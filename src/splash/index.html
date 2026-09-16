@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atlas Studio</title>
+    <style>
+      :root {
+        --bg: #0b0f12;
+        --text: #f5f7f8;
+        --muted: #a5adb5;
+        --accent: #35e58b;
+        --accent-soft: rgba(53, 229, 139, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+
+      .stage {
+        position: relative;
+        display: flex;
+        height: 100%;
+        width: 100%;
+        align-items: center;
+        justify-content: center;
+        background:
+          radial-gradient(ellipse 42% 34% at 50% 46%, rgba(18, 61, 42, 0.35), transparent 70%),
+          var(--bg);
+      }
+
+      .bloom {
+        position: absolute;
+        width: 220px;
+        height: 220px;
+        border-radius: 50%;
+        background: radial-gradient(circle, var(--accent-soft), transparent 68%);
+        opacity: 0;
+        transform: scale(0.84);
+        animation: bloom 0.5s 1.75s ease-out forwards;
+      }
+
+      .brand {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      .mark {
+        position: relative;
+        width: 72px;
+        height: 72px;
+        display: grid;
+        place-items: center;
+      }
+
+      .dot {
+        position: absolute;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+        opacity: 0;
+        animation:
+          dotIn 0.25s ease-out forwards,
+          dotOut 0.2s 0.85s ease-out forwards;
+      }
+
+      .mark svg {
+        width: 56px;
+        height: 56px;
+        overflow: visible;
+      }
+
+      .logo-stroke {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 1.15;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        stroke-dasharray: 72;
+        stroke-dashoffset: 72;
+        animation: draw 0.55s 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+
+      .logo-fill {
+        fill: var(--accent);
+        opacity: 0;
+        filter: url(#soft-glow);
+        animation: fillIn 0.4s 0.8s ease-out forwards, pulseOnce 0.45s 1.3s ease-in-out 1;
+      }
+
+      .sheen {
+        position: absolute;
+        inset: -8%;
+        pointer-events: none;
+        background: linear-gradient(
+          105deg,
+          transparent 38%,
+          rgba(245, 247, 248, 0.22) 50%,
+          transparent 62%
+        );
+        transform: translateX(-130%);
+        opacity: 0;
+        animation: sheen 0.45s 1.75s ease-out forwards;
+        mix-blend-mode: screen;
+      }
+
+      h1 {
+        margin-top: 22px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-indent: 0.18em;
+        opacity: 0;
+        filter: blur(6px);
+        transform: translateY(8px);
+        animation: titleIn 0.5s 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+
+      .tagline {
+        margin-top: 8px;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        opacity: 0;
+        transform: translateY(6px);
+        animation: fadeUp 0.4s 1.3s ease-out forwards;
+      }
+
+      .hint {
+        position: absolute;
+        bottom: 48px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        opacity: 0;
+        transition: opacity 0.45s ease;
+      }
+
+      html.is-waiting .hint {
+        opacity: 0.7;
+      }
+
+      html.is-exiting .stage {
+        animation: dissolve 0.42s ease-out forwards;
+      }
+
+      @keyframes dotIn {
+        from {
+          opacity: 0;
+          transform: scale(0.4);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @keyframes dotOut {
+        to {
+          opacity: 0;
+        }
+      }
+
+      @keyframes draw {
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes fillIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes pulseOnce {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.78;
+          transform: scale(1.035);
+        }
+      }
+
+      @keyframes titleIn {
+        to {
+          opacity: 1;
+          filter: blur(0);
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeUp {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes sheen {
+        0% {
+          opacity: 0;
+          transform: translateX(-130%);
+        }
+        18% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          transform: translateX(130%);
+        }
+      }
+
+      @keyframes bloom {
+        to {
+          opacity: 1;
+          transform: scale(1.08);
+        }
+      }
+
+      @keyframes dissolve {
+        to {
+          opacity: 0;
+          transform: scale(1.012);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .dot,
+        .logo-stroke,
+        .logo-fill,
+        .sheen,
+        h1,
+        .tagline,
+        .bloom {
+          animation: none !important;
+        }
+
+        .dot {
+          display: none;
+        }
+
+        .logo-stroke {
+          opacity: 0;
+        }
+
+        .logo-fill,
+        h1,
+        .tagline {
+          opacity: 1;
+          filter: none;
+          transform: none;
+        }
+
+        html.is-exiting .stage {
+          animation: dissolve 0.2s ease-out forwards;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="bloom" aria-hidden="true"></div>
+      <div class="brand">
+        <div class="mark">
+          <span class="dot" aria-hidden="true"></span>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <defs>
+              <filter id="soft-glow" x="-40%" y="-40%" width="180%" height="180%">
+                <feGaussianBlur stdDeviation="0.8" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+            <path class="logo-stroke" d="M4 18L12 4L20 18H15.5L12 11.5L8.5 18H4Z" />
+            <path class="logo-fill" d="M4 18L12 4L20 18H15.5L12 11.5L8.5 18H4Z" />
+          </svg>
+          <span class="sheen" aria-hidden="true"></span>
+        </div>
+        <h1>ATLAS STUDIO</h1>
+        <p class="tagline">Sistema de criação com IA</p>
+      </div>
+      <p class="hint">Preparando seu workspace...</p>
+    </div>
+  </body>
+</html>

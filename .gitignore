@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+
+# Build / packagers
+dist/
+dist-electron/
+release/
+coverage/
+out/
+.vite/
+*.asar
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+auth.json
+credentials.json
+.codex/
+
+# Logs and caches
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+.cache/
+.turbo/
+*.tmp
+*.temp
+*.bak
+
+# Local databases (userData / SQLite)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Local user workspace data (keep skills in git)
+workspace/projects/
+workspace/memory/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local screenshots / generated assets not part of the source
+/ChatGPT Image*.png

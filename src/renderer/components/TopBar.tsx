@@ -1,0 +1,45 @@
+import { ChevronDown } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { GlobalSearch } from './GlobalSearch'
+import { NewMenuButton } from './NewMenuButton'
+import { NotificationBell } from './NotificationBell'
+import type { AppSettings } from '@shared/types'
+
+export function TopBar({ settings }: { settings: AppSettings | null }) {
+  const navigate = useNavigate()
+
+  return (
+    <header className="flex h-[68px] shrink-0 items-center gap-4 border-b border-border-soft bg-bg/80 px-6 backdrop-blur">
+      <GlobalSearch />
+
+      <div className="flex items-center gap-3">
+        <NewMenuButton />
+        <NotificationBell />
+
+        <button
+          type="button"
+          aria-label="Abrir configurações"
+          className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/5"
+          onClick={() => navigate('/configuracoes')}
+        >
+          <div className="h-9 w-9 overflow-hidden rounded-full border border-border bg-gradient-to-br from-[#2b3a44] to-[#10161a]">
+            {settings?.accountPhotoDataUrl ? (
+              <img
+                src={settings.accountPhotoDataUrl}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : null}
+          </div>
+          <div className="hidden text-left xl:block">
+            <div className="text-sm font-medium text-text">
+              {settings?.accountName || 'Atlas Studio'}
+            </div>
+            <div className="text-xs text-muted">{settings?.accountRole || 'Editor'}</div>
+          </div>
+          <ChevronDown className="h-4 w-4 text-muted" />
+        </button>
+      </div>
+    </header>
+  )
+}

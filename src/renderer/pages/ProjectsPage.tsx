@@ -1,0 +1,297 @@
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { FolderOpen, Files, Pencil, Plus, Scissors, Search, Tag, Trash2 } from 'lucide-react'
+import type { Channel, Project, ProjectType } from '@shared/types'
+import { PageHeader } from '../components/PageHeader'
+import { Card } from '../components/Card'
+import { Button } from '../components/Button'
+import { ConfirmDialog } from '../components/Modal'
+import {
+  ProjectEditorModal,
+  type ProjectFormValues,
+} from '../components/ProjectEditorModal'
+import { QuickPromptsPanel } from '../components/QuickPromptsPanel'
+import { getAtlasApi } from '../lib/api'
+import { notifyProjectsChanged } from '../lib/projectEvents'
+import { useToast } from '../components/Toast'
+import { ENVIRONMENTS, environmentBreadcrumb, projectPath } from '../lib/environments'
+import { formatRelativeDate } from '../lib/utils'
+
+const EMPTY_FORM: ProjectFormValues = { name: '', description: '', channelId: '' }
+
+/**
+ * Lista de projetos de um ambiente. A mesma tela serve História e Música —
+ * o `projectType` decide o filtro, o destaque visual e o tipo do novo projeto.
+ */
+export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
+  const api = getAtlasApi()
+  const navigate = useNavigate()
+  const { push } = useToast()
+  const env = ENVIRONMENTS[projectType]
+
+  const [projects, setProjects] = useState<Project[]>([])
+  const [channels, setChannels] = useState<Channel[]>([])
+  const [query, setQuery] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<Project | null>(null)
+  const [deleting, setDeleting] = useState<Project | null>(null)
+  const [form, setForm] = useState<ProjectFormValues>(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    const [projectList, channelList] = await Promise.all([
+      api.projects.list({ projectType, query: query || undefined }),
+      api.channels.list({ channelType: projectType }),
+    ])
+    setProjects(projectList)
+    setChannels(channelList)
+  }, [api, projectType, query])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  function openCreate() {
+    setEditing(null)
+    setForm(EMPTY_FORM)
+    setModalOpen(true)
+  }
+
+  function openEdit(project: Project) {
+    setEditing(project)
+    setForm({
+      name: project.name,
+      description: project.description,
+      channelId: project.channelId ?? '',
+    })
+    setModalOpen(true)
+  }
+
+  async function saveProject() {
+    if (!form.name.trim()) {
+      push('Informe o nome do projeto.', 'error')
+      return
+    }
+    setSaving(true)
+    try {
+      if (editing) {
+        const updated = await api.projects.update(editing.id, {
+          name: form.name.trim(),
+          description: form.description.trim(),
+          channelId: form.channelId || null,
+        })
+        if (!updated) throw new Error('Projeto não encontrado.')
+        setModalOpen(false)
+        setEditing(null)
+        setForm(EMPTY_FORM)
+        push('Projeto atualizado.', 'success')
+        notifyProjectsChanged()
+        await load()
+        return
+      }
+      const project = await api.projects.create({
+        name: form.name.trim(),
+        description: form.description.trim(),
+        projectType,
+        channelId: form.channelId || null,
+      })
+      setModalOpen(false)
+      setForm(EMPTY_FORM)
+      notifyProjectsChanged()
+      navigate(projectPath(projectType, project.id))
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao salvar projeto', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return
+    try {
+      await api.projects.remove(deleting.id)
+      push('Projeto removido.', 'success')
+      setDeleting(null)
+      notifyProjectsChanged()
+      await load()
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao remover projeto', 'error')
+    }
+  }
+
+  return (
+    <div className="h-full overflow-y-auto px-8 py-6">
+      <PageHeader
+        breadcrumb={environmentBreadcrumb(projectType)}
+        title={env.label}
+        subtitle={env.tagline}
+      />
+
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[260px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-2" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Buscar projeto de ${env.label}...`}
+            className="h-11 w-full rounded-xl border border-border bg-card-2 pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+          />
+        </div>
+        {projectType === 'history' ? (
+          <>
+            <Button
+              variant="secondary"
+              icon={<Files className="h-4 w-4" />}
+              onClick={() => navigate('/historia/roteiros')}
+            >
+              Roteiros
+            </Button>
+            <Button
+              variant="secondary"
+              icon={<Tag className="h-4 w-4" />}
+              onClick={() => navigate('/historia/nichos')}
+            >
+              Nichos
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="secondary"
+            icon={<Scissors className="h-4 w-4" />}
+            onClick={() => navigate('/musica/faixas')}
+          >
+            Faixas
+          </Button>
+        )}
+        <Button
+          icon={<Plus className="h-4 w-4" />}
+          style={{ backgroundColor: env.color }}
+          onClick={openCreate}
+        >
+          Novo projeto
+        </Button>
+      </div>
+
+      {projects.length === 0 ? (
+        <Card className="flex flex-col items-center py-14 text-center">
+          <env.icon className="h-8 w-8 text-muted-2" />
+          <p className="mt-3 text-sm font-medium text-text">
+            {query ? 'Nenhum projeto encontrado' : `Nenhum projeto de ${env.label} ainda`}
+          </p>
+          <p className="mt-1 max-w-md text-xs leading-relaxed text-muted">{env.description}</p>
+          {!query ? (
+            <Button
+              className="mt-5"
+              icon={<Plus className="h-4 w-4" />}
+              style={{ backgroundColor: env.color }}
+              onClick={openCreate}
+            >
+              Criar primeiro projeto
+            </Button>
+          ) : null}
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {projects.map((project) => (
+            <Card
+              key={project.id}
+              className="flex cursor-pointer flex-col gap-3 transition-colors hover:border-[#334049]"
+              onClick={() => navigate(projectPath(projectType, project.id))}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: `${env.color}1f`, color: env.color }}
+                >
+                  <env.icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-[15px] font-semibold text-text">{project.name}</h3>
+                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">
+                    {project.description || 'Sem descrição'}
+                  </p>
+                  <p className="mt-1.5 truncate text-xs text-muted-2">
+                    {project.channelName ? `Canal: ${project.channelName}` : 'Sem canal vinculado'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-muted">
+                <span>
+                  {projectType === 'history'
+                    ? `${project.scriptCount ?? 0} ${(project.scriptCount ?? 0) === 1 ? 'roteiro' : 'roteiros'}`
+                    : `${project.trackCount ?? 0} ${(project.trackCount ?? 0) === 1 ? 'faixa' : 'faixas'}`}
+                </span>
+                <span>{formatRelativeDate(project.updatedAt)}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs text-muted-2">
+                <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {project.projectFolderPath || 'Nenhuma pasta vinculada'}
+                </span>
+              </div>
+
+              <div className="mt-auto flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  className="h-9 px-3 text-xs"
+                  icon={<Trash2 className="h-3.5 w-3.5" />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setDeleting(project)
+                  }}
+                >
+                  Excluir
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-9 px-3 text-xs"
+                  icon={<Pencil className="h-3.5 w-3.5" />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openEdit(project)
+                  }}
+                >
+                  Editar
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Prompts rápidos não dependem de projeto: ficam disponíveis assim que
+          o usuário entra em Música, mesmo sem nada criado ainda. */}
+      {projectType === 'music' ? (
+        <div className="mt-6">
+          <QuickPromptsPanel />
+        </div>
+      ) : null}
+
+      <ProjectEditorModal
+        open={modalOpen}
+        projectType={projectType}
+        channels={channels}
+        editing={editing}
+        form={form}
+        saving={saving}
+        onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+        onClose={() => {
+          setModalOpen(false)
+          setEditing(null)
+        }}
+        onSubmit={() => void saveProject()}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title="Excluir projeto?"
+        message="O projeto será removido do Atlas. Os arquivos da pasta do projeto não serão apagados."
+        confirmLabel="Excluir projeto"
+        onConfirm={() => void confirmDelete()}
+        onClose={() => setDeleting(null)}
+      />
+    </div>
+  )
+}
