@@ -134,33 +134,35 @@ export function ChannelsPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <div className="h-full min-w-0 w-full overflow-y-auto px-8 py-6">
       <PageHeader
         breadcrumb="Atlas / Canais"
         title="Canais"
         subtitle="Gerencie seus canais e planeje os vídeos no calendário editorial."
       />
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[260px] flex-1">
+      <div className="mb-5 flex min-w-0 w-full flex-wrap items-center justify-end gap-3">
+        <div className="relative min-w-[min(100%,16rem)] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-2" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar canal..."
-            className="h-11 w-full rounded-xl border border-border bg-card-2 pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+            className="h-11 w-full min-w-0 rounded-xl border border-border bg-card-2 pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
           />
         </div>
-        <Button
-          variant="secondary"
-          icon={<MessageSquareText className="h-4 w-4" />}
-          onClick={() => navigate('/prompts')}
-        >
-          Prompts
-        </Button>
-        <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
-          Novo canal
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Button
+            variant="secondary"
+            icon={<MessageSquareText className="h-4 w-4" />}
+            onClick={() => navigate('/prompts')}
+          >
+            Prompts
+          </Button>
+          <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
+            Novo canal
+          </Button>
+        </div>
       </div>
 
       {channels.length === 0 ? (
@@ -175,10 +177,10 @@ export function ChannelsPage() {
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid min-w-0 w-full grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] gap-4">
           {channels.map((channel) => (
-            <Card key={channel.id} className="flex flex-col gap-4 transition-colors hover:border-[#334049]">
-              <div className="flex gap-3">
+            <Card key={channel.id} className="flex min-w-0 w-full flex-col gap-4 transition-colors hover:border-[#334049]">
+              <div className="flex min-w-0 gap-3">
                 <div
                   className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border-soft"
                   style={{ background: `linear-gradient(145deg, ${channel.color}33, #10161a)` }}
@@ -192,43 +194,54 @@ export function ChannelsPage() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-[15px] font-semibold text-text">{channel.name}</h3>
-                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">
+                  <h3 className="truncate text-[15px] font-semibold text-text" title={channel.name}>
+                    {channel.name}
+                  </h3>
+                  <p className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-muted">
                     {channel.description || 'Sem descrição'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs text-muted">
-                <span>{channel.videoCount ?? 0} {(channel.videoCount ?? 0) === 1 ? 'vídeo' : 'vídeos'}</span>
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted">
+                <span className="shrink-0">
+                  {channel.videoCount ?? 0} {(channel.videoCount ?? 0) === 1 ? 'vídeo' : 'vídeos'}
+                </span>
                 <span
-                  className="truncate"
+                  className="min-w-0 truncate"
                   style={{ color: ENVIRONMENTS[channel.channelType ?? 'history'].color }}
                 >
                   {PROJECT_TYPE_LABEL[channel.channelType ?? 'history']}
                 </span>
-                {channel.nicheName ? <span className="truncate">Nicho: {channel.nicheName}</span> : null}
+                {channel.nicheName ? (
+                  <span className="min-w-0 truncate">Nicho: {channel.nicheName}</span>
+                ) : null}
               </div>
 
-              <div className="mt-auto flex items-center justify-between gap-2">
+              <div className="mt-auto flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <StatusBadge
+                  className="shrink-0"
                   status={channel.active ? 'ativo' : 'rascunho'}
                   label={channel.active ? 'Ativo' : 'Inativo'}
                 />
-                <div className="flex gap-2">
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                   <Button
                     variant="ghost"
-                    className="h-9 px-3 text-xs"
+                    className="h-9 shrink-0 px-3 text-xs"
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     onClick={() => setDeleting(channel)}
                   >
                     Excluir
                   </Button>
-                  <Button variant="secondary" className="h-9 px-3 text-xs" onClick={() => openEdit(channel)}>
+                  <Button
+                    variant="secondary"
+                    className="h-9 shrink-0 px-3 text-xs"
+                    onClick={() => openEdit(channel)}
+                  >
                     Editar
                   </Button>
                   <Button
-                    className="h-9 px-3 text-xs"
+                    className="h-9 shrink-0 px-3 text-xs"
                     icon={<CalendarDays className="h-3.5 w-3.5" />}
                     onClick={() => navigate(`/canais/${channel.id}`)}
                   >

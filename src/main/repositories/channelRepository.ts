@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db/database'
-import type { Channel, ChannelVideo, ChannelVideoStatus, TitleStrengthAnalysis } from '../../shared/types'
+import type {
+  Channel,
+  ChannelVideo,
+  ChannelVideoStatus,
+  TitleStrengthAnalysis,
+  VideoListFilters,
+} from '../../shared/types'
 import { isProjectType } from '../../shared/types'
+import { hydrateStoredTitleAnalysis } from '../../shared/antigravity/titleAnalysis'
 import { readImageDataUrl } from '../services/storage/profilePhoto'
 import { removeChannelMedia, removeVideoThumbnailFile } from '../services/storage/channelMedia'
 import { folderExists } from '../services/storage/projectFolders'
@@ -37,6 +44,9 @@ type VideoRow = {
   project_folder_path: string | null
   created_at: string
   updated_at: string
+  channel_name?: string | null
+  channel_type?: string | null
+  channel_color?: string | null
 }
 
 const VIDEO_STATUSES: ChannelVideoStatus[] = ['colocando', 'editando', 'agendando', 'publicado']
@@ -47,12 +57,10 @@ function normalizeVideoStatus(value: string): ChannelVideoStatus {
   return VIDEO_STATUSES.includes(value as ChannelVideoStatus) ? (value as ChannelVideoStatus) : 'colocando'
 }
 
-function parseTitleAnalysis(value: string | null): TitleStrengthAnalysis | null {
+function parseTitleAnalysis(value: string | null, title?: string): TitleStrengthAnalysis | null {
   if (!value?.trim()) return null
   try {
-    const parsed = JSON.parse(value) as TitleStrengthAnalysis
-    if (!parsed || typeof parsed.score !== 'number') return null
-    return parsed
+    return hydrateStoredTitleAnalysis(JSON.parse(value) as unknown, title)
   } catch {
     return null
   }
@@ -92,10 +100,13 @@ function mapVideo(row: VideoRow): ChannelVideo {
     projectFolderPath: row.project_folder_path?.trim() ? row.project_folder_path : null,
     folderExists: folderExists(row.project_folder_path),
     titleScore: row.title_score == null ? null : Number(row.title_score),
-    titleAnalysis: parseTitleAnalysis(row.title_analysis),
+    titleAnalysis: parseTitleAnalysis(row.title_analysis, row.title),
     titleAnalyzedAt: row.title_analyzed_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    channelName: row.channel_name ?? null,
+    channelType: isProjectType(row.channel_type) ? row.channel_type : null,
+    channelColor: row.channel_color ?? null,
   }
 }
 
@@ -205,26 +216,60 @@ export const channelRepository = {
     return true
   },
 
-  listVideos(filters: { channelId: string; from?: string; to?: string }): ChannelVideo[] {
+  listVideos(filters: VideoListFilters = {}): ChannelVideo[] {
     const db = getDb()
-    let sql = 'SELECT * FROM channel_videos WHERE channel_id = ?'
-    const params: unknown[] = [filters.channelId]
+    let sql = `
+      SELECT v.*, c.name AS channel_name, c.channel_type AS channel_type, c.color AS channel_color
+      FROM channel_videos v
+      LEFT JOIN channels c ON c.id = v.channel_id
+      WHERE 1=1
+    `
+    const params: unknown[] = []
+    if (filters.channelId) {
+      sql += ' AND v.channel_id = ?'
+      params.push(filters.channelId)
+    }
     if (filters.from) {
-      sql += ' AND scheduled_date >= ?'
+      sql += ' AND v.scheduled_date >= ?'
       params.push(filters.from)
     }
     if (filters.to) {
-      sql += ' AND scheduled_date <= ?'
+      sql += ' AND v.scheduled_date <= ?'
       params.push(filters.to)
     }
-    sql += ' ORDER BY scheduled_date ASC, created_at ASC'
+    sql += ' ORDER BY v.scheduled_date ASC, v.created_at ASC'
+    if (filters.limit != null) {
+      sql += ' LIMIT ?'
+      params.push(Math.max(1, Math.min(filters.limit, 200)))
+    }
     return (db.prepare(sql).all(...params) as VideoRow[]).map(mapVideo)
   },
 
+  listRecentTitles(channelId: string, opts?: { excludeVideoId?: string; limit?: number }): string[] {
+    const limit = Math.max(1, Math.min(opts?.limit ?? 20, 40))
+    const rows = getDb()
+      .prepare(
+        `SELECT id, title FROM channel_videos
+         WHERE channel_id = ?
+         ORDER BY scheduled_date DESC, updated_at DESC
+         LIMIT ?`,
+      )
+      .all(channelId, limit) as Array<{ id: string; title: string }>
+    return rows
+      .filter((row) => row.id !== opts?.excludeVideoId)
+      .map((row) => row.title.trim())
+      .filter(Boolean)
+  },
+
   getVideo(id: string): ChannelVideo | null {
-    const row = getDb().prepare('SELECT * FROM channel_videos WHERE id = ?').get(id) as
-      | VideoRow
-      | undefined
+    const row = getDb()
+      .prepare(
+        `SELECT v.*, c.name AS channel_name, c.channel_type AS channel_type, c.color AS channel_color
+         FROM channel_videos v
+         LEFT JOIN channels c ON c.id = v.channel_id
+         WHERE v.id = ?`,
+      )
+      .get(id) as VideoRow | undefined
     return row ? mapVideo(row) : null
   },
 

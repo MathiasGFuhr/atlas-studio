@@ -248,6 +248,11 @@ export interface AnalyzeTitleRequest {
   performanceDataIfAvailable?: TitlePerformanceDatum[]
 }
 
+export interface AnalyzeTitleResult {
+  analysis: TitleStrengthAnalysis
+  video: ChannelVideo | null
+}
+
 export interface AntigravityStatus {
   connected: boolean
   authenticated: boolean
@@ -260,11 +265,6 @@ export interface AntigravityStatus {
 
 export interface AntigravityLoginStartResult {
   loginId: string
-}
-
-export interface AnalyzeTitleResult {
-  analysis: TitleStrengthAnalysis
-  video: ChannelVideo | null
 }
 
 export type QuickPromptKind = 'image' | 'animation'
@@ -339,6 +339,19 @@ export interface ChannelVideo {
   titleAnalyzedAt?: string | null
   createdAt: string
   updatedAt: string
+  /** Nome do canal no momento da leitura. Calculado na leitura. */
+  channelName?: string | null
+  /** Tipo do canal no momento da leitura. Calculado na leitura. */
+  channelType?: ChannelType | null
+  /** Cor do canal no momento da leitura. Calculado na leitura. */
+  channelColor?: string | null
+}
+
+export interface VideoListFilters {
+  channelId?: string
+  from?: string
+  to?: string
+  limit?: number
 }
 
 export interface ChannelPrompt {

@@ -11,12 +11,20 @@ import type {
   AnalyzeTitleResult,
   AntigravityLoginStartResult,
   AntigravityStatus,
-  TitleStrengthAnalysis,
 } from '../../../shared/types'
 import {
   normalizeQuickPromptAnalysis,
   QUICK_PROMPT_ANALYSIS_SCHEMA,
 } from '../../../shared/antigravity/quickPromptAnalysis'
+import {
+  TITLE_ANALYSIS_FAIL_MESSAGE,
+  TITLE_ANALYSIS_SCHEMA,
+  buildTitleAnalysisPrompt,
+  computeTitleLocalFacts,
+  hashTitleAnalysisContext,
+  parseTitleAnalysisResponse,
+} from '../../../shared/antigravity/titleAnalysis'
+import { enrichTitleAnalysisPayload } from './enrichTitleContext'
 import { IPC } from '../../../shared/types'
 import { logger } from '../logging/logger'
 import { settingsRepository } from '../../repositories/settingsRepository'
@@ -43,57 +51,7 @@ const CHAT_RESPONSE_SCHEMA = {
   required: ['message'],
 }
 
-const TITLE_SCHEMA = {
-  type: 'object',
-  properties: {
-    score: { type: 'integer', description: 'Nota de 0 a 100 da força do título no YouTube' },
-    verdict: { type: 'string', description: 'Frase curta em português sobre a força do título' },
-    curiosity: { type: 'integer' },
-    clarity: { type: 'integer' },
-    emotion: { type: 'integer' },
-    length: { type: 'integer' },
-    specificity: { type: 'integer' },
-    strengths: { type: 'array', items: { type: 'string' } },
-    weaknesses: { type: 'array', items: { type: 'string' } },
-    suggestions: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Até 3 títulos alternativos mais fortes',
-    },
-  },
-  required: ['score', 'verdict', 'strengths', 'weaknesses', 'suggestions'],
-}
-
-function clampScore(value: unknown): number {
-  const n = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(n)) return 0
-  return Math.max(0, Math.min(100, Math.round(n)))
-}
-
-function asStringList(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.map((item) => String(item).trim()).filter(Boolean).slice(0, 6)
-}
-
-function optionalScore(value: unknown): number | null {
-  if (value == null || value === '') return null
-  return clampScore(value)
-}
-
-export function normalizeTitleAnalysis(raw: Record<string, unknown>): TitleStrengthAnalysis {
-  return {
-    score: clampScore(raw.score),
-    verdict: String(raw.verdict ?? '').trim() || 'Análise concluída.',
-    curiosity: optionalScore(raw.curiosity),
-    clarity: optionalScore(raw.clarity),
-    emotion: optionalScore(raw.emotion),
-    length: optionalScore(raw.length),
-    specificity: optionalScore(raw.specificity),
-    strengths: asStringList(raw.strengths),
-    weaknesses: asStringList(raw.weaknesses),
-    suggestions: asStringList(raw.suggestions).slice(0, 3),
-  }
-}
+const TITLE_CACHE_LIMIT = 40
 
 export class AntigravityService {
   private status: AntigravityStatus = {
@@ -109,6 +67,7 @@ export class AntigravityService {
   private loginPollTimer: ReturnType<typeof setInterval> | null = null
   private loginTimeout: ReturnType<typeof setTimeout> | null = null
   private currentLoginId: string | null = null
+  private readonly titleCache = new Map<string, AnalyzeTitleResult['analysis']>()
   private readonly getWindow: () => BrowserWindow | null
 
   constructor(opts?: { getWindow?: () => BrowserWindow | null }) {
@@ -328,14 +287,31 @@ export class AntigravityService {
     const title = request.title.trim()
     if (!title) throw new Error('O título é obrigatório para analisar.')
 
-    const structured = await this.runStructuredPrompt({
-      schemaFile: 'title-schema.json',
-      schema: TITLE_SCHEMA,
-      prompt: this.buildPrompt(request),
-      invalidMessage: 'O Antigravity não devolveu uma análise válida do título.',
-    })
+    const payload = enrichTitleAnalysisPayload({ ...request, title })
+    const localFacts = computeTitleLocalFacts(payload.currentTitle)
+    const cacheKey = hashTitleAnalysisContext({ ...payload, localFacts })
+    let analysis = this.titleCache.get(cacheKey) ?? null
 
-    const analysis = normalizeTitleAnalysis(structured)
+    if (!analysis) {
+      let structured: Record<string, unknown>
+      try {
+        structured = await this.runStructuredPrompt({
+          schemaFile: 'title-schema.json',
+          schema: TITLE_ANALYSIS_SCHEMA,
+          prompt: buildTitleAnalysisPrompt({ ...payload, localFacts }),
+          invalidMessage: TITLE_ANALYSIS_FAIL_MESSAGE,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : TITLE_ANALYSIS_FAIL_MESSAGE
+        if (/login google|não encontrado|agy/i.test(message)) throw error
+        throw new Error(TITLE_ANALYSIS_FAIL_MESSAGE)
+      }
+
+      analysis = parseTitleAnalysisResponse(structured, { profile: payload.projectType, localFacts })
+      if (!analysis) throw new Error(TITLE_ANALYSIS_FAIL_MESSAGE)
+      this.rememberTitleAnalysis(cacheKey, analysis)
+    }
+
     let video = null
     if (request.videoId) {
       video = channelRepository.updateVideo(request.videoId, {
@@ -346,6 +322,15 @@ export class AntigravityService {
     }
 
     return { analysis, video }
+  }
+
+  private rememberTitleAnalysis(key: string, analysis: AnalyzeTitleResult['analysis']) {
+    this.titleCache.set(key, analysis)
+    while (this.titleCache.size > TITLE_CACHE_LIMIT) {
+      const oldest = this.titleCache.keys().next().value
+      if (!oldest) break
+      this.titleCache.delete(oldest)
+    }
   }
 
   async analyzeQuickPrompt(request: AnalyzeQuickPromptRequest): Promise<AnalyzeQuickPromptResult> {
@@ -369,22 +354,6 @@ export class AntigravityService {
       prompt,
       invalidMessage: 'O Antigravity não devolveu uma resposta válida para o Chat.',
     })
-  }
-
-  private buildPrompt(request: AnalyzeTitleRequest): string {
-    const channel = request.channelName?.trim()
-    const description = request.description?.trim()
-    return [
-      'Você é um analista de títulos de YouTube. Avalie a FORÇA de clique deste título.',
-      'Considere curiosidade, clareza, emoção, tamanho (bom no mobile, ~40-70 caracteres), especificidade e fórmula comprovada.',
-      'Seja rigoroso: acima de 70 é bom; acima de 90 é raro.',
-      'Responda só no schema JSON pedido, em português do Brasil.',
-      channel ? `Canal: ${channel}` : '',
-      `Título: ${request.title.trim()}`,
-      description ? `Descrição (contexto): ${description.slice(0, 600)}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n')
   }
 
   private buildQuickPromptAudit(request: AnalyzeQuickPromptRequest): string {

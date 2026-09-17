@@ -54,6 +54,7 @@ export function ChannelCalendarPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [analysis, setAnalysis] = useState<TitleStrengthAnalysis | null>(null)
   const [analyzedTitle, setAnalyzedTitle] = useState<string | null>(null)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [copied, setCopied] = useState<'title' | 'description' | null>(null)
   const [form, setForm] = useState({
     title: '',
@@ -61,6 +62,10 @@ export function ChannelCalendarPage() {
     scheduledDate: todayKey(),
     status: 'colocando' as ChannelVideoStatus,
     projectFolderPath: null as string | null,
+    thumbnailText: '',
+    songTitle: '',
+    artistName: '',
+    eventName: '',
   })
 
   const from = toDateKey(year, month, 1)
@@ -135,12 +140,17 @@ export function ChannelCalendarPage() {
     setPendingThumb(null)
     setAnalysis(null)
     setAnalyzedTitle(null)
+    setAnalysisError(null)
     setForm({
       title: '',
       description: '',
       scheduledDate: dateKey ?? todayKey(),
       status: 'colocando',
       projectFolderPath: null,
+      thumbnailText: '',
+      songTitle: '',
+      artistName: '',
+      eventName: '',
     })
     setModalOpen(true)
   }
@@ -150,12 +160,17 @@ export function ChannelCalendarPage() {
     setPendingThumb(null)
     setAnalysis(video.titleAnalysis ?? null)
     setAnalyzedTitle(video.titleAnalysis ? video.title : null)
+    setAnalysisError(null)
     setForm({
       title: video.title,
       description: video.description,
       scheduledDate: video.scheduledDate,
       status: video.status,
       projectFolderPath: video.projectFolderPath ?? null,
+      thumbnailText: '',
+      songTitle: '',
+      artistName: '',
+      eventName: '',
     })
     setModalOpen(true)
   }
@@ -215,12 +230,23 @@ export function ChannelCalendarPage() {
       return
     }
     setAnalyzing(true)
+    setAnalysisError(null)
     try {
       const result = await api.videos.analyzeTitle({
         title: form.title.trim(),
         description: form.description,
+        channelId: channel?.id,
         channelName: channel?.name,
+        projectType: channel?.channelType,
         videoId: editing?.id,
+        thumbnailText: form.thumbnailText.trim() || undefined,
+        songTitle: form.songTitle.trim() || undefined,
+        artistName: form.artistName.trim() || undefined,
+        eventName: form.eventName.trim() || undefined,
+        recentChannelTitles: videos
+          .filter((item) => item.id !== editing?.id)
+          .map((item) => item.title)
+          .filter(Boolean),
       })
       setAnalysis(result.analysis)
       setAnalyzedTitle(form.title.trim())
@@ -228,7 +254,14 @@ export function ChannelCalendarPage() {
       push(`Força do título: ${result.analysis.score}/100`, 'success')
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao analisar o título', 'error')
+      setAnalysis(null)
+      setAnalyzedTitle(null)
+      const message = error instanceof Error ? error.message : 'Não foi possível analisar o título.'
+      const failed = /não foi possível analisar o título/i.test(message)
+        ? 'Não foi possível analisar o título.'
+        : message
+      setAnalysisError(failed)
+      push(failed, 'error')
     } finally {
       setAnalyzing(false)
     }
@@ -509,6 +542,34 @@ export function ChannelCalendarPage() {
               placeholder="Título que vai no YouTube"
             />
           </div>
+          {channel?.channelType === 'music' ? (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <Input
+                label="Artista"
+                value={form.artistName}
+                onChange={(e) => setForm((f) => ({ ...f, artistName: e.target.value }))}
+                placeholder="Opcional"
+              />
+              <Input
+                label="Música"
+                value={form.songTitle}
+                onChange={(e) => setForm((f) => ({ ...f, songTitle: e.target.value }))}
+                placeholder="Opcional"
+              />
+              <Input
+                label="Evento / live"
+                value={form.eventName}
+                onChange={(e) => setForm((f) => ({ ...f, eventName: e.target.value }))}
+                placeholder="Opcional"
+              />
+            </div>
+          ) : null}
+          <Input
+            label="Texto da thumbnail"
+            value={form.thumbnailText}
+            onChange={(e) => setForm((f) => ({ ...f, thumbnailText: e.target.value }))}
+            placeholder="Opcional — se houver texto na arte"
+          />
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
@@ -521,16 +582,12 @@ export function ChannelCalendarPage() {
             </Button>
             {analysis ? <TitleScoreBadge score={analysis.score} /> : null}
           </div>
-          <TitleScorePanel analysis={analysis} />
-          {analysis?.suggestions[0] ? (
-            <button
-              type="button"
-              className="text-left text-xs text-accent hover:underline"
-              onClick={() => setForm((f) => ({ ...f, title: analysis.suggestions[0] }))}
-            >
-              Usar a primeira sugestão como título
-            </button>
-          ) : null}
+          <TitleScorePanel
+            analysis={analysis}
+            currentTitle={form.title}
+            error={analysisError}
+            onUseTitle={(title) => setForm((f) => ({ ...f, title }))}
+          />
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-muted">Descrição</span>

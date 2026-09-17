@@ -84,6 +84,15 @@ export const projectRepository = {
     return row ? mapProject(row) : null
   },
 
+  getByFolderPath(folderPath: string): Project | null {
+    const normalized = folderPath.trim()
+    if (!normalized) return null
+    const row = getDb()
+      .prepare(`${SELECT_WITH_COUNTS} WHERE p.folder_path = ?`)
+      .get(normalized) as ProjectRow | undefined
+    return row ? mapProject(row) : null
+  },
+
   countByType(): Record<ProjectType, number> {
     const rows = getDb()
       .prepare('SELECT project_type, COUNT(*) AS c FROM projects GROUP BY project_type')
