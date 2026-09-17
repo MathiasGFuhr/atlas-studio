@@ -26,9 +26,11 @@ export function enrichTitleAnalysisPayload(request: AnalyzeTitleRequest): TitleA
   const channel = channelId ? channelRepository.get(channelId) : null
   const niche = channel?.nicheId ? nicheRepository.get(channel.nicheId) : null
   const script = video?.scriptId ? scriptRepository.get(video.scriptId) : null
-  const project = video?.projectFolderPath
-    ? projectRepository.getByFolderPath(video.projectFolderPath)
-    : null
+  const project = video?.projectId
+    ? projectRepository.get(video.projectId)
+    : video?.projectFolderPath
+      ? projectRepository.getByFolderPath(video.projectFolderPath)
+      : null
   const tracks =
     project?.projectType === 'music' ? musicRepository.list({ projectId: project.id }) : []
 

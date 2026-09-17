@@ -11,6 +11,7 @@ import { HomeScheduledVideoCard } from '../components/home/HomeScheduledVideoCar
 import { getAtlasApi } from '../lib/api'
 import { onVideosChanged } from '../lib/videoEvents'
 import { useToast } from '../components/Toast'
+import { projectPath } from '../lib/environments'
 
 export function ChannelAgendaPage() {
   const api = getAtlasApi()
@@ -89,6 +90,11 @@ export function ChannelAgendaPage() {
               key={video.id}
               video={video}
               onOpen={() => navigate(channelVideoPath(video.channelId, video.id))}
+              onOpenProject={
+                video.channelType === 'music' && video.projectId
+                  ? () => navigate(projectPath('music', video.projectId!))
+                  : undefined
+              }
               onCopyTitle={() =>
                 void copyField(video.title, 'Este vídeo ainda não tem título.', 'Título copiado.')
               }

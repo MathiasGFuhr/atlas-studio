@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FolderOpen, Files, Pencil, Plus, Scissors, Search, Tag, Trash2 } from 'lucide-react'
 import type { Channel, Project, ProjectType } from '@shared/types'
+import { formatMusicProjectPublicationLine } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
@@ -11,7 +12,8 @@ import {
   type ProjectFormValues,
 } from '../components/ProjectEditorModal'
 import { getAtlasApi } from '../lib/api'
-import { notifyProjectsChanged } from '../lib/projectEvents'
+import { notifyProjectsChanged, onProjectsChanged } from '../lib/projectEvents'
+import { onVideosChanged } from '../lib/videoEvents'
 import { useToast } from '../components/Toast'
 import { ENVIRONMENTS, environmentBreadcrumb, projectPath } from '../lib/environments'
 import { formatRelativeDate } from '../lib/utils'
@@ -48,6 +50,18 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
 
   useEffect(() => {
     void load()
+  }, [load])
+
+  useEffect(() => {
+    const refresh = () => {
+      void load()
+    }
+    const stopProjects = onProjectsChanged(refresh)
+    const stopVideos = onVideosChanged(refresh)
+    return () => {
+      stopProjects()
+      stopVideos()
+    }
   }, [load])
 
   function openCreate() {
@@ -108,8 +122,15 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
   async function confirmDelete() {
     if (!deleting) return
     try {
-      await api.projects.remove(deleting.id)
-      push('Projeto removido.', 'success')
+      await api.projects.remove(deleting.id, {
+        alsoRemovePublication: Boolean(deleting.scheduledVideoId),
+      })
+      push(
+        deleting.scheduledVideoId
+          ? 'Projeto e publicação removidos.'
+          : 'Projeto removido.',
+        'success',
+      )
       setDeleting(null)
       notifyProjectsChanged()
       await load()
@@ -212,6 +233,16 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
                   <p className="mt-1.5 truncate text-xs text-muted-2">
                     {project.channelName ? `Canal: ${project.channelName}` : 'Sem canal vinculado'}
                   </p>
+                  {projectType === 'music' && project.scheduledDate ? (
+                    <p className="mt-1 truncate text-xs text-accent/80">
+                      {formatMusicProjectPublicationLine({
+                        channelName: project.channelName,
+                        scheduledDate: project.scheduledDate,
+                      })}
+                      {' · '}
+                      {project.scheduledVideoStatus === 'publicado' ? 'Publicado' : 'Agendado'}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -278,8 +309,12 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
       <ConfirmDialog
         open={Boolean(deleting)}
         title="Excluir projeto?"
-        message="O projeto será removido do Atlas. Os arquivos da pasta do projeto não serão apagados."
-        confirmLabel="Excluir projeto"
+        message={
+          deleting?.scheduledVideoId
+            ? 'Este projeto possui uma publicação no calendário. Excluir o projeto também remove o agendamento. Os arquivos físicos não serão apagados.'
+            : 'O projeto será removido do Atlas. Os arquivos da pasta do projeto não serão apagados.'
+        }
+        confirmLabel={deleting?.scheduledVideoId ? 'Excluir projeto e publicação' : 'Excluir projeto'}
         onConfirm={() => void confirmDelete()}
         onClose={() => setDeleting(null)}
       />

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ChannelVideo } from './types'
 import {
   channelVideoPath,
+  formatMusicProjectPublicationLine,
   formatScheduledDateLabel,
   pickUpcomingChannelVideos,
   todayDateKey,
@@ -14,6 +15,7 @@ function video(partial: Partial<ChannelVideo> & Pick<ChannelVideo, 'id' | 'title
     thumbnailPath: '',
     status: 'agendando',
     scriptId: null,
+    projectId: null,
     projectFolderPath: null,
     createdAt: '2026-09-10T10:00:00.000Z',
     updatedAt: '2026-09-10T10:00:00.000Z',
@@ -61,5 +63,15 @@ describe('channelVideos', () => {
 
   it('abre o registro do vídeo no calendário do canal', () => {
     expect(channelVideoPath('abc', 'xyz')).toBe('/canais/abc/videos/xyz')
+  })
+
+  it('monta o resumo da publicação do projeto de Música', () => {
+    expect(
+      formatMusicProjectPublicationLine({
+        channelName: 'Johann Falk',
+        scheduledDate: '2026-09-21',
+        now,
+      }),
+    ).toBe('Johann Falk · 21 set')
   })
 })

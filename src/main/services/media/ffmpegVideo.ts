@@ -118,3 +118,36 @@ export async function exportVideoClip(input: {
     await exportVideoClip({ ...input, subtitlePath: null })
   }
 }
+
+/** Frame estático pequeno para cards. Não usa o vídeo inteiro. */
+export async function extractVideoThumbnail(input: {
+  sourcePath: string
+  outputPath: string
+  atSeconds?: number
+}): Promise<void> {
+  const resolved = path.resolve(input.sourcePath)
+  if (!fs.existsSync(resolved)) throw new Error('Arquivo de vídeo não encontrado.')
+  fs.mkdirSync(path.dirname(input.outputPath), { recursive: true })
+  const seek = Math.max(0, input.atSeconds ?? 1)
+  await runFfmpegResult(
+    [
+      '-y',
+      '-ss',
+      seek.toFixed(3),
+      '-i',
+      resolved,
+      '-frames:v',
+      '1',
+      '-vf',
+      'scale=480:-2',
+      '-q:v',
+      '4',
+      input.outputPath,
+    ],
+    {
+      timeoutMs: 30_000,
+      timeoutMessage: 'O FFmpeg demorou demais para gerar a thumbnail.',
+      failMessage: 'Falha ao gerar a thumbnail do vídeo.',
+    },
+  )
+}

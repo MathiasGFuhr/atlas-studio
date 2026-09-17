@@ -1,16 +1,29 @@
 import { randomUUID } from 'node:crypto'
 import type { AppDatabase } from './database'
 import { backupSqliteFile, isBackupSettingEnabled } from './backup'
+import { shortsProjectNameFromFileName } from '../../shared/shortsProject'
+import {
+  findUnequivocalMusicProject,
+  resolveMusicProjectName,
+  type MusicProjectMatchCandidate,
+} from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 6
+export const CURRENT_SCHEMA_VERSION = 8
+
+type SchemaStepResult = {
+  historyCreated: number
+  musicCreated: number
+  musicVideosLinked?: number
+  musicProjectsFromVideos?: number
+}
 
 type SchemaStep = {
   version: number
   name: string
   /** Só copiar o .db quando o passo muda estrutura de forma relevante. */
   backup: boolean
-  up: (database: AppDatabase) => { historyCreated: number; musicCreated: number }
+  up: (database: AppDatabase) => SchemaStepResult
 }
 
 /**
@@ -54,6 +67,18 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyChatAgentModelOverrides,
   },
+  {
+    version: 7,
+    name: 'shorts-project-name',
+    backup: false,
+    up: applyShortsProjectName,
+  },
+  {
+    version: 8,
+    name: 'music-video-project-link',
+    backup: false,
+    up: applyMusicVideoProjectLink,
+  },
 ]
 
 /**
@@ -66,6 +91,8 @@ export function migrateSchema(
 ): {
   historyCreated: number
   musicCreated: number
+  musicVideosLinked: number
+  musicProjectsFromVideos: number
   schemaVersion: number
   backedUp: boolean
 } {
@@ -73,6 +100,8 @@ export function migrateSchema(
   const from = getAppliedSchemaVersion(database)
   let historyCreated = 0
   let musicCreated = 0
+  let musicVideosLinked = 0
+  let musicProjectsFromVideos = 0
   let backedUp = false
 
   for (const step of SCHEMA_STEPS) {
@@ -88,12 +117,16 @@ export function migrateSchema(
     const created = step.up(database)
     historyCreated += created.historyCreated
     musicCreated += created.musicCreated
+    musicVideosLinked += created.musicVideosLinked ?? 0
+    musicProjectsFromVideos += created.musicProjectsFromVideos ?? 0
     recordSchemaVersion(database, step.version, step.name)
   }
 
   return {
     historyCreated,
     musicCreated,
+    musicVideosLinked,
+    musicProjectsFromVideos,
     schemaVersion: getAppliedSchemaVersion(database),
     backedUp,
   }
@@ -212,6 +245,168 @@ function applyChatAgentModelOverrides(database: AppDatabase): {
   ensureColumn(database, 'chat_conversations', 'model_override', 'TEXT')
   ensureColumn(database, 'chat_conversations', 'effort_override', 'TEXT')
   return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyShortsProjectName(database: AppDatabase): {
+  historyCreated: number
+  musicCreated: number
+} {
+  ensureColumn(database, 'shorts_jobs', 'name', "TEXT NOT NULL DEFAULT ''")
+  const rows = database.prepare('SELECT id, source_name, name FROM shorts_jobs').all() as Array<{
+    id: string
+    source_name: string
+    name: string
+  }>
+  const update = database.prepare('UPDATE shorts_jobs SET name = ? WHERE id = ?')
+  for (const row of rows) {
+    const current = String(row.name ?? '').trim()
+    if (current) continue
+    update.run(shortsProjectNameFromFileName(row.source_name), row.id)
+  }
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyMusicVideoProjectLink(database: AppDatabase): SchemaStepResult {
+  ensureColumn(database, 'channels', 'channel_type', "TEXT NOT NULL DEFAULT 'history'")
+  ensureColumn(database, 'projects', 'channel_id', 'TEXT')
+  ensureColumn(database, 'channel_videos', 'project_folder_path', 'TEXT')
+  ensureColumn(database, 'channel_videos', 'project_id', 'TEXT')
+  database.exec(`UPDATE channel_videos SET project_id = NULL WHERE project_id = ''`)
+  const result = backfillMusicChannelVideos(database)
+  database.exec('CREATE INDEX IF NOT EXISTS idx_videos_project ON channel_videos(project_id)')
+  database.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_project_unique ON channel_videos(project_id) WHERE project_id IS NOT NULL',
+  )
+  return result
+}
+
+/**
+ * Vídeos musicais sem project_id: vincula a um projeto inequívoco ou cria um novo.
+ * Não casa por título parcial. Não cria pasta física. Não toca em História/Shorts.
+ */
+export function backfillMusicChannelVideos(database: AppDatabase): {
+  historyCreated: number
+  musicCreated: number
+  musicVideosLinked: number
+  musicProjectsFromVideos: number
+} {
+  const videos = database
+    .prepare(
+      `SELECT v.id, v.channel_id, v.title, v.project_folder_path, v.created_at, v.updated_at
+       FROM channel_videos v
+       JOIN channels c ON c.id = v.channel_id
+       WHERE c.channel_type = 'music'
+         AND (v.project_id IS NULL OR v.project_id = '')
+       ORDER BY v.created_at ASC, v.id ASC`,
+    )
+    .all() as Array<{
+    id: string
+    channel_id: string
+    title: string
+    project_folder_path: string | null
+    created_at: string
+    updated_at: string
+  }>
+
+  if (videos.length === 0) {
+    return { historyCreated: 0, musicCreated: 0, musicVideosLinked: 0, musicProjectsFromVideos: 0 }
+  }
+
+  const candidates = loadMusicProjectCandidates(database)
+  let musicVideosLinked = 0
+  let musicProjectsFromVideos = 0
+
+  const insertProject = database.prepare(
+    `INSERT INTO projects (id, name, description, project_type, folder_path, channel_id, created_at, updated_at)
+     VALUES (?, ?, '', 'music', ?, ?, ?, ?)`,
+  )
+  const updateVideo = database.prepare('UPDATE channel_videos SET project_id = ? WHERE id = ?')
+  const updateProjectChannel = database.prepare(
+    'UPDATE projects SET channel_id = ?, updated_at = ? WHERE id = ? AND (channel_id IS NULL OR channel_id = \'\')',
+  )
+
+  for (const video of videos) {
+    const matched = findUnequivocalMusicProject(
+      {
+        title: video.title,
+        channelId: video.channel_id,
+        folderPath: video.project_folder_path,
+      },
+      candidates,
+    )
+
+    if (matched) {
+      updateVideo.run(matched.id, video.id)
+      if (!matched.channelId) {
+        updateProjectChannel.run(video.channel_id, video.updated_at, matched.id)
+        matched.channelId = video.channel_id
+      }
+      matched.linkedVideoId = video.id
+      musicVideosLinked += 1
+      continue
+    }
+
+    const projectId = randomUUID()
+    const name = resolveMusicProjectName({ title: video.title })
+    const folderTaken = Boolean(
+      video.project_folder_path?.trim() &&
+        candidates.some(
+          (candidate) =>
+            candidate.folderPath &&
+            candidate.folderPath.trim().toLowerCase() === video.project_folder_path?.trim().toLowerCase(),
+        ),
+    )
+    const folderPath = !folderTaken && video.project_folder_path?.trim() ? video.project_folder_path : null
+    insertProject.run(
+      projectId,
+      name,
+      folderPath,
+      video.channel_id,
+      video.created_at,
+      video.updated_at,
+    )
+    updateVideo.run(projectId, video.id)
+    candidates.push({
+      id: projectId,
+      name,
+      channelId: video.channel_id,
+      folderPath,
+      linkedVideoId: video.id,
+    })
+    musicProjectsFromVideos += 1
+  }
+
+  return {
+    historyCreated: 0,
+    musicCreated: musicProjectsFromVideos,
+    musicVideosLinked,
+    musicProjectsFromVideos,
+  }
+}
+
+function loadMusicProjectCandidates(database: AppDatabase): MusicProjectMatchCandidate[] {
+  return (
+    database
+      .prepare(
+        `SELECT p.id, p.name, p.channel_id, p.folder_path,
+        (SELECT v.id FROM channel_videos v WHERE v.project_id = p.id LIMIT 1) AS linked_video_id
+       FROM projects p
+       WHERE p.project_type = 'music'`,
+      )
+      .all() as Array<{
+      id: string
+      name: string
+      channel_id: string | null
+      folder_path: string | null
+      linked_video_id: string | null
+    }>
+  ).map((row) => ({
+    id: row.id,
+    name: row.name,
+    channelId: row.channel_id?.trim() || null,
+    folderPath: row.folder_path?.trim() || null,
+    linkedVideoId: row.linked_video_id?.trim() || null,
+  }))
 }
 
 function applyIncrementalBase(database: AppDatabase): {

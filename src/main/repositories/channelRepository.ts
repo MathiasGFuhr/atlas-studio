@@ -4,6 +4,7 @@ import type {
   Channel,
   ChannelVideo,
   ChannelVideoStatus,
+  ChannelVideoWriteInput,
   TitleStrengthAnalysis,
   VideoListFilters,
 } from '../../shared/types'
@@ -38,6 +39,8 @@ type VideoRow = {
   scheduled_date: string
   status: string
   script_id: string | null
+  project_id: string | null
+  project_name?: string | null
   title_score: number | null
   title_analysis: string | null
   title_analyzed_at: string | null
@@ -97,6 +100,8 @@ function mapVideo(row: VideoRow): ChannelVideo {
     scheduledDate: row.scheduled_date,
     status,
     scriptId: row.script_id ?? null,
+    projectId: row.project_id?.trim() ? row.project_id : null,
+    projectName: row.project_name ?? null,
     projectFolderPath: row.project_folder_path?.trim() ? row.project_folder_path : null,
     folderExists: folderExists(row.project_folder_path),
     titleScore: row.title_score == null ? null : Number(row.title_score),
@@ -235,15 +240,21 @@ export const channelRepository = {
   listVideos(filters: VideoListFilters = {}): ChannelVideo[] {
     const db = getDb()
     let sql = `
-      SELECT v.*, c.name AS channel_name, c.channel_type AS channel_type, c.color AS channel_color
+      SELECT v.*, c.name AS channel_name, c.channel_type AS channel_type, c.color AS channel_color,
+        p.name AS project_name
       FROM channel_videos v
       LEFT JOIN channels c ON c.id = v.channel_id
+      LEFT JOIN projects p ON p.id = v.project_id
       WHERE 1=1
     `
     const params: unknown[] = []
     if (filters.channelId) {
       sql += ' AND v.channel_id = ?'
       params.push(filters.channelId)
+    }
+    if (filters.projectId) {
+      sql += ' AND v.project_id = ?'
+      params.push(filters.projectId)
     }
     if (filters.from) {
       sql += ' AND v.scheduled_date >= ?'
@@ -280,18 +291,35 @@ export const channelRepository = {
   getVideo(id: string): ChannelVideo | null {
     const row = getDb()
       .prepare(
-        `SELECT v.*, c.name AS channel_name, c.channel_type AS channel_type, c.color AS channel_color
+        `SELECT v.*, c.name AS channel_name, c.channel_type AS channel_type, c.color AS channel_color,
+          p.name AS project_name
          FROM channel_videos v
          LEFT JOIN channels c ON c.id = v.channel_id
+         LEFT JOIN projects p ON p.id = v.project_id
          WHERE v.id = ?`,
       )
       .get(id) as VideoRow | undefined
     return row ? mapVideo(row) : null
   },
 
-  createVideo(
-    input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl' | 'folderExists'>,
-  ): ChannelVideo {
+  getVideoByProjectId(projectId: string): ChannelVideo | null {
+    const id = projectId.trim()
+    if (!id) return null
+    const row = getDb()
+      .prepare(
+        `SELECT v.*, c.name AS channel_name, c.channel_type AS channel_type, c.color AS channel_color,
+          p.name AS project_name
+         FROM channel_videos v
+         LEFT JOIN channels c ON c.id = v.channel_id
+         LEFT JOIN projects p ON p.id = v.project_id
+         WHERE v.project_id = ?
+         LIMIT 1`,
+      )
+      .get(id) as VideoRow | undefined
+    return row ? mapVideo(row) : null
+  },
+
+  createVideo(input: ChannelVideoWriteInput): ChannelVideo {
     if (!this.get(input.channelId)) {
       throw new Error('Canal não encontrado')
     }
@@ -301,8 +329,8 @@ export const channelRepository = {
     getDb()
       .prepare(
         `INSERT INTO channel_videos
-          (id, channel_id, title, description, thumbnail_path, scheduled_date, status, script_id, project_folder_path, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, channel_id, title, description, thumbnail_path, scheduled_date, status, script_id, project_id, project_folder_path, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -313,6 +341,7 @@ export const channelRepository = {
         input.scheduledDate,
         status,
         input.scriptId || null,
+        input.projectId?.trim() || null,
         input.projectFolderPath?.trim() || null,
         timestamp,
         timestamp,

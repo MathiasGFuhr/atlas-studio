@@ -10,6 +10,7 @@ import type {
   Channel,
   ChannelPrompt,
   ChannelVideo,
+  ChannelVideoWriteInput,
   DiscoveredSkill,
   GenerateScriptRequest,
   GenerationProgressEvent,
@@ -18,6 +19,7 @@ import type {
   Niche,
   Project,
   ProjectType,
+  RemoveProjectOptions,
   ScriptRecord,
   ScriptVersion,
   SkillRescanResult,
@@ -27,6 +29,7 @@ import type {
   TaskWriteInput,
   VideoListFilters,
 } from '../src/shared/types'
+import { MUSIC_PROJECT_HAS_PUBLICATION_ERROR } from '../src/shared/types'
 import type { MusicTrack } from '../src/shared/musicAnalysis'
 import type { ShortsAnalyzeInput, ShortsJob, ShortsProgressEvent } from '../src/shared/shorts'
 import type { CustomPrompt } from '../src/shared/quickPrompts/types'
@@ -177,6 +180,11 @@ export const mockApi = {
         folderExists: false,
         scriptCount: 0,
         trackCount: 0,
+        scheduledVideoId: null,
+        scheduledVideoChannelId: null,
+        scheduledDate: null,
+        scheduledVideoStatus: null,
+        scheduledVideoTitle: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -197,9 +205,16 @@ export const mockApi = {
       projects[idx] = next
       return projects[idx]
     },
-    remove: async (id: string) => {
+    remove: async (id: string, options?: RemoveProjectOptions) => {
       const idx = projects.findIndex((p) => p.id === id)
       if (idx < 0) return false
+      const linkedVideoIdx = videos.findIndex((v) => v.projectId === id)
+      if (linkedVideoIdx >= 0) {
+        if (!options?.alsoRemovePublication) {
+          throw new Error(MUSIC_PROJECT_HAS_PUBLICATION_ERROR)
+        }
+        videos.splice(linkedVideoIdx, 1)
+      }
       projects.splice(idx, 1)
       for (const script of scripts) {
         if (script.projectId === id) script.projectId = null
@@ -395,15 +410,65 @@ export const mockApi = {
       return filters?.limit != null ? matched.slice(0, filters.limit) : matched
     },
     get: async (id: string) => videos.find((v) => v.id === id) ?? null,
-    create: async (
-      input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl' | 'folderExists'>,
-    ) => {
+    create: async (input: ChannelVideoWriteInput) => {
+      const channel = channels.find((c) => c.id === input.channelId)
+      let projectId = input.projectId?.trim() || null
+      if (channel?.channelType === 'music' && !projectId) {
+        const existing = projects.find(
+          (p) =>
+            p.projectType === 'music' &&
+            !p.scheduledVideoId &&
+            (p.channelId === channel.id || !p.channelId) &&
+            p.name.trim().toLowerCase() === input.title.trim().toLowerCase(),
+        )
+        const project =
+          existing ??
+          (await mockApi.projects.create({
+            name: input.songTitle?.trim() || input.title.trim(),
+            projectType: 'music',
+            channelId: channel.id,
+          }))
+        projectId = project.id
+        const idx = projects.findIndex((p) => p.id === project.id)
+        if (idx >= 0) {
+          projects[idx] = {
+            ...projects[idx],
+            scheduledVideoId: 'pending',
+            scheduledVideoChannelId: channel.id,
+            scheduledDate: input.scheduledDate,
+            channelId: channel.id,
+            channelName: channel.name,
+          }
+        }
+      }
       const video: ChannelVideo = {
-        ...input,
         id: crypto.randomUUID(),
+        channelId: input.channelId,
+        title: input.title.trim(),
+        description: input.description ?? '',
+        thumbnailPath: input.thumbnailPath ?? '',
+        scheduledDate: input.scheduledDate,
+        status: input.status,
+        scriptId: input.scriptId ?? null,
+        projectId,
+        projectName: projectId ? projects.find((p) => p.id === projectId)?.name ?? null : null,
+        projectFolderPath: input.projectFolderPath ?? null,
         folderExists: Boolean(input.projectFolderPath),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+      }
+      if (projectId) {
+        const idx = projects.findIndex((p) => p.id === projectId)
+        if (idx >= 0) {
+          projects[idx] = {
+            ...projects[idx],
+            scheduledVideoId: video.id,
+            scheduledVideoChannelId: video.channelId,
+            scheduledDate: video.scheduledDate,
+            scheduledVideoStatus: video.status,
+            scheduledVideoTitle: video.title,
+          }
+        }
       }
       videos.push(video)
       return video
@@ -417,7 +482,21 @@ export const mockApi = {
     remove: async (id: string) => {
       const idx = videos.findIndex((v) => v.id === id)
       if (idx < 0) return false
+      const current = videos[idx]
       videos.splice(idx, 1)
+      if (current.projectId) {
+        const projectIdx = projects.findIndex((p) => p.id === current.projectId)
+        if (projectIdx >= 0) {
+          projects[projectIdx] = {
+            ...projects[projectIdx],
+            scheduledVideoId: null,
+            scheduledVideoChannelId: null,
+            scheduledDate: null,
+            scheduledVideoStatus: null,
+            scheduledVideoTitle: null,
+          }
+        }
+      }
       return true
     },
     setThumbnail: async (videoId: string, sourcePath: string) => {
@@ -610,6 +689,11 @@ export const mockApi = {
     remove: async () => false,
     mediaUrl: async () => {
       throw new Error('Prévia de vídeo indisponível no modo mock. Use o Electron.')
+    },
+    thumbnailUrl: async () => null,
+    relink: async () => null,
+    openExportsFolder: async () => {
+      throw new Error('Pasta de exports indisponível no modo mock. Use o Electron.')
     },
     onProgress: (_callback: (event: ShortsProgressEvent) => void) => () => undefined,
   },

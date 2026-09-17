@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Clapperboard, FileText, MessageSquare, Music2, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Clapperboard, FileText, MessageSquare, Music2, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
 import type { Channel, Project, ProjectType, ScriptRecord } from '@shared/types'
 import type { MusicTrack } from '@shared/musicAnalysis'
 import { formatTimecode } from '@shared/musicAnalysis'
+import { channelVideoPath, formatMusicProjectPublicationLine } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
@@ -134,9 +135,14 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
     if (!project) return
     setConfirmDelete(false)
     try {
-      await api.projects.remove(project.id)
+      await api.projects.remove(project.id, {
+        alsoRemovePublication: Boolean(project.scheduledVideoId),
+      })
       notifyProjectsChanged()
-      push('Projeto removido.', 'success')
+      push(
+        project.scheduledVideoId ? 'Projeto e publicação removidos.' : 'Projeto removido.',
+        'success',
+      )
       navigate(env.basePath, { replace: true })
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao remover projeto', 'error')
@@ -289,6 +295,32 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
 
           <ProjectFolderPanel project={project} onChange={setProject} />
 
+          {projectType === 'music' && project.scheduledVideoId && project.scheduledVideoChannelId ? (
+            <Card padding="sm" className="space-y-2">
+              <p className="text-xs font-medium text-muted">Publicação</p>
+              <p className="text-sm text-text">
+                {formatMusicProjectPublicationLine({
+                  channelName: project.channelName,
+                  scheduledDate: project.scheduledDate,
+                })}
+              </p>
+              <p className="text-xs text-muted-2">
+                {project.scheduledVideoStatus === 'publicado' ? 'Publicado' : 'Agendado'}
+              </p>
+              <Button
+                variant="secondary"
+                fullWidth
+                className="h-9 text-xs"
+                icon={<CalendarDays className="h-3.5 w-3.5" />}
+                onClick={() =>
+                  navigate(channelVideoPath(project.scheduledVideoChannelId!, project.scheduledVideoId!))
+                }
+              >
+                Abrir no calendário
+              </Button>
+            </Card>
+          ) : null}
+
           <Card padding="sm" className="space-y-2 text-xs text-muted">
             <div className="flex justify-between gap-3">
               <span>Canal</span>
@@ -337,8 +369,12 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
       <ConfirmDialog
         open={confirmDelete}
         title="Excluir projeto?"
-        message="O projeto será removido do Atlas. Os arquivos da pasta do projeto não serão apagados."
-        confirmLabel="Excluir projeto"
+        message={
+          project.scheduledVideoId
+            ? 'Este projeto possui uma publicação no calendário. Excluir o projeto também remove o agendamento. Os arquivos físicos não serão apagados.'
+            : 'O projeto será removido do Atlas. Os arquivos da pasta do projeto não serão apagados.'
+        }
+        confirmLabel={project.scheduledVideoId ? 'Excluir projeto e publicação' : 'Excluir projeto'}
         onConfirm={() => void removeProject()}
         onClose={() => setConfirmDelete(false)}
       />

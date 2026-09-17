@@ -24,7 +24,7 @@ import {
   type ProjectFormValues,
 } from '../components/ProjectEditorModal'
 import { getAtlasApi } from '../lib/api'
-import { ENVIRONMENTS } from '../lib/environments'
+import { ENVIRONMENTS, projectPath } from '../lib/environments'
 import { notifyProjectsChanged, onProjectsChanged } from '../lib/projectEvents'
 import { notifyTasksChanged, onTasksChanged } from '../lib/taskEvents'
 import { onChannelsChanged } from '../lib/channelEvents'
@@ -332,6 +332,11 @@ export function HomePage() {
                     key={video.id}
                     video={video}
                     onOpen={() => navigate(channelVideoPath(video.channelId, video.id))}
+                    onOpenProject={
+                      video.channelType === 'music' && video.projectId
+                        ? () => navigate(projectPath('music', video.projectId!))
+                        : undefined
+                    }
                     onCopyTitle={() =>
                       void copyVideoField(video.title, 'Este vídeo ainda não tem título.', 'Título copiado.')
                     }

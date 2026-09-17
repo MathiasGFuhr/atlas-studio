@@ -18,11 +18,13 @@ function dateParts(dateKey: string): { day: string; month: string } | null {
 export function HomeScheduledVideoCard({
   video,
   onOpen,
+  onOpenProject,
   onCopyTitle,
   onCopyDescription,
 }: {
   video: ChannelVideo
   onOpen: () => void
+  onOpenProject?: () => void
   onCopyTitle: () => void
   onCopyDescription: () => void
 }) {
@@ -121,6 +123,19 @@ export function HomeScheduledVideoCard({
                 >
                   Abrir
                 </button>
+                {onOpenProject && video.projectId && channelType === 'music' ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="block w-full px-3 py-1.5 text-left text-xs text-text hover:bg-white/5"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      onOpenProject()
+                    }}
+                  >
+                    Abrir projeto
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   role="menuitem"

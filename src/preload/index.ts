@@ -14,6 +14,7 @@ import type {
   Channel,
   ChannelPrompt,
   ChannelVideo,
+  ChannelVideoWriteInput,
   DiscoveredSkill,
   GenerateScriptRequest,
   GenerationProgressEvent,
@@ -21,6 +22,7 @@ import type {
   Niche,
   Project,
   ProjectType,
+  RemoveProjectOptions,
   ScriptRecord,
   ScriptVersion,
   SkillRescanResult,
@@ -38,6 +40,7 @@ import type {
   ShortsJob,
   ShortsProgressEvent,
 } from '../shared/shorts'
+import type { ShortsProjectListFilters } from '../shared/shortsProject'
 import type { CustomPrompt } from '../shared/quickPrompts/types'
 import type {
   ChatAgentStatusSnapshot,
@@ -68,7 +71,8 @@ const api = {
       id: string,
       patch: Partial<Pick<Project, 'name' | 'description' | 'projectFolderPath' | 'channelId'>>,
     ) => ipcRenderer.invoke(IPC.projects.update, id, patch) as Promise<Project | null>,
-    remove: (id: string) => ipcRenderer.invoke(IPC.projects.remove, id) as Promise<boolean>,
+    remove: (id: string, options?: RemoveProjectOptions) =>
+      ipcRenderer.invoke(IPC.projects.remove, id, options) as Promise<boolean>,
     /** Cria a pasta física do projeto na raiz configurada. */
     createFolder: (id: string) =>
       ipcRenderer.invoke(IPC.projects.createFolder, id) as Promise<Project | null>,
@@ -119,13 +123,12 @@ const api = {
     list: (filters?: VideoListFilters) =>
       ipcRenderer.invoke(IPC.videos.list, filters) as Promise<ChannelVideo[]>,
     get: (id: string) => ipcRenderer.invoke(IPC.videos.get, id) as Promise<ChannelVideo | null>,
-    create: (
-      input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl' | 'folderExists'>,
-    ) => ipcRenderer.invoke(IPC.videos.create, input) as Promise<ChannelVideo>,
+    create: (input: ChannelVideoWriteInput) =>
+      ipcRenderer.invoke(IPC.videos.create, input) as Promise<ChannelVideo>,
     update: (
       id: string,
       patch: Partial<
-        Omit<ChannelVideo, 'id' | 'channelId' | 'createdAt' | 'thumbnailDataUrl' | 'folderExists'>
+        Omit<ChannelVideo, 'id' | 'channelId' | 'createdAt' | 'thumbnailDataUrl' | 'folderExists' | 'projectName'>
       >,
     ) => ipcRenderer.invoke(IPC.videos.update, id, patch) as Promise<ChannelVideo | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.videos.remove, id) as Promise<boolean>,
@@ -198,7 +201,7 @@ const api = {
       ipcRenderer.invoke(IPC.music.export, payload) as Promise<string | null>,
   },
   shorts: {
-    list: (filters?: { projectId?: string | null }) =>
+    list: (filters?: ShortsProjectListFilters) =>
       ipcRenderer.invoke(IPC.shorts.list, filters) as Promise<ShortsJob[]>,
     get: (id: string) => ipcRenderer.invoke(IPC.shorts.get, id) as Promise<ShortsJob | null>,
     import: (projectId?: string | null) =>
@@ -212,13 +215,21 @@ const api = {
     updateSettings: (
       jobId: string,
       patch: Partial<
-        Pick<ShortsJob, 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled'>
+        Pick<
+          ShortsJob,
+          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled'
+        >
       >,
     ) => ipcRenderer.invoke(IPC.shorts.updateSettings, jobId, patch) as Promise<ShortsJob | null>,
     export: (payload: { jobId: string; clipId: string }) =>
       ipcRenderer.invoke(IPC.shorts.export, payload) as Promise<string | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.shorts.remove, id) as Promise<boolean>,
     mediaUrl: (jobId: string) => ipcRenderer.invoke(IPC.shorts.mediaUrl, jobId) as Promise<string>,
+    thumbnailUrl: (jobId: string) =>
+      ipcRenderer.invoke(IPC.shorts.thumbnailUrl, jobId) as Promise<string | null>,
+    relink: (jobId: string) => ipcRenderer.invoke(IPC.shorts.relink, jobId) as Promise<ShortsJob | null>,
+    openExportsFolder: (jobId: string) =>
+      ipcRenderer.invoke(IPC.shorts.openExportsFolder, jobId) as Promise<boolean>,
     onProgress: (callback: (event: ShortsProgressEvent) => void) => {
       const listener = (_: Electron.IpcRendererEvent, data: ShortsProgressEvent) => callback(data)
       ipcRenderer.on(IPC.shorts.progress, listener)

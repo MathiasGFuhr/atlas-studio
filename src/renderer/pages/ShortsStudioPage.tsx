@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Clapperboard, Film, Loader2, Scissors } from 'lucide-react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Clapperboard, Loader2, Pencil, Scissors } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { Project } from '@shared/types'
 import type {
@@ -32,11 +32,11 @@ import { PageHeader } from '../components/PageHeader'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Input } from '../components/Input'
+import { Modal } from '../components/Modal'
 import { ShortsAdjustModal } from '../components/shorts/ShortsAdjustModal'
 import { ShortsResultCard } from '../components/shorts/ShortsResultCard'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
-import { cn } from '../lib/utils'
 
 function FieldSelect({
   label,
@@ -66,12 +66,16 @@ function FieldSelect({
 export function ShortsStudioPage() {
   const api = getAtlasApi()
   const { push } = useToast()
+  const navigate = useNavigate()
+  const { jobId } = useParams<{ jobId: string }>()
   const [params] = useSearchParams()
   const projectId = params.get('projectId')
+  const listPath = projectId ? `/shorts?projectId=${encodeURIComponent(projectId)}` : '/shorts'
 
   const [project, setProject] = useState<Project | null>(null)
   const [job, setJob] = useState<ShortsJob | null>(null)
-  const [jobs, setJobs] = useState<ShortsJob[]>([])
+  const [missing, setMissing] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<ShortsProfile>('history')
   const [clipCount, setClipCount] = useState<ShortsClipCount>(5)
   const [requestedDuration, setRequestedDuration] = useState(30)
@@ -86,6 +90,8 @@ export function ShortsStudioPage() {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [playingClipId, setPlayingClipId] = useState<string | null>(null)
   const [copyBusyId, setCopyBusyId] = useState<string | null>(null)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
 
   const analyzing = job?.status === 'analyzing' || (busy && progress?.stage !== 'exporting')
 
@@ -100,19 +106,22 @@ export function ShortsStudioPage() {
     })
   }, [api, projectId])
 
-  async function loadJobs(currentId?: string) {
-    const list = await api.shorts.list(projectId ? { projectId } : undefined)
-    setJobs(list)
-    if (currentId) {
-      setJob(list.find((item) => item.id === currentId) ?? list[0] ?? null)
+  async function loadJob() {
+    if (!jobId) {
+      setJob(null)
+      setMissing(true)
+      setLoading(false)
       return
     }
-    setJob((current) => list.find((item) => item.id === current?.id) ?? list[0] ?? null)
+    const found = await api.shorts.get(jobId)
+    setJob(found)
+    setMissing(!found)
+    setLoading(false)
   }
 
   useEffect(() => {
-    void loadJobs()
-  }, [projectId])
+    void loadJob()
+  }, [jobId])
 
   useEffect(() => {
     return api.shorts.onProgress((event) => {
@@ -129,10 +138,12 @@ export function ShortsStudioPage() {
     setDurationMode(job.durationMode)
     setAspectMode(job.aspectMode)
     setCaptionsEnabled(job.captionsEnabled)
+    setRenameValue(job.name)
   }, [job?.id])
 
   async function persistSettings(
     patch: Partial<{
+      name: string
       profile: ShortsProfile
       clipCount: ShortsClipCount
       requestedDuration: number
@@ -164,31 +175,27 @@ export function ShortsStudioPage() {
     applyRequestedDuration(parsed)
   }
 
-  async function importVideo() {
+  async function saveRename() {
+    const name = renameValue.trim()
+    if (!name) {
+      push('Informe o nome do projeto.', 'error')
+      return
+    }
+    await persistSettings({ name })
+    setRenameOpen(false)
+    push('Projeto renomeado.', 'success')
+  }
+
+  async function relinkVideo() {
+    if (!job) return
     setBusy(true)
     try {
-      const next = await api.shorts.import(projectId)
+      const next = await api.shorts.relink(job.id)
       if (!next) return
-      const cap = capRequestedDuration(requestedDuration, next.probe?.duration)
-      const saved =
-        (await api.shorts.updateSettings(next.id, {
-          requestedDuration: cap.requested,
-          durationMode,
-          profile,
-          clipCount,
-          aspectMode,
-          captionsEnabled,
-        })) ?? next
-      setRequestedDuration(cap.requested)
-      setDurationInput(formatDurationInput(cap.requested))
-      setDurationWarning(cap.message)
-      if (cap.capped && cap.message) push(cap.message, 'error')
-      setJob(saved)
-      setProgress(null)
-      await loadJobs(saved.id)
-      push('Vídeo importado. O arquivo original permanece no lugar.', 'success')
+      setJob(next)
+      push('Arquivo original localizado.', 'success')
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao importar o vídeo', 'error')
+      push(error instanceof Error ? error.message : 'Falha ao localizar o arquivo', 'error')
     } finally {
       setBusy(false)
     }
@@ -196,7 +203,7 @@ export function ShortsStudioPage() {
 
   async function analyze() {
     if (!job) {
-      push('Importe um vídeo primeiro.', 'error')
+      push('Abra um projeto com vídeo para analisar.', 'error')
       return
     }
     setBusy(true)
@@ -212,7 +219,6 @@ export function ShortsStudioPage() {
         captionsEnabled,
       })
       setJob(next)
-      await loadJobs(next.id)
       if (next.status === 'error') {
         push(next.errorMessage || 'A análise falhou. O vídeo original foi preservado.', 'error')
       } else {
@@ -311,31 +317,88 @@ export function ShortsStudioPage() {
 
   const probe = job?.probe
 
-  return (
-    <div className="h-full overflow-y-auto px-8 py-6">
-      <PageHeader
-        breadcrumb={project ? `Atlas / Shorts Studio / ${project.name}` : 'Atlas / Shorts Studio'}
-        title="Shorts Studio"
-        subtitle="Importe um vídeo completo, deixe o Atlas sugerir os melhores trechos e exporte Shorts 9:16 com corte, crop e legenda. Sem editor complexo."
-        hint={
-          project
-            ? `Vinculado ao projeto ${project.name} (${project.projectType === 'music' ? 'Música' : 'História'}).`
-            : 'Aberto globalmente — funciona sem projeto.'
-        }
-      />
+  if (loading && !job) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted" />
+      </div>
+    )
+  }
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
+  if (missing) {
+    return (
+      <div className="h-full overflow-y-auto px-8 py-6">
+        <button
+          type="button"
+          onClick={() => navigate(listPath)}
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar aos projetos
+        </button>
+        <Card className="flex flex-col items-center py-14 text-center">
+          <Clapperboard className="mb-3 h-10 w-10 text-muted" />
+          <p className="text-sm text-muted">Projeto de Shorts não encontrado.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full min-w-0 overflow-y-auto px-8 py-6">
+      <button
+        type="button"
+        onClick={() => navigate(listPath)}
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar aos projetos
+      </button>
+
+      <div className="mb-2 flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <PageHeader
+          breadcrumb={project ? `Atlas / Shorts Studio / ${project.name}` : 'Atlas / Shorts Studio'}
+          title={job?.name || 'Shorts Studio'}
+          subtitle="Importe um vídeo completo, deixe o Atlas sugerir os melhores trechos e exporte Shorts 9:16 com corte, crop e legenda. Sem editor complexo."
+          hint={
+            project
+              ? `Vinculado ao projeto ${project.name} (${project.projectType === 'music' ? 'Música' : 'História'}).`
+              : undefined
+          }
+        />
+        </div>
+        <Button
+          variant="secondary"
+          className="mt-7 h-9 px-3 text-xs"
+          icon={<Pencil className="h-3.5 w-3.5" />}
+          disabled={!job}
+          onClick={() => {
+            setRenameValue(job?.name ?? '')
+            setRenameOpen(true)
+          }}
+        >
+          Renomear
+        </Button>
+      </div>
+
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-5">
           <Card className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
               <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-muted">Arquivo</p>
-                  <p className="mt-1 text-sm text-text">{job?.sourceName || 'Nenhum vídeo importado'}</p>
+                  <p className="mt-1 truncate text-sm text-text">{job?.sourceName || 'Nenhum vídeo importado'}</p>
+                  {job && !job.sourceExists ? (
+                    <p className="mt-1 text-xs text-danger">Arquivo original não encontrado.</p>
+                  ) : null}
                 </div>
-                <Button variant="secondary" disabled={busy} onClick={() => void importVideo()}>
-                  {job ? 'Trocar vídeo' : 'Importar vídeo'}
-                </Button>
+                {job && !job.sourceExists ? (
+                  <Button variant="secondary" disabled={busy} onClick={() => void relinkVideo()}>
+                    Localizar arquivo
+                  </Button>
+                ) : null}
               </div>
             </div>
             <FieldSelect
@@ -478,7 +541,7 @@ export function ShortsStudioPage() {
             <div className="md:col-span-2">
               <Button
                 fullWidth
-                disabled={busy || Boolean(copyBusyId) || !job}
+                disabled={busy || Boolean(copyBusyId) || !job || job.sourceExists === false}
                 icon={analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />}
                 onClick={() => void analyze()}
               >
@@ -537,7 +600,7 @@ export function ShortsStudioPage() {
           ) : (
             <Card className="flex flex-col items-center py-14 text-center">
               <Clapperboard className="mb-3 h-10 w-10 text-muted" />
-              <p className="text-sm text-muted">Importe um vídeo e analise para ver os cortes sugeridos.</p>
+              <p className="text-sm text-muted">Analise o vídeo para ver os cortes sugeridos.</p>
             </Card>
           )}
         </div>
@@ -552,27 +615,35 @@ export function ShortsStudioPage() {
                 : 'Perfil História: gancho, curiosidade, revelação, conflito, frase memorável, virada.'}
             </p>
           </Card>
-          {jobs.length > 1 ? (
-            <Card padding="sm" className="space-y-2">
-              <p className="text-xs font-medium text-muted">Recentes</p>
-              {jobs.slice(0, 6).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setJob(item)}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-xs hover:bg-white/5',
-                    item.id === job?.id ? 'bg-white/5 text-text' : 'text-muted',
-                  )}
-                >
-                  <Film className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{item.sourceName}</span>
-                </button>
-              ))}
-            </Card>
-          ) : null}
         </aside>
       </div>
+
+      <Modal
+        open={renameOpen}
+        title="Renomear projeto"
+        onClose={() => setRenameOpen(false)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRenameOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void saveRename()}>Salvar</Button>
+          </>
+        }
+      >
+        <Input
+          id="shorts-editor-rename"
+          label="Nome do projeto"
+          value={renameValue}
+          onChange={(event) => setRenameValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              void saveRename()
+            }
+          }}
+        />
+      </Modal>
 
       <ShortsAdjustModal
         open={Boolean(previewClip && job)}

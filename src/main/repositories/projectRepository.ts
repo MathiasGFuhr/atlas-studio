@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db/database'
-import type { Project, ProjectType } from '../../shared/types'
-import { isProjectType } from '../../shared/types'
+import type { ChannelVideoStatus, Project, ProjectType } from '../../shared/types'
+import { isProjectType, MUSIC_PROJECT_HAS_PUBLICATION_ERROR } from '../../shared/types'
 import { folderExists } from '../services/storage/projectFolders'
 import { channelRepository } from './channelRepository'
 
@@ -17,6 +17,11 @@ type ProjectRow = {
   updated_at: string
   script_count?: number
   track_count?: number
+  scheduled_video_id?: string | null
+  scheduled_video_channel_id?: string | null
+  scheduled_date?: string | null
+  scheduled_video_status?: string | null
+  scheduled_video_title?: string | null
 }
 
 function mapProject(row: ProjectRow): Project {
@@ -33,6 +38,11 @@ function mapProject(row: ProjectRow): Project {
     folderExists: folderExists(folderPath),
     scriptCount: Number(row.script_count ?? 0),
     trackCount: Number(row.track_count ?? 0),
+    scheduledVideoId: row.scheduled_video_id?.trim() || null,
+    scheduledVideoChannelId: row.scheduled_video_channel_id?.trim() || null,
+    scheduledDate: row.scheduled_date?.trim() || null,
+    scheduledVideoStatus: (row.scheduled_video_status as ChannelVideoStatus | null) ?? null,
+    scheduledVideoTitle: row.scheduled_video_title ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -42,9 +52,15 @@ const SELECT_WITH_COUNTS = `
   SELECT p.*,
     c.name AS channel_name,
     (SELECT COUNT(*) FROM scripts s WHERE s.project_id = p.id) AS script_count,
-    (SELECT COUNT(*) FROM music_tracks m WHERE m.project_id = p.id) AS track_count
+    (SELECT COUNT(*) FROM music_tracks m WHERE m.project_id = p.id) AS track_count,
+    v.id AS scheduled_video_id,
+    v.channel_id AS scheduled_video_channel_id,
+    v.scheduled_date AS scheduled_date,
+    v.status AS scheduled_video_status,
+    v.title AS scheduled_video_title
   FROM projects p
   LEFT JOIN channels c ON c.id = p.channel_id
+  LEFT JOIN channel_videos v ON v.project_id = p.id
 `
 
 function resolveChannelId(projectType: ProjectType, channelId?: string | null): string | null {
@@ -184,10 +200,14 @@ export const projectRepository = {
    * Remove o cadastro do projeto da fonte de verdade (`projects`).
    * Roteiros, faixas e prompts rápidos continuam no Atlas, só perdem o vínculo.
    * A pasta física não é apagada. O boot não recria o projeto a partir desses órfãos.
+   * Vídeo musical vinculado precisa ser removido antes (serviço de publicação).
    */
   remove(id: string): boolean {
     const current = this.get(id)
     if (!current) return false
+    if (channelRepository.getVideoByProjectId(id)) {
+      throw new Error(MUSIC_PROJECT_HAS_PUBLICATION_ERROR)
+    }
     const db = getDb()
     db.prepare('UPDATE scripts SET project_id = NULL WHERE project_id = ?').run(id)
     db.prepare('UPDATE music_tracks SET project_id = NULL WHERE project_id = ?').run(id)

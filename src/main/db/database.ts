@@ -198,6 +198,7 @@ export async function initDatabase(workspaceRoot: string): Promise<AppDatabase> 
       title_analysis TEXT,
       title_analyzed_at TEXT,
       project_folder_path TEXT,
+      project_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
@@ -318,6 +319,11 @@ export async function initDatabase(workspaceRoot: string): Promise<AppDatabase> 
   if (migrated.historyCreated > 0 || migrated.musicCreated > 0) {
     console.log(
       `[atlas][db] migração de projetos: ${migrated.historyCreated} roteiro(s) → História, ${migrated.musicCreated} faixa(s) → Música`,
+    )
+  }
+  if (migrated.musicProjectsFromVideos > 0 || migrated.musicVideosLinked > 0) {
+    console.log(
+      `[atlas][db] vídeos musicais: ${migrated.musicVideosLinked} vinculado(s) a projeto existente, ${migrated.musicProjectsFromVideos} projeto(s) criado(s)`,
     )
   }
   ensureWorkspaceDirs(workspaceRoot)

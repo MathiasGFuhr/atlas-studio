@@ -3,7 +3,12 @@ import type { BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { ChatActionResult } from '../../../shared/chat/types'
-import { isProjectType, type Project, type ProjectType, type TaskRelatedType } from '../../../shared/types'
+import {
+  isProjectType,
+  type Project,
+  type ProjectType,
+  type TaskRelatedType,
+} from '../../../shared/types'
 import { MUSIC_PROMPTS_PATH } from '../../../shared/workspaceCapabilities'
 import { isTaskCategory, isTaskPriority, isTaskRelatedType, todayYmd } from '../../../shared/tasks'
 import { channelRepository } from '../../repositories/channelRepository'
@@ -12,6 +17,7 @@ import { projectRepository } from '../../repositories/projectRepository'
 import { quickPromptRepository } from '../../repositories/quickPromptRepository'
 import { scriptRepository } from '../../repositories/scriptRepository'
 import { taskRepository } from '../../repositories/taskRepository'
+import { removeProject } from '../videos/musicVideoProjectService'
 import {
   createProjectFolder,
   folderExists,
@@ -266,7 +272,7 @@ export function createAtlasActionRegistry(deps: {
 
   registry.register('delete_project', (input, ctx) => {
     const project = findProject(input, ctx)
-    projectRepository.remove(project.id)
+    removeProject(project.id)
     return ok({
       name: 'delete_project',
       title: 'Projeto removido do Atlas',

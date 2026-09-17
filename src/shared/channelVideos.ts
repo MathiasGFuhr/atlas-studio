@@ -62,6 +62,18 @@ export function channelVideoPath(channelId: string, videoId: string): string {
   return `/canais/${channelId}/videos/${videoId}`
 }
 
+/** Linha discreta na lista de Música quando o projeto já tem publicação. */
+export function formatMusicProjectPublicationLine(input: {
+  channelName?: string | null
+  scheduledDate?: string | null
+  now?: Date
+}): string | null {
+  if (!input.scheduledDate) return null
+  const date = formatScheduledDateLabel(input.scheduledDate, input.now)
+  const channel = input.channelName?.trim()
+  return channel ? `${channel} · ${date}` : date
+}
+
 export function channelAgendaPath(): string {
   return '/canais/agenda'
 }

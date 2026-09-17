@@ -46,6 +46,13 @@ export interface Project {
   scriptCount?: number
   /** Quantidade de faixas vinculadas (projetos de Música). Calculado na leitura. */
   trackCount?: number
+  /** Publicação do calendário vinculada a este projeto. Calculado na leitura. */
+  scheduledVideoId?: string | null
+  /** Canal da publicação vinculada. Calculado na leitura. */
+  scheduledVideoChannelId?: string | null
+  scheduledDate?: string | null
+  scheduledVideoStatus?: ChannelVideoStatus | null
+  scheduledVideoTitle?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -330,6 +337,14 @@ export interface ChannelVideo {
   scheduledDate: string
   status: ChannelVideoStatus
   scriptId: string | null
+  /**
+   * Projeto vinculado a esta publicação.
+   * Obrigatório para vídeos de canais de Música (`projectType: 'music'`).
+   * História continua podendo ficar `null`.
+   */
+  projectId: string | null
+  /** Nome do projeto no momento da leitura. Calculado na leitura. */
+  projectName?: string | null
   /** Pasta física do projeto de edição vinculada a este vídeo. */
   projectFolderPath: string | null
   /** Calculado na leitura — não persistir. */
@@ -347,8 +362,33 @@ export interface ChannelVideo {
   channelColor?: string | null
 }
 
+/** Entrada de criação/atualização de vídeo do calendário. */
+export interface ChannelVideoWriteInput {
+  channelId: string
+  title: string
+  description?: string
+  thumbnailPath?: string
+  scheduledDate: string
+  status: ChannelVideoStatus
+  scriptId?: string | null
+  projectFolderPath?: string | null
+  /** Projeto de Música existente. Ignorado em canais de História. */
+  projectId?: string | null
+  /** Nome real da música — só usado para nomear o projeto criado automaticamente. */
+  songTitle?: string | null
+}
+
+export const MUSIC_PROJECT_HAS_PUBLICATION_ERROR =
+  'Este projeto possui uma publicação agendada. Exclua o projeto e a publicação juntos, ou cancele.'
+
+export interface RemoveProjectOptions {
+  /** Quando o projeto de Música tem publicação, também remove o vídeo do calendário. */
+  alsoRemovePublication?: boolean
+}
+
 export interface VideoListFilters {
   channelId?: string
+  projectId?: string
   from?: string
   to?: string
   limit?: number
@@ -732,6 +772,9 @@ export const IPC = {
     export: 'shorts:export',
     remove: 'shorts:remove',
     mediaUrl: 'shorts:mediaUrl',
+    thumbnailUrl: 'shorts:thumbnailUrl',
+    relink: 'shorts:relink',
+    openExportsFolder: 'shorts:openExportsFolder',
     progress: 'shorts:progress',
   },
   skills: {

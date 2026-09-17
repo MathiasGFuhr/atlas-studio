@@ -132,6 +132,8 @@ export interface ShortsEditorialContext {
 export interface ShortsJob {
   id: string
   projectId: string | null
+  /** Nome exibido do projeto. Por padrão, o arquivo sem extensão. */
+  name: string
   sourcePath: string
   sourceName: string
   profile: ShortsProfile
@@ -149,6 +151,10 @@ export interface ShortsJob {
   status: ShortsJobStatus
   createdAt: string
   updatedAt: string
+  /** Calculado na leitura: o arquivo original ainda existe neste path. */
+  sourceExists: boolean
+  /** URL atlas-media da thumbnail em cache, se já gerada. */
+  thumbnailUrl: string | null
 }
 
 export interface ShortsProgressEvent {

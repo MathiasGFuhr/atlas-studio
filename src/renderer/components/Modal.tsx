@@ -83,7 +83,7 @@ export function ConfirmDialog({
         </>
       }
     >
-      <p className="text-sm leading-relaxed text-muted">{message}</p>
+      <p className="whitespace-pre-line text-sm leading-relaxed text-muted">{message}</p>
     </Modal>
   )
 }

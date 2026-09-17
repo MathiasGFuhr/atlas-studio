@@ -14,10 +14,17 @@ import type {
 } from '../../shared/shorts'
 import { isShortsAspectMode, isShortsClipCount, isShortsDurationMode, isShortsProfile, normalizeShortsClip } from '../../shared/shorts'
 import { requestedDurationFromLegacyPreset } from '../../shared/shortsDuration'
+import {
+  matchesShortsProjectSearch,
+  shortsProjectNameFromFileName,
+  sortShortsProjects,
+  type ShortsProjectListFilters,
+} from '../../shared/shortsProject'
 
 type JobRow = {
   id: string
   project_id: string | null
+  name: string | null
   source_path: string
   source_name: string
   profile: string
@@ -53,11 +60,13 @@ function mapJob(row: JobRow): ShortsJob {
     Number(row.requested_duration) > 0
       ? Number(row.requested_duration)
       : requestedDurationFromLegacyPreset(row.duration_preset)
+  const sourceName = row.source_name
   return {
     id: row.id,
     projectId: row.project_id,
+    name: String(row.name ?? '').trim() || shortsProjectNameFromFileName(sourceName),
     sourcePath: row.source_path,
-    sourceName: row.source_name,
+    sourceName,
     profile: isShortsProfile(row.profile) ? row.profile : 'history',
     clipCount,
     requestedDuration: requested,
@@ -75,19 +84,27 @@ function mapJob(row: JobRow): ShortsJob {
     status: (row.status as ShortsJobStatus) || 'draft',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    sourceExists: true,
+    thumbnailUrl: null,
   }
 }
 
 export const shortsRepository = {
-  list(filters?: { projectId?: string | null }): ShortsJob[] {
+  list(filters?: ShortsProjectListFilters): ShortsJob[] {
+    let jobs: ShortsJob[]
     if (filters?.projectId) {
-      return (
+      jobs = (
         getDb()
           .prepare('SELECT * FROM shorts_jobs WHERE project_id = ? ORDER BY updated_at DESC')
           .all(filters.projectId) as JobRow[]
       ).map(mapJob)
+    } else {
+      jobs = (getDb().prepare('SELECT * FROM shorts_jobs ORDER BY updated_at DESC').all() as JobRow[]).map(mapJob)
     }
-    return (getDb().prepare('SELECT * FROM shorts_jobs ORDER BY updated_at DESC').all() as JobRow[]).map(mapJob)
+    if (filters?.query) {
+      jobs = jobs.filter((job) => matchesShortsProjectSearch(job, filters.query ?? ''))
+    }
+    return sortShortsProjects(jobs, filters?.sort ?? 'updated_desc')
   },
 
   get(id: string): ShortsJob | null {
@@ -98,23 +115,26 @@ export const shortsRepository = {
   create(input: {
     sourcePath: string
     sourceName: string
+    name?: string
     projectId?: string | null
     profile?: ShortsProfile
     probe?: VideoProbeInfo | null
   }): ShortsJob {
     const id = randomUUID()
     const timestamp = new Date().toISOString()
+    const name = (input.name?.trim() || shortsProjectNameFromFileName(input.sourceName)).trim()
     getDb()
       .prepare(
         `INSERT INTO shorts_jobs (
-          id, project_id, source_path, source_name, profile, clip_count, duration_preset,
+          id, project_id, name, source_path, source_name, profile, clip_count, duration_preset,
           requested_duration, duration_mode, aspect_mode, captions_enabled, probe_json, clips_json,
           transcript_json, transcript_source, analysis_notes, error_message, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
         input.projectId || null,
+        name,
         input.sourcePath,
         input.sourceName,
         input.profile || 'history',
@@ -141,6 +161,9 @@ export const shortsRepository = {
     id: string,
     patch: Partial<{
       projectId: string | null
+      name: string
+      sourcePath: string
+      sourceName: string
       profile: ShortsProfile
       clipCount: ShortsClipCount
       requestedDuration: number
@@ -161,19 +184,23 @@ export const shortsRepository = {
     const next: ShortsJob = {
       ...current,
       ...patch,
+      name: patch.name != null ? patch.name.trim() || current.name : current.name,
       updatedAt: new Date().toISOString(),
     }
     getDb()
       .prepare(
         `UPDATE shorts_jobs SET
-          project_id = ?, profile = ?, clip_count = ?, duration_preset = ?, requested_duration = ?,
-          duration_mode = ?, aspect_mode = ?, captions_enabled = ?, probe_json = ?, clips_json = ?,
-          transcript_json = ?, transcript_source = ?, analysis_notes = ?, error_message = ?, status = ?,
-          updated_at = ?
+          project_id = ?, name = ?, source_path = ?, source_name = ?, profile = ?, clip_count = ?,
+          duration_preset = ?, requested_duration = ?, duration_mode = ?, aspect_mode = ?,
+          captions_enabled = ?, probe_json = ?, clips_json = ?, transcript_json = ?,
+          transcript_source = ?, analysis_notes = ?, error_message = ?, status = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
         next.projectId,
+        next.name,
+        next.sourcePath,
+        next.sourceName,
         next.profile,
         next.clipCount,
         String(next.requestedDuration),

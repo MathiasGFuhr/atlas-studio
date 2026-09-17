@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Check, ChevronLeft, ChevronRight, Copy, FolderOpen, FolderSearch, ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Copy, FolderOpen, FolderSearch, ImagePlus, Music2, Plus, Sparkles, Trash2 } from 'lucide-react'
 import type { Channel, ChannelVideo, ChannelVideoStatus, TitleStrengthAnalysis } from '@shared/types'
 import { channelVideoPath, toDateKey, todayDateKey } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
@@ -15,6 +15,8 @@ import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { TitleScoreBadge, TitleScorePanel } from '../components/TitleScore'
 import { notifyVideosChanged } from '../lib/videoEvents'
+import { notifyProjectsChanged } from '../lib/projectEvents'
+import { projectPath } from '../lib/environments'
 import { cn } from '../lib/utils'
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -342,8 +344,15 @@ export function ChannelCalendarPage() {
           status: form.status,
           scriptId: null,
           projectFolderPath: form.projectFolderPath,
+          songTitle: form.songTitle.trim() || null,
         })
-        push('Vídeo adicionado ao calendário.', 'success')
+        push(
+          channel?.channelType === 'music'
+            ? 'Vídeo adicionado e vinculado ao projeto de Música.'
+            : 'Vídeo adicionado ao calendário.',
+          'success',
+        )
+        if (channel?.channelType === 'music') notifyProjectsChanged()
       }
       if (pendingThumb) {
         const withThumb = await api.videos.setThumbnail(saved.id, pendingThumb)
@@ -368,8 +377,14 @@ export function ChannelCalendarPage() {
     if (!deleting) return
     try {
       await api.videos.remove(deleting.id)
-      push('Vídeo removido.', 'success')
+      push(
+        channel?.channelType === 'music'
+          ? 'Agendamento removido. O projeto de Música foi mantido.'
+          : 'Vídeo removido.',
+        'success',
+      )
       notifyVideosChanged()
+      if (channel?.channelType === 'music') notifyProjectsChanged()
       setDeleting(null)
       closeModal()
       await load()
@@ -531,9 +546,20 @@ export function ChannelCalendarPage() {
                     ) : null}
                   </div>
                 </div>
-                <Button variant="secondary" className="h-9 self-start px-3 text-xs" onClick={() => openExistingVideo(video)}>
-                  Editar
-                </Button>
+                <div className="flex shrink-0 flex-col gap-2">
+                  <Button variant="secondary" className="h-9 px-3 text-xs" onClick={() => openExistingVideo(video)}>
+                    Editar
+                  </Button>
+                  {video.projectId && channel.channelType === 'music' ? (
+                    <Button
+                      variant="ghost"
+                      className="h-9 px-3 text-xs"
+                      onClick={() => navigate(projectPath('music', video.projectId!))}
+                    >
+                      Abrir projeto
+                    </Button>
+                  ) : null}
+                </div>
               </Card>
             ))}
           </div>
@@ -555,6 +581,15 @@ export function ChannelCalendarPage() {
                 onClick={() => setDeleting(editing)}
               >
                 Excluir
+              </Button>
+            ) : null}
+            {editing?.projectId && channel.channelType === 'music' ? (
+              <Button
+                variant="secondary"
+                icon={<Music2 className="h-4 w-4" />}
+                onClick={() => navigate(projectPath('music', editing.projectId!))}
+              >
+                Abrir projeto
               </Button>
             ) : null}
             <Button variant="secondary" onClick={closeModal}>
@@ -752,8 +787,12 @@ export function ChannelCalendarPage() {
 
       <ConfirmDialog
         open={Boolean(deleting)}
-        title="Excluir vídeo"
-        message={`Excluir “${deleting?.title ?? ''}” do calendário?`}
+        title={channel.channelType === 'music' ? 'Excluir agendamento?' : 'Excluir vídeo'}
+        message={
+          channel.channelType === 'music'
+            ? `Excluir “${deleting?.title ?? ''}” do calendário? O projeto de Música será mantido.`
+            : `Excluir “${deleting?.title ?? ''}” do calendário?`
+        }
         confirmLabel="Excluir"
         onConfirm={() => void confirmDelete()}
         onClose={() => setDeleting(null)}

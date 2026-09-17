@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createRequire } from 'node:module'
 import type { AppDatabase } from './database'
-import { migrateSchema } from './migrations'
+import { migrateSchema, backfillMusicChannelVideos } from './migrations'
 
 const require = createRequire(import.meta.url)
 const initSqlJs = require('sql.js') as typeof import('sql.js')
@@ -148,7 +148,7 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 6 })
+    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 8 })
 
     // Nenhum registro antigo foi perdido.
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -228,7 +228,7 @@ describe('migração para projetos de História e Música', () => {
 
     const second = migrateSchema(db)
 
-    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 6 })
+    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 8 })
     expect(db.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual(afterFirst)
   })
 
@@ -317,7 +317,7 @@ describe('migração para projetos de História e Música', () => {
     const db = await createLegacyDatabase()
     seedLegacyContent(db)
     const first = migrateSchema(db)
-    expect(first.schemaVersion).toBe(6)
+    expect(first.schemaVersion).toBe(8)
     expect(first.backedUp).toBe(false)
     expect(migrateSchema(db).backedUp).toBe(false)
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -328,6 +328,8 @@ describe('migração para projetos de História e Música', () => {
       expect.objectContaining({ version: 4 }),
       expect.objectContaining({ version: 5 }),
       expect.objectContaining({ version: 6 }),
+      expect.objectContaining({ version: 7 }),
+      expect.objectContaining({ version: 8 }),
     ])
   })
 
@@ -354,9 +356,10 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result.schemaVersion).toBe(6)
+    expect(result.schemaVersion).toBe(8)
     const after = db.prepare('PRAGMA table_info(channel_videos)').all() as Array<{ name: string }>
     expect(after.some((col) => col.name === 'project_folder_path')).toBe(true)
+    expect(after.some((col) => col.name === 'project_id')).toBe(true)
     const shorts = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='shorts_jobs'").get() as
       | { name: string }
       | undefined
@@ -364,6 +367,7 @@ describe('migração para projetos de História e Música', () => {
     const shortsCols = db.prepare('PRAGMA table_info(shorts_jobs)').all() as Array<{ name: string }>
     expect(shortsCols.some((col) => col.name === 'requested_duration')).toBe(true)
     expect(shortsCols.some((col) => col.name === 'duration_mode')).toBe(true)
+    expect(shortsCols.some((col) => col.name === 'name')).toBe(true)
     const chatCols = db.prepare('PRAGMA table_info(chat_conversations)').all() as Array<{ name: string }>
     expect(chatCols.some((col) => col.name === 'model_override')).toBe(true)
     expect(chatCols.some((col) => col.name === 'effort_override')).toBe(true)
@@ -397,5 +401,167 @@ describe('migração para projetos de História e Música', () => {
     expect(db.prepare('SELECT status FROM channel_videos WHERE id = ?').get('v3')).toEqual({
       status: 'publicado',
     })
+    expect(db.prepare('SELECT project_id FROM channel_videos WHERE id = ?').get('v1')).toEqual({
+      project_id: null,
+    })
+  })
+
+  it('preenche o nome dos projetos de Shorts a partir do arquivo original', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    db.exec(`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      );
+      CREATE TABLE shorts_jobs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        source_path TEXT NOT NULL,
+        source_name TEXT NOT NULL,
+        profile TEXT NOT NULL DEFAULT 'history',
+        clip_count INTEGER NOT NULL DEFAULT 5,
+        duration_preset TEXT NOT NULL DEFAULT '20-45',
+        requested_duration REAL NOT NULL DEFAULT 30,
+        duration_mode TEXT NOT NULL DEFAULT 'approximate',
+        aspect_mode TEXT NOT NULL DEFAULT 'center_9_16',
+        captions_enabled INTEGER NOT NULL DEFAULT 1,
+        probe_json TEXT,
+        clips_json TEXT NOT NULL DEFAULT '[]',
+        transcript_json TEXT NOT NULL DEFAULT '[]',
+        transcript_source TEXT NOT NULL DEFAULT 'none',
+        analysis_notes TEXT,
+        error_message TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `)
+    db.exec(`ALTER TABLE channels ADD COLUMN channel_type TEXT NOT NULL DEFAULT 'history'`)
+    const appliedAt = '2026-09-17T00:00:00.000Z'
+    for (const [version, name] of [
+      [1, 'incremental-base'],
+      [2, 'channel-video-pipeline-status'],
+      [3, 'channel-video-project-folder'],
+      [4, 'shorts-studio-jobs'],
+      [5, 'shorts-custom-duration'],
+      [6, 'chat-agent-model-overrides'],
+    ] as const) {
+      db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(
+        version,
+        name,
+        appliedAt,
+      )
+    }
+    const at = '2026-09-17T10:00:00.000Z'
+    db.prepare(
+      `INSERT INTO shorts_jobs (
+        id, source_path, source_name, profile, clip_count, duration_preset,
+        requested_duration, duration_mode, aspect_mode, captions_enabled,
+        clips_json, transcript_json, transcript_source, status, created_at, updated_at
+      ) VALUES (?, ?, ?, 'music', 5, '30', 30, 'approximate', 'center_9_16', 1, '[]', '[]', 'none', 'draft', ?, ?)`,
+    ).run('sj1', 'C:\\videos\\show.mp4', 'Als „GEGEN DEN TAKT“ begann.mp4', at, at)
+
+    const result = migrateSchema(db)
+
+    expect(result.schemaVersion).toBe(8)
+    expect(db.prepare('SELECT name FROM shorts_jobs WHERE id = ?').get('sj1')).toEqual({
+      name: 'Als „GEGEN DEN TAKT“ begann',
+    })
+  })
+
+  it('vincula vídeos musicais existentes a projetos sem duplicar quando o nome é inequívoco', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    migrateSchema(db)
+
+    const at = '2026-09-17T10:00:00.000Z'
+    db.prepare(
+      `INSERT INTO channels (id, name, channel_type, created_at, updated_at)
+       VALUES ('ch-falk', 'Johann Falk', 'music', ?, ?)`,
+    ).run(at, at)
+    db.prepare(
+      `INSERT INTO projects (id, name, description, project_type, folder_path, channel_id, created_at, updated_at)
+       VALUES ('p-existing', 'HEILIGE LÜGEN', '', 'music', NULL, 'ch-falk', ?, ?)`,
+    ).run(at, at)
+    db.prepare(
+      `INSERT INTO channel_videos (id, channel_id, title, scheduled_date, status, created_at, updated_at)
+       VALUES ('v-match', 'ch-falk', 'HEILIGE LÜGEN', '2026-09-21', 'agendando', ?, ?)`,
+    ).run(at, at)
+    db.prepare(
+      `INSERT INTO channel_videos (id, channel_id, title, scheduled_date, status, created_at, updated_at)
+       VALUES ('v-new', 'ch-falk', 'Gegen den Takt', '2026-09-22', 'colocando', ?, ?)`,
+    ).run(at, at)
+    db.prepare(
+      `INSERT INTO channel_videos (id, channel_id, title, scheduled_date, status, created_at, updated_at)
+       VALUES ('v-history', 'c1', 'A Queda de Roma no calendário', '2026-09-23', 'colocando', ?, ?)`,
+    ).run(at, at)
+
+    const beforeProjects = db.prepare('SELECT COUNT(*) AS c FROM projects').get() as { c: number }
+    const result = backfillMusicChannelVideos(db)
+
+    expect(result).toMatchObject({
+      musicVideosLinked: 1,
+      musicProjectsFromVideos: 1,
+    })
+    expect(db.prepare('SELECT project_id FROM channel_videos WHERE id = ?').get('v-match')).toEqual({
+      project_id: 'p-existing',
+    })
+    const created = db
+      .prepare('SELECT project_id FROM channel_videos WHERE id = ?')
+      .get('v-new') as { project_id: string }
+    expect(created.project_id).toBeTruthy()
+    expect(created.project_id).not.toBe('p-existing')
+    expect(db.prepare('SELECT channel_id, name FROM projects WHERE id = ?').get(created.project_id)).toEqual({
+      channel_id: 'ch-falk',
+      name: 'Gegen den Takt',
+    })
+    expect(db.prepare('SELECT folder_path FROM projects WHERE id = ?').get(created.project_id)).toEqual({
+      folder_path: null,
+    })
+    expect(db.prepare('SELECT project_id FROM channel_videos WHERE id = ?').get('v-history')).toEqual({
+      project_id: null,
+    })
+    expect(db.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual({ c: beforeProjects.c + 1 })
+    expect(db.prepare('SELECT COUNT(*) AS c FROM shorts_jobs').get()).toEqual({ c: 0 })
+
+    const second = backfillMusicChannelVideos(db)
+    expect(second).toMatchObject({ musicVideosLinked: 0, musicProjectsFromVideos: 0 })
+    expect(db.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual({ c: beforeProjects.c + 1 })
+  })
+
+  it('não casa automaticamente quando dois projetos do mesmo canal têm o mesmo nome', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    migrateSchema(db)
+
+    const at = '2026-09-17T10:00:00.000Z'
+    db.prepare(
+      `INSERT INTO channels (id, name, channel_type, created_at, updated_at)
+       VALUES ('ch-falk', 'Johann Falk', 'music', ?, ?)`,
+    ).run(at, at)
+    db.prepare(
+      `INSERT INTO projects (id, name, description, project_type, folder_path, channel_id, created_at, updated_at)
+       VALUES ('p1', 'HEILIGE LÜGEN', '', 'music', NULL, 'ch-falk', ?, ?)`,
+    ).run(at, at)
+    db.prepare(
+      `INSERT INTO projects (id, name, description, project_type, folder_path, channel_id, created_at, updated_at)
+       VALUES ('p2', 'HEILIGE LÜGEN', '', 'music', NULL, 'ch-falk', ?, ?)`,
+    ).run(at, at)
+    db.prepare(
+      `INSERT INTO channel_videos (id, channel_id, title, scheduled_date, status, created_at, updated_at)
+       VALUES ('v1', 'ch-falk', 'HEILIGE LÜGEN', '2026-09-21', 'agendando', ?, ?)`,
+    ).run(at, at)
+
+    const result = backfillMusicChannelVideos(db)
+
+    expect(result.musicVideosLinked).toBe(0)
+    expect(result.musicProjectsFromVideos).toBe(1)
+    const linked = db.prepare('SELECT project_id FROM channel_videos WHERE id = ?').get('v1') as {
+      project_id: string
+    }
+    expect(linked.project_id).not.toBe('p1')
+    expect(linked.project_id).not.toBe('p2')
   })
 })
