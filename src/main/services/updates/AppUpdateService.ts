@@ -5,8 +5,9 @@ import { settingsRepository } from '../../repositories/settingsRepository'
 import { IPC } from '../../../shared/types'
 import {
   emptyUpdateStatus,
+  flattenReleaseNotes,
   realDownloadPercent,
-  summarizeReleaseNotes,
+  userFacingUpdateError,
   type AppUpdateStatus,
 } from '../../../shared/updates'
 
@@ -58,10 +59,11 @@ export function startAppUpdateService(deps: { getWindow: () => BrowserWindow | n
 
     bindUpdaterEvents(updater)
   } catch (error) {
+    console.error('[updates]', userFacingUpdateError('unsupported'), error)
     status = {
       ...status,
       state: 'unsupported',
-      errorMessage: errorMessage(error, 'Atualizador indisponível nesta instalação.'),
+      errorMessage: userFacingUpdateError('unsupported'),
     }
     return
   }
@@ -90,7 +92,7 @@ export async function checkForAppUpdates(opts: { silent?: boolean } = {}): Promi
     status = {
       ...getAppUpdateStatus(),
       state: 'unsupported',
-      errorMessage: 'Canal de atualização não configurado nesta build.',
+      errorMessage: userFacingUpdateError('no-feed'),
     }
     emit()
     return getAppUpdateStatus()
@@ -114,7 +116,7 @@ export async function checkForAppUpdates(opts: { silent?: boolean } = {}): Promi
         ...getAppUpdateStatus(),
         state: status.state === 'ready' ? 'ready' : 'available',
         availableVersion: latest,
-        releaseNotes: summarizeReleaseNotes(info?.releaseNotes),
+        releaseNotes: flattenReleaseNotes(info?.releaseNotes) || null,
         errorMessage: null,
       }
     } else {
@@ -130,16 +132,18 @@ export async function checkForAppUpdates(opts: { silent?: boolean } = {}): Promi
     if (opts.silent && isNetworkError(error)) {
       status = { ...getAppUpdateStatus(), state: 'idle', errorMessage: null }
     } else if (isMissingFeedError(error)) {
+      console.error('[updates]', userFacingUpdateError('no-feed'), error)
       status = {
         ...getAppUpdateStatus(),
         state: 'unsupported',
-        errorMessage: 'Canal de atualização não configurado. Veja docs/atualizacoes.md.',
+        errorMessage: userFacingUpdateError('no-feed'),
       }
     } else {
+      console.error('[updates]', userFacingUpdateError('check'), error)
       status = {
         ...getAppUpdateStatus(),
         state: 'error',
-        errorMessage: errorMessage(error, 'Não foi possível verificar atualizações.'),
+        errorMessage: userFacingUpdateError('check'),
       }
     }
   }
@@ -166,10 +170,11 @@ export async function downloadAppUpdate(): Promise<AppUpdateStatus> {
   try {
     await updater.downloadUpdate()
   } catch (error) {
+    console.error('[updates]', userFacingUpdateError('download'), error)
     status = {
       ...getAppUpdateStatus(),
       state: 'error',
-      errorMessage: errorMessage(error, 'Falha ao baixar a atualização.'),
+      errorMessage: userFacingUpdateError('download'),
     }
     emit()
   }
@@ -183,10 +188,11 @@ export function installAppUpdate(): AppUpdateStatus {
   try {
     updater.quitAndInstall(false, true)
   } catch (error) {
+    console.error('[updates]', userFacingUpdateError('install'), error)
     status = {
       ...getAppUpdateStatus(),
       state: 'error',
-      errorMessage: errorMessage(error, 'Não foi possível instalar a atualização.'),
+      errorMessage: userFacingUpdateError('install'),
     }
     emit()
   }
@@ -204,7 +210,7 @@ function bindUpdaterEvents(autoUpdater: AppUpdater) {
       ...getAppUpdateStatus(),
       state: 'available',
       availableVersion: info.version,
-      releaseNotes: summarizeReleaseNotes(info.releaseNotes),
+      releaseNotes: flattenReleaseNotes(info.releaseNotes) || null,
       errorMessage: null,
     }
     emit()
@@ -237,7 +243,7 @@ function bindUpdaterEvents(autoUpdater: AppUpdater) {
       ...getAppUpdateStatus(),
       state: 'ready',
       availableVersion: info.version ?? status.availableVersion,
-      releaseNotes: summarizeReleaseNotes(info.releaseNotes) ?? status.releaseNotes,
+      releaseNotes: flattenReleaseNotes(info.releaseNotes) || status.releaseNotes,
       downloadPercent: 100,
       errorMessage: null,
     }
@@ -252,10 +258,11 @@ function bindUpdaterEvents(autoUpdater: AppUpdater) {
         return
       }
     }
+    console.error('[updates]', userFacingUpdateError('generic'), error)
     status = {
       ...getAppUpdateStatus(),
       state: 'error',
-      errorMessage: errorMessage(error, 'Erro no atualizador.'),
+      errorMessage: userFacingUpdateError('generic'),
     }
     emit()
   })

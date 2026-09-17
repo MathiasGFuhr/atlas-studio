@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react'
 import { Download, RefreshCw, RotateCcw } from 'lucide-react'
 import type { AppSettings } from '@shared/types'
 import type { AppUpdateStatus } from '@shared/updates'
-import { updateStateLabel } from '@shared/updates'
+import {
+  UPDATE_ERROR_GENERIC,
+  UPDATE_NOTES_FALLBACK,
+  normalizeReleaseNotes,
+  updateStateLabel,
+} from '@shared/updates'
 import { Button } from './Button'
 import { Card } from './Card'
 import { getAtlasApi } from '../lib/api'
@@ -48,6 +53,11 @@ export function UpdatesSettingsCard({
   const showInstall = state === 'ready'
   const showProgress = state === 'downloading'
   const percent = status?.downloadPercent
+  const availableVersion = status?.availableVersion
+  const notes = availableVersion
+    ? normalizeReleaseNotes(status?.releaseNotes, { displayedVersion: availableVersion })
+    : { items: [] as string[] }
+  const errorText = safeUpdateErrorText(status?.errorMessage)
 
   return (
     <Card id="atualizacoes" className={highlight ? 'ring-1 ring-accent/40' : undefined}>
@@ -67,12 +77,29 @@ export function UpdatesSettingsCard({
           <span className="font-medium text-text">{updateStateLabel(state)}</span>
         </div>
 
-        {state === 'available' && status?.availableVersion ? (
+        {availableVersion &&
+        (state === 'available' || state === 'error' || state === 'downloading' || state === 'ready') ? (
           <div className="rounded-xl border border-border-soft bg-card-2 px-3.5 py-3">
             <p className="text-sm font-semibold text-text">Nova versão disponível</p>
-            <p className="mt-0.5 text-sm text-accent">Atlas Studio {status.availableVersion}</p>
-            {status.releaseNotes ? (
-              <p className="mt-2 text-xs leading-relaxed text-muted">{status.releaseNotes}</p>
+            <p className="mt-0.5 text-sm text-accent">Atlas Studio {availableVersion}</p>
+            {notes.title ? (
+              <p className="mt-2 text-xs font-medium leading-relaxed text-text">{notes.title}</p>
+            ) : null}
+            {notes.items.length > 0 ? (
+              <ul className="mt-2 space-y-1">
+                {notes.items.map((item, index) => (
+                  <li key={`${index}-${item.slice(0, 24)}`} className="flex gap-2 text-xs leading-relaxed text-muted">
+                    <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-muted/70" aria-hidden />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {notes.text ? (
+              <p className="mt-2 text-xs leading-relaxed text-muted">{notes.text}</p>
+            ) : null}
+            {notes.items.length === 0 && !notes.text ? (
+              <p className="mt-2 text-xs leading-relaxed text-muted">{UPDATE_NOTES_FALLBACK}</p>
             ) : null}
           </div>
         ) : null}
@@ -100,8 +127,8 @@ export function UpdatesSettingsCard({
           <p className="text-sm text-text">Atualização pronta para instalar.</p>
         ) : null}
 
-        {status?.errorMessage && (state === 'error' || state === 'unsupported') ? (
-          <p className="text-xs leading-relaxed text-danger">{status.errorMessage}</p>
+        {errorText && (state === 'error' || state === 'unsupported') ? (
+          <p className="text-xs leading-relaxed text-danger">{errorText}</p>
         ) : null}
 
         {state === 'dev' ? (
@@ -156,4 +183,19 @@ export function UpdatesSettingsCard({
       </div>
     </Card>
   )
+}
+
+function safeUpdateErrorText(message: string | null | undefined): string | null {
+  if (!message) return null
+  const compact = message.replace(/\s+/g, ' ').trim()
+  if (!compact) return null
+  if (
+    compact.length > 180 ||
+    /https?:\/\//i.test(compact) ||
+    /\b(ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EPERM|ENOENT)\b/i.test(compact) ||
+    /\bat\s+\S+\s+\(/i.test(compact)
+  ) {
+    return UPDATE_ERROR_GENERIC
+  }
+  return compact
 }
