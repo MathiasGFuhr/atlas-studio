@@ -426,6 +426,7 @@ export class AntigravityService {
     scenes: Array<{ time: number }>
     localCandidates: ShortsLocalCandidate[]
     hasTranscript: boolean
+    editorial?: ShortsEditorialContext
   }) {
     const structured = await this.runStructuredPrompt({
       schemaFile: 'shorts-schema.json',
@@ -440,6 +441,7 @@ export class AntigravityService {
       clipCount: request.clipCount,
       requestedDuration: request.requestedDuration,
       durationMode: request.durationMode,
+      localCandidates: request.localCandidates,
     })
   }
 

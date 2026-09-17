@@ -28,6 +28,14 @@ export function exportedShortsCount(clips: ShortsClip[]): number {
   return clips.filter((clip) => Boolean(clip.exportedPath) || clip.accepted).length
 }
 
+export function shortsProjectDeleteMessage(exportedCount: number): string {
+  const lines = ['O projeto será removido do Atlas. O vídeo original não será apagado.']
+  if (exportedCount > 0) {
+    lines.push('Os Shorts já exportados também serão mantidos no computador.')
+  }
+  return lines.join('\n\n')
+}
+
 export function matchesShortsProjectSearch(
   project: Pick<ShortsJob, 'name' | 'sourceName' | 'profile'>,
   query: string,

@@ -10,16 +10,24 @@ import type {
   ShortsJob,
   ShortsProgressEvent,
 } from '../../../shared/shorts'
-import { capRequestedDuration, constrainClipWindow } from '../../../shared/shortsDuration'
+import { capRequestedDuration } from '../../../shared/shortsDuration'
 import { analyzeMusic } from '../../../shared/musicAnalysis'
 import { decodeWavPcm } from '../../../shared/decodeWav'
-import { buildLocalShortsCandidates, snapClipToCues } from '../../../shared/shortsMoments'
-import { normalizeShortsAnalysis, SHORTS_ANALYSIS_FAIL_MESSAGE } from '../../../shared/antigravity/shortsAnalysis'
+import { shortsCandidatePoolSize, toRankedWindows } from '../../../shared/shortsDiversity'
+import { buildLocalShortsCandidates } from '../../../shared/shortsMoments'
+import { finalizeShortsSelection } from '../../../shared/shortsSelection'
+import {
+  normalizeShortsAnalysis,
+  SHORTS_ANALYSIS_FAIL_MESSAGE,
+  shortsAiClipsToRanked,
+} from '../../../shared/antigravity/shortsAnalysis'
+import { logger } from '../logging/logger'
 import {
   fallbackShortsCopy,
   type ShortsCopyClipInput,
 } from '../../../shared/antigravity/shortsCopy'
 import { cuesForClip } from '../../../shared/shortsExport'
+import { mergeReanalysisClips } from '../../../shared/shortsProjectIdentity'
 import { shortsRepository } from '../../repositories/shortsRepository'
 import { getUserDataPath } from '../../paths'
 import type { AntigravityService } from '../antigravity/AntigravityService'
@@ -30,7 +38,7 @@ import {
   probeVideo,
 } from '../media/ffmpegVideo'
 import { cuesFromSilence, transcribeLocalAudio } from './transcribeLocal'
-import { resolveShortsEditorialContext } from './editorialContext'
+import { resolveShortsEditorialContext, resolveShortsLanguageFields, shortsLanguageAnalysisNote } from './editorialContext'
 
 function jobDir(id: string) {
   return path.join(getUserDataPath(), 'shorts', id)
@@ -200,6 +208,21 @@ export async function analyzeShortsJob(input: {
     const transcript =
       localTranscript.cues.length > 0 ? localTranscript.cues : cuesFromSilence(probe.duration, silence)
     const transcriptSource = localTranscript.cues.length > 0 ? localTranscript.source : silence.length > 0 ? 'silence' : 'none'
+    const transcriptLanguage = localTranscript.language
+    const languageSeed = {
+      ...(shortsRepository.get(job.id) ?? job),
+      probe,
+      transcript,
+      transcriptSource,
+      transcriptLanguage,
+    }
+    const languageFields = resolveShortsLanguageFields(languageSeed)
+    shortsRepository.update(job.id, {
+      probe,
+      transcript,
+      transcriptSource,
+      ...languageFields,
+    })
 
     send('detecting_moments', 'Analisando melhores momentos...')
     const scenes = (await detectScenes(job.sourcePath)).map((time) => ({ time }))
@@ -236,6 +259,14 @@ export async function analyzeShortsJob(input: {
     })
 
     send('preparing_cuts', 'Preparando cortes...')
+    const editorial = resolveShortsEditorialContext({
+      ...(shortsRepository.get(job.id) ?? job),
+      profile: input.request.profile,
+      probe,
+      transcript,
+      transcriptSource,
+      ...languageFields,
+    })
     let aiClips = [] as ReturnType<typeof normalizeShortsAnalysis>['clips']
     let notes: string | null = durationCap.capped ? durationCap.message : null
     try {
@@ -250,6 +281,7 @@ export async function analyzeShortsJob(input: {
         scenes,
         localCandidates,
         hasTranscript: transcriptSource === 'whisper',
+        editorial,
       })
       aiClips = analyzed.clips
       notes = [notes, analyzed.notes].filter(Boolean).join('\n') || null
@@ -258,36 +290,49 @@ export async function analyzeShortsJob(input: {
       notes = [notes, fail].filter(Boolean).join('\n')
     }
 
-    const merged =
-      aiClips.length > 0
-        ? aiClips
-        : localCandidates.map((item) => ({
-            start: item.start,
-            end: item.end,
-            score: item.score,
-            reason: item.reason,
-            hook: '',
-          }))
-
-    const snapped = merged.map((clip) => {
-      const next = snapClipToCues(clip.start, clip.end, transcript, probe.duration, input.request.profile)
-      const window = constrainClipWindow({
-        start: next.start,
-        end: durationMode === 'exact' ? next.start + requestedDuration : next.end,
-        videoDuration: probe.duration,
-        requestedDuration,
-        mode: durationMode,
-        moved: durationMode === 'exact' ? 'start' : 'both',
-      })
-      return { ...clip, start: window.start, end: window.end }
+    const fallback = toRankedWindows(localCandidates)
+    const ranked = aiClips.length > 0 ? shortsAiClipsToRanked(aiClips) : fallback
+    const selection = finalizeShortsSelection({
+      ranked,
+      fallback,
+      clipCount: input.request.clipCount,
+      videoDuration: probe.duration,
+      requestedDuration,
+      durationMode,
+      profile: input.request.profile,
+      cues: transcript,
+    })
+    logger.info('shorts.selection', {
+      jobId: job.id,
+      poolSize: shortsCandidatePoolSize(input.request.clipCount),
+      generated: selection.diagnostics.generated,
+      selected: selection.diagnostics.selected,
+      discarded: selection.diagnostics.discarded,
     })
 
-    const clips = toClips(snapped.slice(0, input.request.clipCount), probe.duration)
+    const clips = toClips(
+      selection.clips.map((clip) => ({
+        start: clip.start,
+        end: clip.end,
+        score: clip.score,
+        reason: clip.reason,
+        hook: clip.hook,
+      })),
+      probe.duration,
+    )
+    if (selection.note) notes = notes ? `${notes}\n${selection.note}` : selection.note
     if (transcriptSource !== 'whisper') {
       const extra =
         'Transcrição local completa não encontrada. Os cortes usaram áudio, cenas e o Antigravity só com timestamps — o vídeo original não foi enviado.'
       notes = notes ? `${notes}\n${extra}` : extra
     }
+    const languageNote = shortsLanguageAnalysisNote({
+      ...(shortsRepository.get(job.id) ?? job),
+      transcript,
+      transcriptSource,
+      ...languageFields,
+    })
+    if (languageNote) notes = notes ? `${notes}\n${languageNote}` : languageNote
 
     const latest = shortsRepository.get(job.id) ?? job
     const withCopy =
@@ -302,6 +347,7 @@ export async function analyzeShortsJob(input: {
               durationMode,
               transcript,
               transcriptSource,
+              ...languageFields,
             },
             clips,
             fields: 'all',
@@ -310,16 +356,20 @@ export async function analyzeShortsJob(input: {
           })
         : clips
 
+    const latestClips = shortsRepository.get(job.id)?.clips ?? job.clips
+    const mergedClips = mergeReanalysisClips(latestClips, withCopy)
+
     return shortsRepository.update(job.id, {
       probe,
-      clips: withCopy,
+      clips: mergedClips,
       requestedDuration,
       durationMode,
       transcript,
       transcriptSource,
+      ...languageFields,
       analysisNotes: notes,
       errorMessage: null,
-      status: withCopy.length > 0 ? 'ready' : 'error',
+      status: mergedClips.length > 0 ? 'ready' : 'error',
     })!
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao analisar o vídeo.'

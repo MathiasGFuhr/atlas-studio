@@ -23,7 +23,12 @@ export async function probeVideo(filePath: string): Promise<VideoProbeInfo> {
   if (!info.duration || !info.width) {
     throw new Error('Não foi possível ler duração e resolução deste vídeo.')
   }
-  return info
+  try {
+    const stat = fs.statSync(resolved)
+    return { ...info, fileSize: stat.size, mtimeMs: stat.mtimeMs }
+  } catch {
+    return info
+  }
 }
 
 export async function extractAudioWav(sourcePath: string, outputPath: string): Promise<void> {

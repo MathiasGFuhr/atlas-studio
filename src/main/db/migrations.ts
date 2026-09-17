@@ -2,6 +2,16 @@ import { randomUUID } from 'node:crypto'
 import type { AppDatabase } from './database'
 import { backupSqliteFile, isBackupSettingEnabled } from './backup'
 import { shortsProjectNameFromFileName } from '../../shared/shortsProject'
+import { normalizeShortsClip, type ShortsClip, type ShortsJobStatus, type TranscriptCue, type VideoProbeInfo } from '../../shared/shorts'
+import {
+  mergeSameSourceSnapshots,
+  planShortsProjectConsolidation,
+  type ShortsProjectSnapshot,
+} from '../../shared/shortsProjectIdentity'
+import {
+  languageFieldsFromResolution,
+  resolveContentLanguage,
+} from '../../shared/shortsLanguage'
 import {
   findUnequivocalMusicProject,
   resolveMusicProjectName,
@@ -9,13 +19,15 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 8
+export const CURRENT_SCHEMA_VERSION = 10
 
 type SchemaStepResult = {
   historyCreated: number
   musicCreated: number
   musicVideosLinked?: number
   musicProjectsFromVideos?: number
+  shortsDuplicatesFound?: number
+  shortsDuplicatesRemoved?: number
 }
 
 type SchemaStep = {
@@ -79,6 +91,18 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyMusicVideoProjectLink,
   },
+  {
+    version: 9,
+    name: 'shorts-content-language',
+    backup: false,
+    up: applyShortsContentLanguage,
+  },
+  {
+    version: 10,
+    name: 'shorts-project-source-dedup',
+    backup: true,
+    up: applyShortsProjectDedup,
+  },
 ]
 
 /**
@@ -93,6 +117,8 @@ export function migrateSchema(
   musicCreated: number
   musicVideosLinked: number
   musicProjectsFromVideos: number
+  shortsDuplicatesFound: number
+  shortsDuplicatesRemoved: number
   schemaVersion: number
   backedUp: boolean
 } {
@@ -102,6 +128,8 @@ export function migrateSchema(
   let musicCreated = 0
   let musicVideosLinked = 0
   let musicProjectsFromVideos = 0
+  let shortsDuplicatesFound = 0
+  let shortsDuplicatesRemoved = 0
   let backedUp = false
 
   for (const step of SCHEMA_STEPS) {
@@ -119,6 +147,8 @@ export function migrateSchema(
     musicCreated += created.musicCreated
     musicVideosLinked += created.musicVideosLinked ?? 0
     musicProjectsFromVideos += created.musicProjectsFromVideos ?? 0
+    shortsDuplicatesFound += created.shortsDuplicatesFound ?? 0
+    shortsDuplicatesRemoved += created.shortsDuplicatesRemoved ?? 0
     recordSchemaVersion(database, step.version, step.name)
   }
 
@@ -127,6 +157,8 @@ export function migrateSchema(
     musicCreated,
     musicVideosLinked,
     musicProjectsFromVideos,
+    shortsDuplicatesFound,
+    shortsDuplicatesRemoved,
     schemaVersion: getAppliedSchemaVersion(database),
     backedUp,
   }
@@ -264,6 +296,280 @@ function applyShortsProjectName(database: AppDatabase): {
     update.run(shortsProjectNameFromFileName(row.source_name), row.id)
   }
   return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyShortsContentLanguage(database: AppDatabase): SchemaStepResult {
+  ensureColumn(database, 'shorts_jobs', 'content_language', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(database, 'shorts_jobs', 'language_source', "TEXT NOT NULL DEFAULT 'fallback'")
+  ensureColumn(database, 'shorts_jobs', 'language_confidence', 'REAL NOT NULL DEFAULT 0')
+  ensureColumn(database, 'shorts_jobs', 'language_override', 'TEXT')
+  ensureColumn(database, 'shorts_jobs', 'detected_language', 'TEXT')
+  ensureColumn(database, 'shorts_jobs', 'transcript_language', 'TEXT')
+  backfillShortsContentLanguage(database)
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function backfillShortsContentLanguage(database: AppDatabase) {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  const names = new Set(tables.map((item) => item.name))
+  if (!names.has('shorts_jobs')) return
+
+  const hasProjects = names.has('projects')
+  const hasChannels = names.has('channels')
+  const hasNiches = names.has('niches')
+  const hasScripts = names.has('scripts')
+
+  const rows = database
+    .prepare(
+      `SELECT
+        j.id,
+        j.source_name,
+        j.name,
+        j.transcript_json,
+        j.project_id,
+        j.content_language,
+        j.language_override,
+        j.transcript_language
+        ${hasChannels && hasProjects ? ', c.description AS channel_description' : ''}
+        ${hasNiches && hasChannels && hasProjects ? ', n.default_language AS niche_language' : ''}
+       FROM shorts_jobs j
+       ${hasProjects ? 'LEFT JOIN projects p ON p.id = j.project_id' : ''}
+       ${hasChannels && hasProjects ? 'LEFT JOIN channels c ON c.id = p.channel_id' : ''}
+       ${hasNiches && hasChannels && hasProjects ? 'LEFT JOIN niches n ON n.id = c.niche_id' : ''}`,
+    )
+    .all() as Array<{
+    id: string
+    source_name: string
+    name: string | null
+    transcript_json: string | null
+    project_id: string | null
+    content_language: string | null
+    language_override: string | null
+    transcript_language: string | null
+    channel_description?: string | null
+    niche_language?: string | null
+  }>
+
+  const scriptStmt = hasScripts
+    ? database.prepare(
+        `SELECT language FROM scripts
+         WHERE project_id = ? AND language IS NOT NULL AND TRIM(language) != ''
+         LIMIT 1`,
+      )
+    : null
+  const update = database.prepare(
+    `UPDATE shorts_jobs SET
+      content_language = ?,
+      language_source = ?,
+      language_confidence = ?,
+      detected_language = ?,
+      transcript_language = ?
+     WHERE id = ?`,
+  )
+
+  for (const row of rows) {
+    if (String(row.content_language ?? '').trim()) continue
+    let transcriptText = ''
+    try {
+      const parsed = JSON.parse(String(row.transcript_json || '[]')) as unknown
+      if (Array.isArray(parsed)) {
+        transcriptText = parsed
+          .map((item) => {
+            if (!item || typeof item !== 'object') return ''
+            return String((item as { text?: unknown }).text ?? '').trim()
+          })
+          .filter(Boolean)
+          .join(' ')
+      }
+    } catch {
+      transcriptText = ''
+    }
+    const script =
+      row.project_id && scriptStmt ? (scriptStmt.get(row.project_id) as { language?: string } | undefined) : null
+    const resolved = resolveContentLanguage({
+      languageOverride: row.language_override,
+      transcriptLanguage: row.transcript_language,
+      transcriptText,
+      channelLanguage: row.channel_description ?? null,
+      projectLanguage: script?.language ?? null,
+      nicheLanguage: row.niche_language ?? null,
+      filename: row.source_name,
+      title: row.name ?? '',
+    })
+    const fields = languageFieldsFromResolution(resolved, {
+      languageOverride: row.language_override,
+      transcriptLanguage: row.transcript_language,
+    })
+    update.run(
+      fields.contentLanguage,
+      fields.languageSource,
+      fields.languageConfidence,
+      fields.detectedLanguage,
+      fields.transcriptLanguage,
+      row.id,
+    )
+  }
+}
+
+function parseMigrationJson<T>(value: string | null, fallback: T): T {
+  if (!value) return fallback
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return fallback
+  }
+}
+
+function mapShortsSnapshot(row: {
+  id: string
+  project_id: string | null
+  name: string | null
+  source_path: string
+  source_name: string
+  profile: string
+  status: string
+  created_at: string
+  updated_at: string
+  probe_json: string | null
+  clips_json: string | null
+  transcript_json: string | null
+  transcript_source: string | null
+  analysis_notes: string | null
+}): ShortsProjectSnapshot {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: String(row.name ?? '').trim() || shortsProjectNameFromFileName(row.source_name),
+    sourcePath: row.source_path,
+    sourceName: row.source_name,
+    profile: row.profile === 'music' ? 'music' : 'history',
+    status: (row.status as ShortsJobStatus) || 'draft',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    probe: parseMigrationJson<VideoProbeInfo | null>(row.probe_json, null),
+    clips: parseMigrationJson<unknown[]>(row.clips_json, [])
+      .map((item, index) => normalizeShortsClip(item, index + 1))
+      .filter((item): item is ShortsClip => Boolean(item)),
+    transcript: parseMigrationJson<TranscriptCue[]>(row.transcript_json, []),
+    transcriptSource: (row.transcript_source as ShortsProjectSnapshot['transcriptSource']) || 'none',
+    analysisNotes: row.analysis_notes,
+  }
+}
+
+function applyShortsProjectDedup(database: AppDatabase): SchemaStepResult {
+  return backfillShortsProjectDedup(database)
+}
+
+/**
+ * Une ShortsProjects do mesmo vídeo-fonte e absorve cards criados a partir de export/preview.
+ * Não mescla só por nome. Não apaga MP4 original nem exports.
+ */
+export function backfillShortsProjectDedup(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'shorts_jobs')) {
+    return { historyCreated: 0, musicCreated: 0, shortsDuplicatesFound: 0, shortsDuplicatesRemoved: 0 }
+  }
+
+  const rows = database.prepare('SELECT * FROM shorts_jobs').all() as Array<{
+    id: string
+    project_id: string | null
+    name: string | null
+    source_path: string
+    source_name: string
+    profile: string
+    status: string
+    created_at: string
+    updated_at: string
+    probe_json: string | null
+    clips_json: string | null
+    transcript_json: string | null
+    transcript_source: string | null
+    analysis_notes: string | null
+  }>
+  const snapshots = rows.map(mapShortsSnapshot)
+  const plan = planShortsProjectConsolidation(snapshots)
+  if (plan.length === 0) {
+    return { historyCreated: 0, musicCreated: 0, shortsDuplicatesFound: 0, shortsDuplicatesRemoved: 0 }
+  }
+
+  const byId = new Map(snapshots.map((item) => [item.id, item]))
+  const update = database.prepare(
+    `UPDATE shorts_jobs SET
+      name = ?, project_id = ?, probe_json = ?, clips_json = ?, transcript_json = ?,
+      transcript_source = ?, analysis_notes = ?, status = ?, updated_at = ?
+     WHERE id = ?`,
+  )
+  const remove = database.prepare('DELETE FROM shorts_jobs WHERE id = ?')
+  const now = new Date().toISOString()
+  let removed = 0
+
+  for (const action of plan) {
+    if (action.type === 'absorb_export') {
+      const parent = byId.get(action.parentId)
+      const derived = byId.get(action.derivedId)
+      if (!parent || !derived) continue
+      const clips = parent.clips.map((clip) =>
+        clip.id === action.clipId
+          ? { ...clip, exportedPath: clip.exportedPath || action.exportPath, accepted: true }
+          : clip,
+      )
+      const next: ShortsProjectSnapshot = { ...parent, clips }
+      byId.set(parent.id, next)
+      update.run(
+        next.name,
+        next.projectId,
+        next.probe ? JSON.stringify(next.probe) : null,
+        JSON.stringify(next.clips),
+        JSON.stringify(next.transcript ?? []),
+        next.transcriptSource,
+        next.analysisNotes,
+        next.status,
+        now,
+        next.id,
+      )
+      remove.run(derived.id)
+      byId.delete(derived.id)
+      removed += 1
+      continue
+    }
+
+    const keeper = byId.get(action.keeperId)
+    if (!keeper) continue
+    const duplicates = action.duplicateIds
+      .map((id) => byId.get(id))
+      .filter((item): item is ShortsProjectSnapshot => Boolean(item))
+    if (!duplicates.length) continue
+    const next = mergeSameSourceSnapshots(keeper, duplicates)
+    byId.set(keeper.id, next)
+    update.run(
+      next.name,
+      next.projectId,
+      next.probe ? JSON.stringify(next.probe) : null,
+      JSON.stringify(next.clips),
+      JSON.stringify(next.transcript ?? []),
+      next.transcriptSource,
+      next.analysisNotes,
+      next.status,
+      now,
+      next.id,
+    )
+    for (const duplicate of duplicates) {
+      remove.run(duplicate.id)
+      byId.delete(duplicate.id)
+      removed += 1
+    }
+  }
+
+  return {
+    historyCreated: 0,
+    musicCreated: 0,
+    shortsDuplicatesFound: removed,
+    shortsDuplicatesRemoved: removed,
+  }
 }
 
 function applyMusicVideoProjectLink(database: AppDatabase): SchemaStepResult {

@@ -1,4 +1,5 @@
 import type { ProjectType } from './types'
+import type { ContentLanguageSource } from './shortsLanguage'
 
 export type ShortsProfile = ProjectType
 export type ShortsClipCount = 3 | 5 | 10
@@ -51,6 +52,8 @@ export interface VideoProbeInfo {
   aspectRatio: string
   format: string
   hasAudio: boolean
+  fileSize?: number | null
+  mtimeMs?: number | null
 }
 
 export interface TranscriptCue {
@@ -64,11 +67,12 @@ export interface SceneMarker {
 }
 
 export interface ShortsLocalCandidate {
+  id: string
   start: number
   end: number
   score: number
   reason: string
-  source: 'energy' | 'scene' | 'speech' | 'onset'
+  source: 'energy' | 'scene' | 'speech' | 'onset' | 'structure'
 }
 
 export interface ShortsClip {
@@ -123,6 +127,10 @@ export interface ShortsEditorialRecord {
 
 export interface ShortsEditorialContext {
   language: string
+  contentLanguage: string
+  languageName: string
+  languageSource: ContentLanguageSource
+  languageConfidence: number
   channelName?: string
   artistName?: string
   songTitle?: string
@@ -146,6 +154,16 @@ export interface ShortsJob {
   clips: ShortsClip[]
   transcript: TranscriptCue[]
   transcriptSource: ShortsTranscriptSource
+  /** ISO do conteúdo (de, en, pt-BR). Independente do idioma da UI. */
+  contentLanguage: string
+  languageSource: ContentLanguageSource
+  languageConfidence: number
+  /** Escolha manual. Se preenchido, não redetectar automaticamente. */
+  languageOverride: string | null
+  /** Idioma auto-detectado, ignorando o override. */
+  detectedLanguage: string | null
+  /** Idioma devolvido pelo Whisper, se houver. */
+  transcriptLanguage: string | null
   analysisNotes: string | null
   errorMessage: string | null
   status: ShortsJobStatus
@@ -216,6 +234,24 @@ export function formatShortsDuration(seconds: number): string {
 
 export function clipDuration(clip: Pick<ShortsClip, 'start' | 'end'>): number {
   return Math.max(0, clip.end - clip.start)
+}
+
+export function shortsClipPreviewKey(clip: Pick<ShortsClip, 'id' | 'start' | 'end'>): string {
+  return `${clip.id}:${clip.start}:${clip.end}`
+}
+
+export function shortsExportWindow(clip: Pick<ShortsClip, 'id' | 'start' | 'end'>): {
+  clipId: string
+  start: number
+  end: number
+  duration: number
+} {
+  return {
+    clipId: clip.id,
+    start: clip.start,
+    end: clip.end,
+    duration: clipDuration(clip),
+  }
 }
 
 export function normalizeHashtags(value: unknown): string[] {

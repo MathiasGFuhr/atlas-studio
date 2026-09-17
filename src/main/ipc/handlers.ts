@@ -54,12 +54,20 @@ import { shortsRepository } from '../repositories/shortsRepository'
 import { analyzeShortsJob, regenerateShortsClipCopy } from '../services/shorts/ShortsPipeline'
 import { exportVideoClip, probeVideo } from '../services/media/ffmpegVideo'
 import { toAtlasMediaUrl } from '../services/media/atlasMediaProtocol'
-import { ensureShortsThumbnail, presentShortsJob, shortsJobCacheDir } from '../services/shorts/shortsThumbnail'
+import { ensureShortsThumbnail, presentShortsJob } from '../services/shorts/shortsThumbnail'
+import {
+  createFromSourceVideo,
+  deleteProject as deleteShortsProject,
+  markClipExported,
+  toImportResult,
+  updateClip as updateShortsClip,
+  updateProjectSettings,
+} from '../services/shorts/ShortsProjectService'
 import { buildSrt, buildVerticalCropPlan, cuesForClip } from '../../shared/shortsExport'
-import { SHORTS_VIDEO_EXTENSIONS, type ShortsAnalyzeInput, type ShortsClip, type ShortsClipPatch, type ShortsCopyFields, type ShortsJob } from '../../shared/shorts'
-import { capRequestedDuration, constrainClipWindow } from '../../shared/shortsDuration'
+import { SHORTS_VIDEO_EXTENSIONS, shortsExportWindow, type ShortsAnalyzeInput, type ShortsClipPatch, type ShortsCopyFields, type ShortsJob } from '../../shared/shorts'
 import type { ShortsProjectListFilters } from '../../shared/shortsProject'
 import { taskRepository } from '../repositories/taskRepository'
+import { logger } from '../services/logging/logger'
 import type { AntigravityService } from '../services/antigravity/AntigravityService'
 import type { MusicSegment, MusicCutMode } from '../../shared/musicAnalysis'
 import type { ChatSendMessageRequest } from '../../shared/chat/types'
@@ -429,16 +437,47 @@ export function registerIpcHandlers(deps: {
     const sourcePath = path.resolve(result.filePaths[0])
     const probe = await probeVideo(sourcePath)
     const project = projectId ? projectRepository.get(projectId) : null
-    const created = shortsRepository.create({
+    const created = createFromSourceVideo({
       sourcePath,
       sourceName: probe.name,
       projectId: project?.id ?? null,
       profile: project?.projectType ?? 'history',
       probe,
+      forceNew: false,
     })
-    await ensureShortsThumbnail(created)
-    return presentShortsJob(shortsRepository.get(created.id) ?? created)
+    if (created.kind === 'created') {
+      await ensureShortsThumbnail(created.project)
+    }
+    const latest = shortsRepository.get(created.project.id) ?? created.project
+    return toImportResult({ ...created, project: presentShortsJob(latest) }, sourcePath)
   })
+  ipcMain.handle(
+    IPC.shorts.createFromSourceVideo,
+    async (
+      _e,
+      input: { sourcePath: string; projectId?: string | null; forceNew?: boolean },
+    ) => {
+      const sourcePath = path.resolve(String(input?.sourcePath ?? ''))
+      if (!sourcePath || !fs.existsSync(sourcePath)) {
+        throw new Error('Arquivo de vídeo não encontrado.')
+      }
+      const probe = await probeVideo(sourcePath)
+      const project = input.projectId ? projectRepository.get(input.projectId) : null
+      const created = createFromSourceVideo({
+        sourcePath,
+        sourceName: probe.name,
+        projectId: project?.id ?? null,
+        profile: project?.projectType ?? 'history',
+        probe,
+        forceNew: Boolean(input.forceNew),
+      })
+      if (created.kind === 'created') {
+        await ensureShortsThumbnail(created.project)
+      }
+      const latest = shortsRepository.get(created.project.id) ?? created.project
+      return toImportResult({ ...created, project: presentShortsJob(latest) }, sourcePath)
+    },
+  )
   ipcMain.handle(IPC.shorts.analyze, async (_e, request: ShortsAnalyzeInput) => {
     const job = await analyzeShortsJob({
       request,
@@ -451,34 +490,7 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(
     IPC.shorts.updateClip,
     (_e, jobId: string, clipId: string, patch: ShortsClipPatch) => {
-      const job = shortsRepository.get(jobId)
-      if (!job) return null
-      const duration = job.probe?.duration ?? Number.POSITIVE_INFINITY
-      const clips = job.clips.map((clip) => {
-        if (clip.id !== clipId) return clip
-        const next = { ...clip }
-        if (patch.title != null) next.title = patch.title
-        if (patch.description != null) next.description = patch.description
-        if (patch.hashtags != null) next.hashtags = patch.hashtags
-        if (patch.start == null && patch.end == null) return next
-        const videoDuration = Number.isFinite(duration) ? duration : Math.max(clip.end, patch.end ?? 0)
-        if (job.durationMode === 'exact') {
-          const moved = patch.start != null && patch.start !== clip.start ? 'start' : 'end'
-          const window = constrainClipWindow({
-            start: patch.start ?? clip.start,
-            end: patch.end ?? clip.end,
-            videoDuration,
-            requestedDuration: job.requestedDuration,
-            mode: 'exact',
-            moved,
-          })
-          return { ...next, start: window.start, end: window.end }
-        }
-        const start = Math.max(0, Math.min(videoDuration, patch.start ?? clip.start))
-        const end = Math.max(start + 0.4, Math.min(videoDuration, patch.end ?? clip.end))
-        return { ...next, start, end }
-      })
-      const updated = shortsRepository.update(jobId, { clips })
+      const updated = updateShortsClip(jobId, clipId, patch)
       return updated ? presentShortsJob(updated) : null
     },
   )
@@ -503,18 +515,11 @@ export function registerIpcHandlers(deps: {
       patch: Partial<
         Pick<
           ShortsJob,
-          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled'
+          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled' | 'languageOverride'
         >
       >,
     ) => {
-      const job = shortsRepository.get(jobId)
-      if (!job) return null
-      const nextPatch = { ...patch }
-      if (nextPatch.requestedDuration != null) {
-        const capped = capRequestedDuration(nextPatch.requestedDuration, job.probe?.duration)
-        nextPatch.requestedDuration = capped.requested
-      }
-      const updated = shortsRepository.update(jobId, nextPatch)
+      const updated = updateProjectSettings(jobId, patch)
       return updated ? presentShortsJob(updated) : null
     },
   )
@@ -554,12 +559,20 @@ export function registerIpcHandlers(deps: {
       }
     }
 
+    const window = shortsExportWindow(clip)
+    logger.info('shorts.export', {
+      jobId: job.id,
+      clipId: window.clipId,
+      start: window.start,
+      end: window.end,
+      duration: window.duration,
+    })
     try {
       await exportVideoClip({
         sourcePath: job.sourcePath,
         outputPath: result.filePath,
-        start: clip.start,
-        end: clip.end,
+        start: window.start,
+        end: window.end,
         videoFilter: crop?.filter,
         subtitlePath,
       })
@@ -567,19 +580,10 @@ export function registerIpcHandlers(deps: {
       if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true })
     }
 
-    const clips: ShortsClip[] = job.clips.map((item) =>
-      item.id === clip.id ? { ...item, exportedPath: result.filePath!, accepted: true } : item,
-    )
-    shortsRepository.update(job.id, { clips })
+    markClipExported(job.id, clip.id, result.filePath)
     return result.filePath
   })
-  ipcMain.handle(IPC.shorts.remove, (_e, id: string) => {
-    const job = shortsRepository.get(id)
-    if (!job) return false
-    const cacheDir = shortsJobCacheDir(id)
-    if (fs.existsSync(cacheDir)) fs.rmSync(cacheDir, { recursive: true, force: true })
-    return shortsRepository.remove(id)
-  })
+  ipcMain.handle(IPC.shorts.remove, (_e, id: string) => deleteShortsProject(id))
   ipcMain.handle(IPC.shorts.mediaUrl, (_e, jobId: string) => {
     const job = shortsRepository.get(jobId)
     if (!job) throw new Error('Projeto de Shorts não encontrado.')

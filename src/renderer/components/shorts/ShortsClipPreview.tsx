@@ -7,6 +7,7 @@ import { buildShortsPreviewFrame } from '@shared/shortsExport'
 import { cn } from '../../lib/utils'
 
 export function ShortsClipPreview({
+  clipId,
   src,
   start,
   end,
@@ -18,6 +19,7 @@ export function ShortsClipPreview({
   resetToken,
   className,
 }: {
+  clipId?: string
   src: string | null
   start: number
   end: number
@@ -34,6 +36,7 @@ export function ShortsClipPreview({
   const [current, setCurrent] = useState(start)
   const duration = Math.max(0.1, end - start)
   const frame = buildShortsPreviewFrame(sourceWidth || 1920, sourceHeight || 1080, aspectMode)
+  const previewKey = resetToken ?? `${clipId ?? 'clip'}:${start}:${end}`
   windowRef.current = { start, end }
 
   useEffect(() => {
@@ -47,7 +50,7 @@ export function ShortsClipPreview({
     if (video.readyState >= 1) apply()
     video.addEventListener('loadedmetadata', apply)
     return () => video.removeEventListener('loadedmetadata', apply)
-  }, [src, resetToken])
+  }, [src, previewKey])
 
   useEffect(() => {
     const video = videoRef.current
@@ -56,7 +59,7 @@ export function ShortsClipPreview({
       video.currentTime = start
       setCurrent(start)
     }
-  }, [start, end])
+  }, [clipId, start, end])
 
   useEffect(() => {
     const video = videoRef.current
@@ -67,7 +70,7 @@ export function ShortsClipPreview({
       return
     }
     video.pause()
-  }, [active])
+  }, [active, start, end])
 
   useEffect(() => {
     const video = videoRef.current

@@ -174,18 +174,18 @@ export function constrainClipWindow(input: {
   start = clamp(start, 0, video)
   end = clamp(end, 0, video)
   if (end <= start) end = Math.min(video, start + target)
-  const length = end - start
-  if (length < bounds.min) {
+  if (end - start < bounds.min) {
     end = Math.min(video, start + bounds.min)
     if (end - start < bounds.min) start = Math.max(0, end - bounds.min)
   }
   if (end - start > bounds.max) {
-    if (input.moved === 'start') end = Math.min(video, start + bounds.max)
-    else start = Math.max(0, end - bounds.max)
+    if (input.moved === 'end') start = Math.max(0, end - bounds.max)
+    else end = Math.min(video, start + bounds.max)
   }
-  if (start + (end - start) > video) {
+  if (end > video) {
     end = video
-    start = Math.max(0, end - Math.min(bounds.max, target))
+    if (end - start > bounds.max) start = Math.max(0, end - bounds.max)
+    if (end - start < bounds.min) start = Math.max(0, end - bounds.min)
   }
   return { start: roundTime(start), end: roundTime(Math.max(start + SHORTS_MIN_CLIP_SECONDS, end)) }
 }

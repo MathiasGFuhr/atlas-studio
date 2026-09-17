@@ -1,7 +1,17 @@
-import type { ShortsDurationMode, ShortsLocalCandidate, ShortsProfile, TranscriptCue } from '../shorts'
+import type { ShortsDurationMode, ShortsEditorialContext, ShortsLocalCandidate, ShortsProfile, TranscriptCue } from '../shorts'
+import {
+  clampAiAdjust,
+  overlapRatio,
+  SHORTS_AI_ADJUST_SECONDS,
+  toRankedWindows,
+  withCandidateIds,
+  type ShortsRankedWindow,
+} from '../shortsDiversity'
 import { durationBounds } from '../shortsDuration'
+import { contentLanguagePromptBlock } from '../shortsLanguage'
 
 export interface ShortsAiClip {
+  id: string
   start: number
   end: number
   score: number
@@ -12,23 +22,45 @@ export interface ShortsAiClip {
 export const SHORTS_ANALYSIS_SCHEMA = {
   type: 'object',
   properties: {
-    clips: {
+    selected: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
-          start: { type: 'number', description: 'Início em segundos' },
-          end: { type: 'number', description: 'Fim em segundos' },
+          candidateId: { type: 'string', description: 'ID do candidato local (c1, c2, ...)' },
           score: { type: 'integer', description: 'Potencial 0-100 para Short' },
-          reason: { type: 'string', description: 'Motivo editorial curto em português' },
-          hook: { type: 'string', description: 'Gancho de 1 frase em português' },
+          reason: { type: 'string', description: 'Motivo editorial curto em português (nota interna do Atlas)' },
+          hook: { type: 'string', description: 'Gancho de 1 frase no idioma do conteúdo (YouTube), nunca no idioma da UI' },
+          start: {
+            type: 'number',
+            description: 'Ajuste fino opcional do início, no máximo 3s longe do candidato',
+          },
+          end: {
+            type: 'number',
+            description: 'Ajuste fino opcional do fim, no máximo 3s longe do candidato',
+          },
         },
-        required: ['start', 'end', 'score', 'reason'],
+        required: ['candidateId', 'score', 'reason'],
+      },
+    },
+    clips: {
+      type: 'array',
+      description: 'Formato legado. Prefira selected[].candidateId.',
+      items: {
+        type: 'object',
+        properties: {
+          candidateId: { type: 'string' },
+          start: { type: 'number' },
+          end: { type: 'number' },
+          score: { type: 'integer' },
+          reason: { type: 'string' },
+          hook: { type: 'string' },
+        },
       },
     },
     notes: { type: 'string', description: 'Observação editorial opcional' },
   },
-  required: ['clips'],
+  required: [],
 }
 
 const MUSIC_CRITERIA = [
@@ -68,6 +100,27 @@ function formatCueLine(cue: TranscriptCue): string {
   return `[${cue.start.toFixed(1)}-${cue.end.toFixed(1)}] ${cue.text.trim()}`
 }
 
+function nearestCandidate(
+  start: number,
+  end: number,
+  candidates: ShortsLocalCandidate[],
+): ShortsLocalCandidate | null {
+  let best: ShortsLocalCandidate | null = null
+  let bestScore = 0
+  for (const candidate of candidates) {
+    const ratio = overlapRatio({ start, end }, candidate)
+    const startDist = Math.abs(candidate.start - start)
+    const score = ratio * 10 + (startDist <= 5 ? 2 : 0)
+    if (score > bestScore) {
+      best = candidate
+      bestScore = score
+    }
+  }
+  if (!best) return null
+  if (overlapRatio({ start, end }, best) >= 0.25 || Math.abs(best.start - start) <= 5) return best
+  return null
+}
+
 export function buildShortsAnalysisPrompt(input: {
   profile: ShortsProfile
   duration: number
@@ -77,12 +130,26 @@ export function buildShortsAnalysisPrompt(input: {
   fileName: string
   transcript: TranscriptCue[]
   scenes: Array<{ time: number }>
-  localCandidates: ShortsLocalCandidate[]
+  localCandidates: Array<Omit<ShortsLocalCandidate, 'id'> & { id?: string }>
   hasTranscript: boolean
+  editorial?: ShortsEditorialContext
 }): string {
   const bounds = durationBounds(input.requestedDuration, input.duration, input.durationMode)
   const criteria = input.profile === 'music' ? MUSIC_CRITERIA : HISTORY_CRITERIA
   const profileLabel = input.profile === 'music' ? 'MÚSICA' : 'HISTÓRIA'
+  const candidates = withCandidateIds(input.localCandidates)
+  const contentLanguage = input.editorial?.contentLanguage?.trim() || input.editorial?.language?.trim() || ''
+  const languageName = input.editorial?.languageName?.trim() || contentLanguage || 'the source material language'
+  const languageBlock = contentLanguage
+    ? [
+        contentLanguagePromptBlock({
+          contentLanguage,
+          languageName,
+        }),
+        `hook: 1 frase no idioma do conteúdo (${languageName} / ${contentLanguage})`,
+        'reason pode permanecer em português (nota interna). hook, se houver, no idioma do conteúdo.',
+      ].join('\n')
+    : ''
   const transcriptBlock =
     input.transcript.length > 0
       ? input.transcript.slice(0, 220).map(formatCueLine).join('\n')
@@ -94,10 +161,10 @@ export function buildShortsAnalysisPrompt(input: {
           .map((scene) => scene.time.toFixed(1))
           .join(', ')
       : '(nenhuma)'
-  const localBlock = input.localCandidates
+  const localBlock = candidates
     .map(
-      (item, index) =>
-        `${index + 1}. ${item.start.toFixed(1)}–${item.end.toFixed(1)}s · ${item.reason} · score local ${item.score}`,
+      (item) =>
+        `${item.id}: ${item.start.toFixed(1)}–${item.end.toFixed(1)}s · ${item.reason} · score local ${item.score}`,
     )
     .join('\n')
 
@@ -127,12 +194,14 @@ export function buildShortsAnalysisPrompt(input: {
           '- preserve entrada natural, refrão completo e resolução quando o modo for aproximado',
           '- evite cortes musicalmente ruins se houver alternativa',
           '- priorize refrão, clímax vocal, solo, entrada forte, plateia, mudança de dinâmica, final forte',
+          '- cada Short precisa ser um momento real diferente: refrão, solo, clímax, entrada vocal, plateia, mudança dinâmica, encerramento',
         ]
       : [
           'Regras História:',
           '- o trecho precisa começar de forma compreensível, sem depender do bloco anterior',
           '- tenha desenvolvimento (não só uma frase isolada) e termine naturalmente',
           '- priorize gancho, curiosidade, revelação, conflito, frase memorável, consequência, virada',
+          '- cada Short precisa ser um trecho distinto: gancho, revelação, conflito, consequência, conclusão',
         ]
 
   return [
@@ -142,26 +211,121 @@ export function buildShortsAnalysisPrompt(input: {
     `videoDuration: ${input.duration.toFixed(1)}`,
     `requestedClipDuration: ${bounds.target.toFixed(1)}`,
     `durationMode: ${input.durationMode}`,
-    `Devolva exatamente ${input.clipCount} clips (pode devolver até ${input.clipCount + 2} para o Atlas filtrar).`,
+    `O usuário pediu até ${input.clipCount} Shorts. RANKEIE os candidatos locais. Não invente timestamps novos.`,
+    'Devolva selected[] com candidateId dos melhores momentos DISTINTOS.',
+    `Pode devolver menos que ${input.clipCount} se não houver trechos realmente diferentes com qualidade.`,
+    'NUNCA devolva o mesmo start/end (nem o mesmo candidateId) para Shorts diferentes.',
+    `Ajuste fino opcional de start/end: no máximo ${SHORTS_AI_ADJUST_SECONDS}s em relação ao candidato. Não transforme todos no final do vídeo.`,
+    'Qualidade editorial continua prioritária, mas distribua os Shorts por regiões diferentes do vídeo quando houver alternativas boas.',
     durationRules.join('\n'),
     'Não invente timestamps fora do vídeo. start >= 0 e end <= videoDuration.',
     'Não escolha frases isoladas. O corte precisa funcionar sozinho: começo claro, desenvolvimento, fechamento.',
     musicRules.join('\n'),
     `Critérios deste perfil: ${criteria.join(', ')}.`,
     input.hasTranscript
-      ? 'Há transcrição com timestamps. Use-a como fonte principal.'
-      : 'Não há transcrição confiável. Use candidatos locais, cenas e dinâmica de áudio. Não invente falas.',
+      ? 'Há transcrição com timestamps. Use-a para escolher entre os candidatos, não para inventar um único corte repetido.'
+      : 'Não há transcrição confiável. Use candidatos locais, cenas e dinâmica de áudio. Não invente falas. A diversidade temporal continua obrigatória.',
     '',
     'Transcrição:',
     transcriptBlock,
     '',
     `Mudanças de cena (s): ${scenesBlock}`,
     '',
-    'Candidatos locais (referência, você pode ajustar):',
+    'Candidatos locais (obrigatório escolher por ID):',
     localBlock || '(nenhum)',
-    '',
-    'Responda só no JSON do schema, em português do Brasil.',
-  ].join('\n')
+    languageBlock,
+    languageBlock ? 'Responda só no JSON do schema.' : 'Responda só no JSON do schema, em português do Brasil.',
+    'Formato: { "selected": [ { "candidateId": "c1", "score": 94, "reason": "...", "hook": "..." } ], "notes": "" }',
+  ]
+    .filter((line) => line != null)
+    .join('\n')
+}
+
+function resolveSelectedItem(
+  record: Record<string, unknown>,
+  candidates: ShortsLocalCandidate[],
+  usedIds: Set<string>,
+): ShortsAiClip | null {
+  const byId = new Map(candidates.map((item) => [item.id, item]))
+  const requestedId = asText(record.candidateId)
+  let candidate = requestedId ? byId.get(requestedId) ?? null : null
+
+  const rawStart = asNumber(record.start, NaN)
+  const rawEnd = asNumber(record.end, NaN)
+  if (!candidate && Number.isFinite(rawStart) && Number.isFinite(rawEnd)) {
+    candidate = nearestCandidate(rawStart, rawEnd, candidates)
+  }
+  if (!candidate && candidates.length === 0 && Number.isFinite(rawStart) && Number.isFinite(rawEnd)) {
+    const syntheticId = requestedId || `ai-${usedIds.size + 1}`
+    candidate = {
+      id: syntheticId,
+      start: Math.min(rawStart, rawEnd),
+      end: Math.max(rawStart, rawEnd),
+      score: clampScore(record.score),
+      reason: asText(record.reason) || 'Trecho com potencial para Short',
+      source: 'speech',
+    }
+  }
+  if (!candidate) return null
+  if (usedIds.has(candidate.id)) return null
+
+  const adjusted = clampAiAdjust(
+    candidate,
+    {
+      start: Number.isFinite(rawStart) ? rawStart : candidate.start,
+      end: Number.isFinite(rawEnd) ? rawEnd : candidate.end,
+    },
+    SHORTS_AI_ADJUST_SECONDS,
+  )
+
+  usedIds.add(candidate.id)
+  return {
+    id: candidate.id,
+    start: Math.round(adjusted.start * 100) / 100,
+    end: Math.round(adjusted.end * 100) / 100,
+    score: clampScore(record.score) || candidate.score,
+    reason: asText(record.reason) || candidate.reason || 'Trecho com potencial para Short',
+    hook: asText(record.hook),
+  }
+}
+
+function applyDurationBounds(
+  clip: ShortsAiClip,
+  input: { duration: number; requestedDuration: number; durationMode: ShortsDurationMode },
+): ShortsAiClip | null {
+  const bounds = durationBounds(input.requestedDuration, input.duration, input.durationMode)
+  let start = Math.max(0, Math.min(input.duration, clip.start))
+  let end = Math.max(0, Math.min(input.duration, clip.end))
+  if (end < start) {
+    const swap = start
+    start = end
+    end = swap
+  }
+  if (end - start < 0.8) return null
+
+  if (input.durationMode === 'exact') {
+    end = Math.min(input.duration, start + bounds.target)
+    if (end - start < bounds.target - 0.12) {
+      start = Math.max(0, end - bounds.target)
+    }
+  } else {
+    if (end - start < bounds.min) {
+      end = Math.min(input.duration, start + bounds.min)
+    }
+    if (end - start > bounds.max) {
+      end = Math.min(input.duration, start + bounds.max)
+    }
+    if (end - start < bounds.min) {
+      start = Math.max(0, end - bounds.min)
+    }
+  }
+
+  if (end <= start || end > input.duration + 0.04) return null
+  return {
+    ...clip,
+    start: Math.round(start * 100) / 100,
+    end: Math.round(end * 100) / 100,
+  }
 }
 
 export function normalizeShortsAnalysis(
@@ -171,75 +335,64 @@ export function normalizeShortsAnalysis(
     clipCount: number
     requestedDuration: number
     durationMode: ShortsDurationMode
+    localCandidates?: ShortsLocalCandidate[]
   },
 ): { clips: ShortsAiClip[]; notes: string } {
-  const bounds = durationBounds(input.requestedDuration, input.duration, input.durationMode)
-  const list = Array.isArray(raw.clips) ? raw.clips : []
+  const candidates = input.localCandidates ?? []
+  const selectedRaw = Array.isArray(raw.selected) ? raw.selected : []
+  const legacyRaw = Array.isArray(raw.clips) ? raw.clips : []
+  const list = selectedRaw.length > 0 ? selectedRaw : legacyRaw
+  const usedIds = new Set<string>()
   const clips: ShortsAiClip[] = []
 
   for (const item of list) {
     if (!item || typeof item !== 'object') continue
-    const record = item as Record<string, unknown>
-    let start = asNumber(record.start, NaN)
-    let end = asNumber(record.end, NaN)
-    if (!Number.isFinite(start) || !Number.isFinite(end)) continue
-    if (end < start) {
-      const swap = start
-      start = end
-      end = swap
-    }
-    start = Math.max(0, Math.min(input.duration, start))
-    end = Math.max(0, Math.min(input.duration, end))
-    if (end - start < 0.8) continue
+    const resolved = resolveSelectedItem(item as Record<string, unknown>, candidates, usedIds)
+    if (!resolved) continue
+    const bounded = applyDurationBounds(resolved, input)
+    if (!bounded) continue
+    clips.push(bounded)
+    if (clips.length >= input.clipCount + 2) break
+  }
 
-    if (input.durationMode === 'exact') {
-      end = Math.min(input.duration, start + bounds.target)
-      if (end - start < bounds.target - 0.12) {
-        start = Math.max(0, end - bounds.target)
-      }
-    } else {
-      if (end - start < bounds.min) {
-        end = Math.min(input.duration, start + bounds.min)
-        if (end - start < bounds.min) start = Math.max(0, end - bounds.min)
-      }
-      if (end - start > bounds.max) {
-        end = start + bounds.max
-        if (end > input.duration) {
-          end = input.duration
-          start = Math.max(0, end - bounds.max)
-        }
-      }
+  if (clips.length === 0 && candidates.length > 0) {
+    for (const candidate of [...candidates].sort((a, b) => b.score - a.score || a.start - b.start)) {
+      const bounded = applyDurationBounds(
+        {
+          id: candidate.id,
+          start: candidate.start,
+          end: candidate.end,
+          score: candidate.score,
+          reason: candidate.reason,
+          hook: '',
+        },
+        input,
+      )
+      if (!bounded) continue
+      clips.push(bounded)
+      if (clips.length >= input.clipCount) break
     }
-
-    if (end <= start || start < 0 || end > input.duration + 0.04) continue
-    const reason = asText(record.reason) || 'Trecho com potencial para Short'
-    const hook = asText(record.hook)
-    clips.push({
-      start: Math.round(start * 100) / 100,
-      end: Math.round(end * 100) / 100,
-      score: clampScore(record.score),
-      reason,
-      hook,
-    })
   }
 
   clips.sort((a, b) => b.score - a.score || a.start - b.start)
-  const picked: ShortsAiClip[] = []
-  for (const clip of clips) {
-    const overlap = picked.some((existing) => {
-      const from = Math.max(existing.start, clip.start)
-      const to = Math.min(existing.end, clip.end)
-      return to - from > (clip.end - clip.start) * 0.55
-    })
-    if (overlap) continue
-    picked.push(clip)
-    if (picked.length >= input.clipCount) break
-  }
-
   return {
-    clips: picked,
+    clips: clips.slice(0, input.clipCount),
     notes: asText(raw.notes),
   }
+}
+
+export function shortsAiClipsToRanked(clips: ShortsAiClip[]): ShortsRankedWindow[] {
+  return toRankedWindows(
+    clips.map((clip) => ({
+      id: clip.id,
+      start: clip.start,
+      end: clip.end,
+      score: clip.score,
+      reason: clip.reason,
+      hook: clip.hook,
+      source: 'ai' as const,
+    })),
+  )
 }
 
 export const SHORTS_ANALYSIS_FAIL_MESSAGE =

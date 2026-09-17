@@ -6,7 +6,17 @@ import type {
   ShortsProfile,
   TranscriptCue,
 } from './shorts'
+import {
+  overlapRatio,
+  selectDiverseClips,
+  shortsCandidatePoolSize,
+  SHORTS_POOL_OVERLAP_LIMIT,
+  withCandidateIds,
+} from './shortsDiversity'
 import { durationBounds } from './shortsDuration'
+
+/** Snap à fala só corrige o corte por poucos segundos — nunca engole o vídeo inteiro. */
+export const SHORTS_SNAP_MAX_SECONDS = 2.5
 
 function roundTime(value: number) {
   return Math.round(value * 100) / 100
@@ -67,12 +77,12 @@ function makeWindow(
   return { start: roundTime(start), end: roundTime(Math.min(duration, start + size)) }
 }
 
-function overlapRatio(a: { start: number; end: number }, b: { start: number; end: number }) {
-  const from = Math.max(a.start, b.start)
-  const to = Math.min(a.end, b.end)
-  const overlap = Math.max(0, to - from)
-  const shorter = Math.min(a.end - a.start, b.end - b.start)
-  return shorter <= 0 ? 0 : overlap / shorter
+function pushCandidate(
+  list: Array<Omit<ShortsLocalCandidate, 'id'>>,
+  candidate: Omit<ShortsLocalCandidate, 'id'>,
+) {
+  if (candidate.end - candidate.start < 0.8) return
+  list.push(candidate)
 }
 
 export function buildLocalShortsCandidates(input: {
@@ -87,9 +97,9 @@ export function buildLocalShortsCandidates(input: {
 }): ShortsLocalCandidate[] {
   const bounds = durationBounds(input.requestedDuration, input.duration, input.durationMode)
   const duration = Math.max(0.5, input.duration)
-  const maxCount = Math.max(1, input.count)
+  const poolSize = shortsCandidatePoolSize(input.count)
   const target = Math.min(bounds.target, duration)
-  const candidates: ShortsLocalCandidate[] = []
+  const raw: Array<Omit<ShortsLocalCandidate, 'id'>> = []
 
   if (input.profile === 'music' && input.analysis) {
     const onsets = input.analysis.onsets
@@ -106,7 +116,7 @@ export function buildLocalShortsCandidates(input: {
       }
       const end = roundTime(Math.min(duration, Math.max(snappedStart + bounds.min, snappedEnd)))
       const energy = windowEnergy(input.analysis, snappedStart, end)
-      candidates.push({
+      pushCandidate(raw, {
         start: snappedStart,
         end,
         score: Math.round(clamp(40 + energy * 180, 40, 92)),
@@ -116,7 +126,7 @@ export function buildLocalShortsCandidates(input: {
     }
     for (const onset of onsets.slice(0, 40)) {
       const window = makeWindow(duration, onset, target, 'start')
-      candidates.push({
+      pushCandidate(raw, {
         start: window.start,
         end: window.end,
         score: 78,
@@ -126,25 +136,45 @@ export function buildLocalShortsCandidates(input: {
     }
   } else {
     const speech = invertSilence(duration, input.analysis?.silence ?? [])
-    const cueStarts = (input.cues ?? []).map((cue) => cue.start)
+    const cueStarts = (input.cues ?? []).filter((cue) => cue.text.trim()).map((cue) => cue.start)
     const bases = speech.length > 0 ? speech : [{ start: 0, end: duration }]
+    const slide = Math.max(bounds.min * 0.85, target * 0.65)
     for (const region of bases) {
-      const start = snapToPoints(region.start, cueStarts, 0.4)
-      const window = makeWindow(duration, start, target, 'start')
-      const end = Math.min(duration, Math.max(window.end, start + bounds.min))
-      candidates.push({
-        start: roundTime(start),
-        end: roundTime(end),
-        score: 70,
-        reason: 'Trecho falado contínuo, com começo e fim naturais',
-        source: 'speech',
+      for (let t = region.start; t + bounds.min * 0.85 <= region.end; t += slide) {
+        const start = snapToPoints(t, cueStarts, 0.4)
+        const window = makeWindow(duration, start, target, 'start')
+        const end = Math.min(duration, Math.max(window.end, start + bounds.min), region.end || duration)
+        const safeEnd = end - start < bounds.min * 0.85 ? Math.min(duration, start + target) : end
+        pushCandidate(raw, {
+          start: roundTime(start),
+          end: roundTime(safeEnd),
+          score: 70,
+          reason: 'Trecho falado contínuo, com começo e fim naturais',
+          source: 'speech',
+        })
+        if (region.end - region.start <= target * 1.15) break
+      }
+    }
+  }
+
+  if (input.analysis && input.analysis.energy.length > 0 && input.profile === 'history') {
+    const step = Math.max(1.4, target * 0.4)
+    for (let t = 0; t + bounds.min <= duration; t += step) {
+      const window = makeWindow(duration, t, target, 'start')
+      const energy = windowEnergy(input.analysis, window.start, window.end)
+      pushCandidate(raw, {
+        start: window.start,
+        end: window.end,
+        score: Math.round(clamp(46 + energy * 140, 46, 84)),
+        reason: 'Trecho com energia de fala/áudio mais alta',
+        source: 'energy',
       })
     }
   }
 
   for (const scene of input.scenes ?? []) {
     const window = makeWindow(duration, scene.time, target, 'start')
-    candidates.push({
+    pushCandidate(raw, {
       start: window.start,
       end: window.end,
       score: input.profile === 'history' ? 74 : 66,
@@ -153,9 +183,25 @@ export function buildLocalShortsCandidates(input: {
     })
   }
 
-  if (candidates.length === 0) {
+  const structureStep = Math.max(target * 0.7, (duration - target) / Math.max(poolSize - 1, 1))
+  for (let t = 0; t + bounds.min <= duration; t += structureStep) {
+    const window = makeWindow(duration, t, target, 'start')
+    const energy = input.analysis ? windowEnergy(input.analysis, window.start, window.end) : 0.2
+    pushCandidate(raw, {
+      start: window.start,
+      end: window.end,
+      score: Math.round(clamp(44 + energy * 90, 44, 76)),
+      reason:
+        input.profile === 'music'
+          ? 'Outra região da faixa com dinâmica aproveitável'
+          : 'Outra região contínua do vídeo',
+      source: 'structure',
+    })
+  }
+
+  if (raw.length === 0) {
     const window = makeWindow(duration, 0, target, 'start')
-    candidates.push({
+    pushCandidate(raw, {
       start: window.start,
       end: window.end,
       score: 55,
@@ -164,23 +210,31 @@ export function buildLocalShortsCandidates(input: {
     })
   }
 
-  const sorted = [...candidates].sort((a, b) => b.score - a.score || a.start - b.start)
-  const picked: ShortsLocalCandidate[] = []
-  for (const candidate of sorted) {
-    const length = candidate.end - candidate.start
-    if (length < bounds.min * 0.85) continue
-    if (picked.some((item) => overlapRatio(item, candidate) > 0.55)) continue
-    let start = roundTime(clamp(candidate.start, 0, duration))
-    let end = roundTime(clamp(candidate.end, start + 1, duration))
-    if (input.durationMode === 'exact') {
-      end = roundTime(Math.min(duration, start + target))
-      if (end - start < target) start = roundTime(Math.max(0, end - target))
-    }
-    picked.push({ ...candidate, start, end })
-    if (picked.length >= maxCount) break
-  }
+  const normalized = withCandidateIds(
+    raw.map((candidate) => {
+      let start = roundTime(clamp(candidate.start, 0, duration))
+      let end = roundTime(clamp(candidate.end, start + 1, duration))
+      if (input.durationMode === 'exact') {
+        end = roundTime(Math.min(duration, start + target))
+        if (end - start < target) start = roundTime(Math.max(0, end - target))
+      } else if (end - start > bounds.max) {
+        end = roundTime(Math.min(duration, start + bounds.max))
+      }
+      return { ...candidate, start, end }
+    }),
+  ).filter((candidate) => candidate.end - candidate.start >= bounds.min * 0.85)
 
-  return picked.slice(0, maxCount)
+  const picked = selectDiverseClips({
+    candidates: normalized.map((item) => ({ ...item, hook: '' })),
+    count: poolSize,
+    videoDuration: duration,
+    overlapLimit: SHORTS_POOL_OVERLAP_LIMIT,
+  })
+
+  return picked.selected.map(({ hook: _hook, source, ...item }) => ({
+    ...item,
+    source: source && source !== 'ai' ? source : 'speech',
+  }))
 }
 
 export function snapClipToCues(
@@ -188,22 +242,41 @@ export function snapClipToCues(
   end: number,
   cues: TranscriptCue[],
   duration: number,
-  profile: ShortsProfile,
+  _profile: ShortsProfile,
 ): { start: number; end: number } {
-  if (cues.length === 0) {
-    return {
-      start: roundTime(clamp(start, 0, duration)),
-      end: roundTime(clamp(end, start + 0.5, duration)),
-    }
+  const safeStart = roundTime(clamp(start, 0, duration))
+  const safeEnd = roundTime(clamp(end, safeStart + 0.5, duration))
+  const usable = cues.filter((cue) => {
+    const text = cue.text.trim()
+    const length = cue.end - cue.start
+    return text.length > 0 && length > 0.2 && length <= 90
+  })
+  if (usable.length === 0) {
+    return { start: safeStart, end: safeEnd }
   }
-  const startCue = cues.find((cue) => cue.start <= start && cue.end >= start) ?? cues.find((cue) => Math.abs(cue.start - start) < 0.45)
-  const endCue = [...cues].reverse().find((cue) => cue.start <= end && cue.end >= end)
-  let nextStart = startCue ? startCue.start : start
-  let nextEnd = endCue ? endCue.end : end
-  if (profile === 'music') {
-    nextStart = startCue?.start ?? nextStart
-    nextEnd = endCue?.end ?? nextEnd
+
+  const startCue =
+    usable.find((cue) => cue.start <= safeStart && cue.end >= safeStart) ??
+    usable.find((cue) => Math.abs(cue.start - safeStart) < 0.45)
+  const endCue = [...usable].reverse().find((cue) => cue.start <= safeEnd && cue.end >= safeEnd)
+
+  let nextStart = safeStart
+  let nextEnd = safeEnd
+  if (startCue && Math.abs(startCue.start - safeStart) <= SHORTS_SNAP_MAX_SECONDS) {
+    nextStart = startCue.start
   }
+  if (endCue && Math.abs(endCue.end - safeEnd) <= SHORTS_SNAP_MAX_SECONDS) {
+    nextEnd = endCue.end
+  }
+  if (nextEnd - nextStart > safeEnd - safeStart + SHORTS_SNAP_MAX_SECONDS * 2) {
+    nextStart = safeStart
+    nextEnd = safeEnd
+  }
+  if (overlapRatio({ start: nextStart, end: nextEnd }, { start: safeStart, end: safeEnd }) < 0.2) {
+    nextStart = safeStart
+    nextEnd = safeEnd
+  }
+
   return {
     start: roundTime(clamp(nextStart, 0, duration)),
     end: roundTime(clamp(nextEnd, nextStart + 0.5, duration)),

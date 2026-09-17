@@ -58,6 +58,30 @@ describe('shortsDuration', () => {
     expect(overflow.start).toBe(30)
   })
 
+  it('no modo aproximado não empurra starts distintos para o fim do vídeo', () => {
+    const a = constrainClipWindow({
+      start: 20,
+      end: 310,
+      videoDuration: 310,
+      requestedDuration: 30,
+      mode: 'approximate',
+      moved: 'both',
+    })
+    const b = constrainClipWindow({
+      start: 80,
+      end: 310,
+      videoDuration: 310,
+      requestedDuration: 30,
+      mode: 'approximate',
+      moved: 'both',
+    })
+    expect(a.start).toBeCloseTo(20, 0)
+    expect(b.start).toBeCloseTo(80, 0)
+    expect(a.end - a.start).toBeLessThanOrEqual(36)
+    expect(b.end - b.start).toBeLessThanOrEqual(36)
+    expect(a.start).not.toBeCloseTo(b.start, 0)
+  })
+
   it('mostra duração com décimos', () => {
     expect(formatClipLength(37.4)).toBe('00:37.4')
   })

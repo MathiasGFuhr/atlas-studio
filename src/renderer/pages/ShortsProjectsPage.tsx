@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Clapperboard, Plus, Search } from 'lucide-react'
 import type { ShortsJob } from '@shared/shorts'
-import { exportedShortsCount, matchesShortsProjectSearch } from '@shared/shortsProject'
+import {
+  exportedShortsCount,
+  matchesShortsProjectSearch,
+  shortsProjectDeleteMessage,
+} from '@shared/shortsProject'
+import type { ShortsImportResult } from '@shared/shortsProjectIdentity'
 import { PageHeader } from '../components/PageHeader'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
@@ -25,6 +30,7 @@ export function ShortsProjectsPage() {
   const [renaming, setRenaming] = useState<ShortsJob | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleting, setDeleting] = useState<ShortsJob | null>(null)
+  const [existingImport, setExistingImport] = useState<ShortsImportResult | null>(null)
 
   const load = useCallback(async () => {
     const list = await api.shorts.list(projectId ? { projectId } : undefined)
@@ -51,10 +57,40 @@ export function ShortsProjectsPage() {
   async function createProject() {
     setBusy(true)
     try {
-      const created = await api.shorts.import(projectId)
-      if (!created) return
+      const result = await api.shorts.import(projectId)
+      if (!result) return
+      if (result.kind === 'existing') {
+        setExistingImport(result)
+        return
+      }
       push('Projeto criado. O arquivo original permanece no lugar.', 'success')
-      navigate(editorPath(created.id))
+      navigate(editorPath(result.project.id))
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao criar o projeto de Shorts', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function openExistingProject() {
+    if (!existingImport) return
+    const id = existingImport.project.id
+    setExistingImport(null)
+    navigate(editorPath(id))
+  }
+
+  async function forceCreateAnother() {
+    if (!existingImport) return
+    setBusy(true)
+    try {
+      const result = await api.shorts.createFromSourceVideo({
+        sourcePath: existingImport.sourcePath,
+        projectId,
+        forceNew: true,
+      })
+      setExistingImport(null)
+      push('Novo projeto criado a partir do mesmo vídeo.', 'success')
+      navigate(editorPath(result.project.id))
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao criar o projeto de Shorts', 'error')
     } finally {
@@ -193,12 +229,42 @@ export function ShortsProjectsPage() {
 
       <ConfirmDialog
         open={Boolean(deleting)}
-        title="Excluir projeto do Shorts Studio?"
-        message="O vídeo original e os arquivos exportados não serão apagados."
+        title="Excluir projeto de Shorts?"
+        message={deleting ? shortsProjectDeleteMessage(exportedShortsCount(deleting.clips)) : ''}
         confirmLabel="Excluir projeto"
         onConfirm={() => void confirmDelete()}
         onClose={() => setDeleting(null)}
       />
+
+      <Modal
+        open={Boolean(existingImport)}
+        title="Este vídeo já possui um projeto no Shorts Studio."
+        onClose={() => setExistingImport(null)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setExistingImport(null)}>
+              Cancelar
+            </Button>
+            {existingImport?.reason === 'same_source' ? (
+              <Button variant="secondary" disabled={busy} onClick={() => void forceCreateAnother()}>
+                Criar outro projeto
+              </Button>
+            ) : null}
+            <Button disabled={busy} onClick={() => void openExistingProject()}>
+              Abrir projeto existente
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm leading-relaxed text-muted">
+          {existingImport?.reason === 'export_of_existing'
+            ? 'Este arquivo é um Short já exportado. O Atlas vai abrir o projeto do vídeo original em vez de criar um card novo.'
+            : 'O comportamento padrão é reabrir o projeto existente. Criar outro projeto é uma ação explícita e gera um segundo card para o mesmo vídeo.'}
+        </p>
+        {existingImport ? (
+          <p className="mt-3 truncate text-xs text-muted-2">{existingImport.project.name}</p>
+        ) : null}
+      </Modal>
     </div>
   )
 }

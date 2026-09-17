@@ -32,6 +32,7 @@ import type {
 import { MUSIC_PROJECT_HAS_PUBLICATION_ERROR } from '../src/shared/types'
 import type { MusicTrack } from '../src/shared/musicAnalysis'
 import type { ShortsAnalyzeInput, ShortsJob, ShortsProgressEvent } from '../src/shared/shorts'
+import type { ShortsImportResult } from '../src/shared/shortsProjectIdentity'
 import type { CustomPrompt } from '../src/shared/quickPrompts/types'
 import type {
   ChatAgentStatusSnapshot,
@@ -674,8 +675,11 @@ export const mockApi = {
   shorts: {
     list: async () => [] as ShortsJob[],
     get: async () => null,
-    import: async () => {
+    import: async (): Promise<ShortsImportResult | null> => {
       throw new Error('Importação de vídeo indisponível no modo mock. Use o Electron.')
+    },
+    createFromSourceVideo: async (): Promise<ShortsImportResult> => {
+      throw new Error('Criação de projeto de Shorts indisponível no modo mock. Use o Electron.')
     },
     analyze: async (_request: ShortsAnalyzeInput) => {
       throw new Error('Análise de Shorts indisponível no modo mock. Use o Electron.')
@@ -856,7 +860,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.7.0',
+      currentVersion: '1.9.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

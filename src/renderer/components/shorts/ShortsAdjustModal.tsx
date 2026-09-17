@@ -1,6 +1,6 @@
 import { Pause, Play } from 'lucide-react'
 import type { ShortsAspectMode, ShortsClip, ShortsClipPatch, ShortsJob } from '@shared/shorts'
-import { clipDuration, formatShortsTimecode } from '@shared/shorts'
+import { clipDuration, formatShortsTimecode, shortsClipPreviewKey } from '@shared/shorts'
 import { formatClipLength } from '@shared/shortsDuration'
 import { Button } from '../Button'
 import { Input } from '../Input'
@@ -68,6 +68,7 @@ export function ShortsAdjustModal({
           <div className="grid gap-5 lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
             <div className={vertical ? 'mx-auto w-full max-w-[240px]' : 'w-full'}>
               <ShortsClipPreview
+                clipId={clip.id}
                 src={mediaUrl}
                 start={start}
                 end={end}
@@ -75,7 +76,7 @@ export function ShortsAdjustModal({
                 sourceWidth={sourceWidth}
                 sourceHeight={sourceHeight}
                 active={playing}
-                resetToken={clip.id}
+                resetToken={shortsClipPreviewKey({ id: clip.id, start, end })}
                 onPlayingChange={onPlayingChange}
               />
               <div className="mt-3 flex items-center gap-2">

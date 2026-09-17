@@ -765,6 +765,7 @@ export const IPC = {
     list: 'shorts:list',
     get: 'shorts:get',
     import: 'shorts:import',
+    createFromSourceVideo: 'shorts:createFromSourceVideo',
     analyze: 'shorts:analyze',
     updateClip: 'shorts:updateClip',
     regenerateCopy: 'shorts:regenerateCopy',

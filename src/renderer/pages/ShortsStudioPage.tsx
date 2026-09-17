@@ -22,17 +22,22 @@ import {
   formatShortsTimecode,
 } from '@shared/shorts'
 import {
+  SHORTS_CONTENT_LANGUAGE_OPTIONS,
+  contentLanguageLabel,
+} from '@shared/shortsLanguage'
+import {
   SHORTS_DURATION_SHORTCUTS,
   capRequestedDuration,
   formatDurationInput,
   isDurationShortcut,
   parseDurationInput,
 } from '@shared/shortsDuration'
+import { isProtectedShortsClip } from '@shared/shortsProjectIdentity'
 import { PageHeader } from '../components/PageHeader'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Input } from '../components/Input'
-import { Modal } from '../components/Modal'
+import { Modal, ConfirmDialog } from '../components/Modal'
 import { ShortsAdjustModal } from '../components/shorts/ShortsAdjustModal'
 import { ShortsResultCard } from '../components/shorts/ShortsResultCard'
 import { getAtlasApi } from '../lib/api'
@@ -92,6 +97,7 @@ export function ShortsStudioPage() {
   const [copyBusyId, setCopyBusyId] = useState<string | null>(null)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
+  const [reanalyzeOpen, setReanalyzeOpen] = useState(false)
 
   const analyzing = job?.status === 'analyzing' || (busy && progress?.stage !== 'exporting')
 
@@ -124,6 +130,10 @@ export function ShortsStudioPage() {
   }, [jobId])
 
   useEffect(() => {
+    if (missing) navigate(listPath, { replace: true })
+  }, [missing, listPath, navigate])
+
+  useEffect(() => {
     return api.shorts.onProgress((event) => {
       setProgress(event)
     })
@@ -150,6 +160,7 @@ export function ShortsStudioPage() {
       durationMode: ShortsDurationMode
       aspectMode: ShortsAspectMode
       captionsEnabled: boolean
+      languageOverride: string | null
     }>,
   ) {
     if (!job) return
@@ -201,6 +212,18 @@ export function ShortsStudioPage() {
     }
   }
 
+  async function requestAnalyze() {
+    if (!job) {
+      push('Abra um projeto com vídeo para analisar.', 'error')
+      return
+    }
+    if (job.clips.some(isProtectedShortsClip)) {
+      setReanalyzeOpen(true)
+      return
+    }
+    await analyze()
+  }
+
   async function analyze() {
     if (!job) {
       push('Abra um projeto com vídeo para analisar.', 'error')
@@ -222,7 +245,13 @@ export function ShortsStudioPage() {
       if (next.status === 'error') {
         push(next.errorMessage || 'A análise falhou. O vídeo original foi preservado.', 'error')
       } else {
-        push(`${next.clips.length} Shorts sugeridos.`, 'success')
+        const preserved = job.clips.filter(isProtectedShortsClip).length
+        push(
+          preserved
+            ? `${next.clips.length} Shorts no projeto. Shorts exportados foram preservados.`
+            : `${next.clips.length} Shorts sugeridos.`,
+          'success',
+        )
       }
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao analisar o vídeo', 'error')
@@ -414,6 +443,29 @@ export function ShortsStudioPage() {
               <option value="music">Música</option>
             </FieldSelect>
             <FieldSelect
+              label="Idioma do conteúdo"
+              value={job?.languageOverride || 'auto'}
+              onChange={(value) => {
+                void persistSettings({ languageOverride: value === 'auto' ? null : value })
+              }}
+            >
+              <option value="auto">
+                Automático
+                {job?.detectedLanguage || job?.contentLanguage
+                  ? ` · ${contentLanguageLabel(job.detectedLanguage || job.contentLanguage)}`
+                  : ''}
+              </option>
+              {SHORTS_CONTENT_LANGUAGE_OPTIONS.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.label}
+                </option>
+              ))}
+              {job?.contentLanguage &&
+              !SHORTS_CONTENT_LANGUAGE_OPTIONS.some((item) => item.code === job.contentLanguage) ? (
+                <option value={job.contentLanguage}>{contentLanguageLabel(job.contentLanguage)}</option>
+              ) : null}
+            </FieldSelect>
+            <FieldSelect
               label="Quantidade"
               value={String(clipCount)}
               onChange={(value) => {
@@ -543,7 +595,7 @@ export function ShortsStudioPage() {
                 fullWidth
                 disabled={busy || Boolean(copyBusyId) || !job || job.sourceExists === false}
                 icon={analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />}
-                onClick={() => void analyze()}
+                onClick={() => void requestAnalyze()}
               >
                 Analisar vídeo
               </Button>
@@ -675,6 +727,18 @@ export function ShortsStudioPage() {
         onExport={() => {
           if (previewClip) void exportClip(previewClip)
         }}
+      />
+
+      <ConfirmDialog
+        open={reanalyzeOpen}
+        title="Analisar o vídeo novamente?"
+        message="Novos candidatos serão gerados neste mesmo projeto. Shorts já exportados ou aceitos serão preservados."
+        confirmLabel="Reanalisar"
+        onConfirm={() => {
+          setReanalyzeOpen(false)
+          void analyze()
+        }}
+        onClose={() => setReanalyzeOpen(false)}
       />
     </div>
   )

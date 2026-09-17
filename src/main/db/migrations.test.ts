@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createRequire } from 'node:module'
 import type { AppDatabase } from './database'
-import { migrateSchema, backfillMusicChannelVideos } from './migrations'
+import { CURRENT_SCHEMA_VERSION, migrateSchema, backfillMusicChannelVideos, backfillShortsProjectDedup } from './migrations'
 
 const require = createRequire(import.meta.url)
 const initSqlJs = require('sql.js') as typeof import('sql.js')
@@ -148,7 +148,7 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 8 })
+    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: CURRENT_SCHEMA_VERSION })
 
     // Nenhum registro antigo foi perdido.
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -228,7 +228,7 @@ describe('migração para projetos de História e Música', () => {
 
     const second = migrateSchema(db)
 
-    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 8 })
+    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: CURRENT_SCHEMA_VERSION })
     expect(db.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual(afterFirst)
   })
 
@@ -317,7 +317,7 @@ describe('migração para projetos de História e Música', () => {
     const db = await createLegacyDatabase()
     seedLegacyContent(db)
     const first = migrateSchema(db)
-    expect(first.schemaVersion).toBe(8)
+    expect(first.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
     expect(first.backedUp).toBe(false)
     expect(migrateSchema(db).backedUp).toBe(false)
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -330,6 +330,8 @@ describe('migração para projetos de História e Música', () => {
       expect.objectContaining({ version: 6 }),
       expect.objectContaining({ version: 7 }),
       expect.objectContaining({ version: 8 }),
+      expect.objectContaining({ version: 9 }),
+      expect.objectContaining({ version: 10 }),
     ])
   })
 
@@ -356,7 +358,7 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result.schemaVersion).toBe(8)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
     const after = db.prepare('PRAGMA table_info(channel_videos)').all() as Array<{ name: string }>
     expect(after.some((col) => col.name === 'project_folder_path')).toBe(true)
     expect(after.some((col) => col.name === 'project_id')).toBe(true)
@@ -368,6 +370,8 @@ describe('migração para projetos de História e Música', () => {
     expect(shortsCols.some((col) => col.name === 'requested_duration')).toBe(true)
     expect(shortsCols.some((col) => col.name === 'duration_mode')).toBe(true)
     expect(shortsCols.some((col) => col.name === 'name')).toBe(true)
+    expect(shortsCols.some((col) => col.name === 'content_language')).toBe(true)
+    expect(shortsCols.some((col) => col.name === 'language_override')).toBe(true)
     const chatCols = db.prepare('PRAGMA table_info(chat_conversations)').all() as Array<{ name: string }>
     expect(chatCols.some((col) => col.name === 'model_override')).toBe(true)
     expect(chatCols.some((col) => col.name === 'effort_override')).toBe(true)
@@ -465,10 +469,16 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result.schemaVersion).toBe(8)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
     expect(db.prepare('SELECT name FROM shorts_jobs WHERE id = ?').get('sj1')).toEqual({
       name: 'Als „GEGEN DEN TAKT“ begann',
     })
+    expect(db.prepare('SELECT content_language, language_source FROM shorts_jobs WHERE id = ?').get('sj1')).toEqual({
+      content_language: 'de',
+      language_source: 'filename',
+    })
+    const clips = db.prepare('SELECT clips_json FROM shorts_jobs WHERE id = ?').get('sj1') as { clips_json: string }
+    expect(clips.clips_json).toBe('[]')
   })
 
   it('vincula vídeos musicais existentes a projetos sem duplicar quando o nome é inequívoco', async () => {
@@ -563,5 +573,97 @@ describe('migração para projetos de História e Música', () => {
     }
     expect(linked.project_id).not.toBe('p1')
     expect(linked.project_id).not.toBe('p2')
+  })
+
+  it('consolida Shorts duplicados do mesmo vídeo-fonte e absorve export de 00:51', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    migrateSchema(db)
+
+    const originalPath =
+      'D:\\Canais Youtube\\Johann Falk\\Gegen den Takt\\Als „GEGEN DEN TAKT“ begann, erwachte das gan\\Als „GEGEN DEN TAKT“ begann, erwachte das gan.mp4'
+    const exportPath =
+      'D:\\Canais Youtube\\Johann Falk\\Gegen den Takt\\Als „GEGEN DEN TAKT“ begann, erwachte das gan\\Als „GEGEN DEN TAKT“ begann, erwachte das gan-short-2.mp4'
+    const otherPath = 'D:\\Canais Youtube\\Johann Falk\\Zu alt\\video.mp4'
+    const at = '2026-09-17T10:03:16.024Z'
+    const insert = db.prepare(
+      `INSERT INTO shorts_jobs (
+        id, name, source_path, source_name, profile, clip_count, duration_preset,
+        requested_duration, duration_mode, aspect_mode, captions_enabled,
+        probe_json, clips_json, transcript_json, transcript_source, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'music', 5, '30', 30, 'approximate', 'center_9_16', 1, ?, ?, '[]', 'none', ?, ?, ?)`,
+    )
+
+    insert.run(
+      'original',
+      'GEGEN DEN TAKT',
+      originalPath,
+      'Als „GEGEN DEN TAKT“ begann, erwachte das gan.mp4',
+      JSON.stringify({ duration: 287.21, name: 'src.mp4', path: originalPath, width: 1920, height: 1080, fps: 30, aspectRatio: '16:9', format: 'mp4', hasAudio: true }),
+      JSON.stringify([
+        {
+          id: 'clip-2',
+          index: 2,
+          start: 235.46,
+          end: 287.21,
+          score: 90,
+          reason: 'final',
+          hook: '',
+          title: 'Refrão',
+          description: '',
+          hashtags: [],
+          accepted: true,
+          exportedPath: exportPath,
+          focusStrategy: 'center',
+        },
+      ]),
+      'ready',
+      at,
+      at,
+    )
+    insert.run(
+      'derived-51',
+      'GEGEN DEN TAKT-short-2',
+      exportPath,
+      'Als „GEGEN DEN TAKT“ begann, erwachte das gan-short-2.mp4',
+      JSON.stringify({ duration: 51.75, name: 'short.mp4', path: exportPath, width: 1080, height: 1920, fps: 30, aspectRatio: '9:16', format: 'mp4', hasAudio: true }),
+      '[]',
+      'draft',
+      '2026-09-17T11:03:08.594Z',
+      '2026-09-17T11:03:08.594Z',
+    )
+    insert.run(
+      'dup-original',
+      'GEGEN DEN TAKT',
+      originalPath,
+      'Als „GEGEN DEN TAKT“ begann, erwachte das gan.mp4',
+      JSON.stringify({ duration: 287.21, name: 'src.mp4', path: originalPath, width: 1920, height: 1080, fps: 30, aspectRatio: '16:9', format: 'mp4', hasAudio: true }),
+      '[]',
+      'draft',
+      '2026-09-17T11:03:11.778Z',
+      '2026-09-17T11:03:11.778Z',
+    )
+    insert.run(
+      'other',
+      'Zu alt für eure Regeln',
+      otherPath,
+      'Zu alt.mp4',
+      JSON.stringify({ duration: 310.78, name: 'Zu alt.mp4', path: otherPath, width: 1920, height: 1080, fps: 30, aspectRatio: '16:9', format: 'mp4', hasAudio: true }),
+      '[]',
+      'ready',
+      at,
+      at,
+    )
+
+    const result = backfillShortsProjectDedup(db)
+    expect(result.shortsDuplicatesRemoved).toBe(2)
+    const remaining = db.prepare('SELECT id FROM shorts_jobs ORDER BY id').all() as Array<{ id: string }>
+    expect(remaining.map((row) => row.id)).toEqual(['original', 'other'])
+    const keeper = db.prepare('SELECT clips_json FROM shorts_jobs WHERE id = ?').get('original') as {
+      clips_json: string
+    }
+    const clips = JSON.parse(keeper.clips_json) as Array<{ exportedPath: string | null }>
+    expect(clips.some((clip) => clip.exportedPath === exportPath)).toBe(true)
+    expect(backfillShortsProjectDedup(db).shortsDuplicatesRemoved).toBe(0)
   })
 })

@@ -7,6 +7,10 @@ import {
 
 const editorial = {
   language: 'de',
+  contentLanguage: 'de',
+  languageName: 'German',
+  languageSource: 'channel' as const,
+  languageConfidence: 0.9,
   channelName: 'Johann Falk',
   artistName: 'Johann Falk',
   songTitle: 'ZU VIEL VON ALLEM',
@@ -35,7 +39,14 @@ describe('shortsCopy', () => {
     })
     const history = buildShortsCopiesPrompt({
       profile: 'history',
-      editorial: { language: 'pt-BR', sourceName: 'roma.mp4' },
+      editorial: {
+        language: 'pt-BR',
+        contentLanguage: 'pt-BR',
+        languageName: 'Brazilian Portuguese',
+        languageSource: 'transcript',
+        languageConfidence: 0.9,
+        sourceName: 'roma.mp4',
+      },
       fileName: 'roma.mp4',
       videoDuration: 240,
       fields: 'all',
@@ -54,6 +65,11 @@ describe('shortsCopy', () => {
 
     expect(music).toContain('Perfil editorial: MÚSICA')
     expect(music).toContain('idiomaObrigatorio: de')
+    expect(music).toContain('contentLanguage: de')
+    expect(music).toContain('languageName: German')
+    expect(music).toContain('Generate all viewer-facing metadata in German.')
+    expect(music).toContain('Do not translate to Portuguese.')
+    expect(music).toContain('Do not use the UI language.')
     expect(music).toContain('artistName: Johann Falk')
     expect(music).toContain('songTitle: ZU VIEL VON ALLEM')
     expect(music).toContain('NÃO traduza automaticamente para inglês')
@@ -63,6 +79,8 @@ describe('shortsCopy', () => {
 
     expect(history).toContain('Perfil editorial: HISTÓRIA')
     expect(history).toContain('idiomaObrigatorio: pt-BR')
+    expect(history).toContain('contentLanguage: pt-BR')
+    expect(history).toContain('Brazilian Portuguese')
     expect(history).toContain('revelação')
     expect(history).not.toContain('clímax')
   })

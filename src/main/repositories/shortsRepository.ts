@@ -13,6 +13,8 @@ import type {
   VideoProbeInfo,
 } from '../../shared/shorts'
 import { isShortsAspectMode, isShortsClipCount, isShortsDurationMode, isShortsProfile, normalizeShortsClip } from '../../shared/shorts'
+import type { ContentLanguageSource } from '../../shared/shortsLanguage'
+import { defaultShortsLanguageFields } from '../../shared/shortsLanguage'
 import { requestedDurationFromLegacyPreset } from '../../shared/shortsDuration'
 import {
   matchesShortsProjectSearch,
@@ -38,6 +40,12 @@ type JobRow = {
   clips_json: string
   transcript_json: string
   transcript_source: string | null
+  content_language: string | null
+  language_source: string | null
+  language_confidence: number | null
+  language_override: string | null
+  detected_language: string | null
+  transcript_language: string | null
   analysis_notes: string | null
   error_message: string | null
   status: string
@@ -79,6 +87,12 @@ function mapJob(row: JobRow): ShortsJob {
       .filter((item): item is ShortsClip => Boolean(item)),
     transcript: parseJson<TranscriptCue[]>(row.transcript_json, []),
     transcriptSource: (row.transcript_source as ShortsTranscriptSource) || 'none',
+    contentLanguage: String(row.content_language ?? '').trim(),
+    languageSource: (row.language_source as ContentLanguageSource) || 'fallback',
+    languageConfidence: Number.isFinite(Number(row.language_confidence)) ? Number(row.language_confidence) : 0,
+    languageOverride: row.language_override ? String(row.language_override).trim() || null : null,
+    detectedLanguage: row.detected_language ? String(row.detected_language).trim() || null : null,
+    transcriptLanguage: row.transcript_language ? String(row.transcript_language).trim() || null : null,
     analysisNotes: row.analysis_notes,
     errorMessage: row.error_message,
     status: (row.status as ShortsJobStatus) || 'draft',
@@ -112,6 +126,7 @@ export const shortsRepository = {
     return row ? mapJob(row) : null
   },
 
+  /** Persistência bruta. Novos projetos só via ShortsProjectService.createFromSourceVideo(). */
   create(input: {
     sourcePath: string
     sourceName: string
@@ -123,13 +138,16 @@ export const shortsRepository = {
     const id = randomUUID()
     const timestamp = new Date().toISOString()
     const name = (input.name?.trim() || shortsProjectNameFromFileName(input.sourceName)).trim()
+    const language = defaultShortsLanguageFields()
     getDb()
       .prepare(
         `INSERT INTO shorts_jobs (
           id, project_id, name, source_path, source_name, profile, clip_count, duration_preset,
           requested_duration, duration_mode, aspect_mode, captions_enabled, probe_json, clips_json,
-          transcript_json, transcript_source, analysis_notes, error_message, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          transcript_json, transcript_source, content_language, language_source, language_confidence,
+          language_override, detected_language, transcript_language, analysis_notes, error_message,
+          status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -148,6 +166,12 @@ export const shortsRepository = {
         '[]',
         '[]',
         'none',
+        language.contentLanguage,
+        language.languageSource,
+        language.languageConfidence,
+        language.languageOverride,
+        language.detectedLanguage,
+        language.transcriptLanguage,
         null,
         null,
         'draft',
@@ -174,6 +198,12 @@ export const shortsRepository = {
       clips: ShortsClip[]
       transcript: TranscriptCue[]
       transcriptSource: ShortsTranscriptSource
+      contentLanguage: string
+      languageSource: ContentLanguageSource
+      languageConfidence: number
+      languageOverride: string | null
+      detectedLanguage: string | null
+      transcriptLanguage: string | null
       analysisNotes: string | null
       errorMessage: string | null
       status: ShortsJobStatus
@@ -193,7 +223,9 @@ export const shortsRepository = {
           project_id = ?, name = ?, source_path = ?, source_name = ?, profile = ?, clip_count = ?,
           duration_preset = ?, requested_duration = ?, duration_mode = ?, aspect_mode = ?,
           captions_enabled = ?, probe_json = ?, clips_json = ?, transcript_json = ?,
-          transcript_source = ?, analysis_notes = ?, error_message = ?, status = ?, updated_at = ?
+          transcript_source = ?, content_language = ?, language_source = ?, language_confidence = ?,
+          language_override = ?, detected_language = ?, transcript_language = ?,
+          analysis_notes = ?, error_message = ?, status = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -212,6 +244,12 @@ export const shortsRepository = {
         JSON.stringify(next.clips),
         JSON.stringify(next.transcript),
         next.transcriptSource,
+        next.contentLanguage,
+        next.languageSource,
+        next.languageConfidence,
+        next.languageOverride,
+        next.detectedLanguage,
+        next.transcriptLanguage,
         next.analysisNotes,
         next.errorMessage,
         next.status,

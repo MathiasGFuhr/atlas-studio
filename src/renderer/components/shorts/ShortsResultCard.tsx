@@ -1,5 +1,5 @@
 import type { ShortsAspectMode, ShortsClip, ShortsClipPatch, ShortsCopyFields } from '@shared/shorts'
-import { clipDuration, formatShortsTimecode } from '@shared/shorts'
+import { clipDuration, formatShortsTimecode, shortsClipPreviewKey } from '@shared/shorts'
 import { formatClipLength } from '@shared/shortsDuration'
 import { Button } from '../Button'
 import { Card } from '../Card'
@@ -44,6 +44,7 @@ export function ShortsResultCard({
     <Card className="flex flex-col gap-4 lg:flex-row">
       <div className={cn('mx-auto shrink-0', vertical ? 'w-[148px]' : 'w-full max-w-[260px] lg:w-[240px]')}>
         <ShortsClipPreview
+          clipId={clip.id}
           src={mediaUrl}
           start={clip.start}
           end={clip.end}
@@ -51,7 +52,7 @@ export function ShortsResultCard({
           sourceWidth={sourceWidth}
           sourceHeight={sourceHeight}
           active={playing}
-          resetToken={clip.id}
+          resetToken={shortsClipPreviewKey(clip)}
           onPlayingChange={onPlayingChange}
         />
       </div>

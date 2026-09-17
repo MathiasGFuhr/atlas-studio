@@ -5,6 +5,7 @@ import type {
   TranscriptCue,
 } from '../shorts'
 import { formatShortsTimecode, normalizeHashtags } from '../shorts'
+import { contentLanguagePromptBlock } from '../shortsLanguage'
 
 export interface ShortsCopyClipInput {
   index: number
@@ -37,8 +38,8 @@ export const SHORTS_COPY_SCHEMA = {
         type: 'object',
         properties: {
           index: { type: 'integer', description: 'Número do Short (1-based)' },
-          title: { type: 'string', description: 'Título editorial específico deste trecho' },
-          description: { type: 'string', description: 'Descrição curta (1 a 3 frases) deste trecho' },
+          title: { type: 'string', description: 'Título editorial nativo no idioma do conteúdo (contentLanguage)' },
+          description: { type: 'string', description: 'Descrição curta nativa no idioma do conteúdo (1 a 3 frases)' },
           hashtags: {
             type: 'array',
             items: { type: 'string' },
@@ -116,7 +117,9 @@ export function buildShortsCopiesPrompt(input: {
   clips: ShortsCopyClipInput[]
 }): string {
   const profileLabel = input.profile === 'music' ? 'MÚSICA' : 'HISTÓRIA'
-  const language = input.editorial.language.trim() || 'idioma do conteúdo'
+  const contentLanguage = input.editorial.contentLanguage?.trim() || input.editorial.language.trim()
+  const languageName = input.editorial.languageName?.trim() || contentLanguage || 'the source material language'
+  const language = contentLanguage || languageName
   const fieldsLabel =
     input.fields === 'title'
       ? 'Reescreva APENAS o título de cada clip. description e hashtags ainda entram no JSON, mas o Atlas só aplicará o título.'
@@ -168,6 +171,8 @@ export function buildShortsCopiesPrompt(input: {
     input.editorial.artistName ? `artistName: ${input.editorial.artistName}` : '',
     input.editorial.songTitle ? `songTitle: ${input.editorial.songTitle}` : '',
     `arquivoOriginal: ${input.fileName}`,
+    `contentLanguage: ${contentLanguage || 'und'}`,
+    `languageName: ${languageName}`,
     `idiomaObrigatorio: ${language}`,
   ].filter(Boolean)
 
@@ -179,11 +184,17 @@ export function buildShortsCopiesPrompt(input: {
     contextLines.join('\n'),
     fieldsLabel,
     '',
-    'Idioma:',
-    `- título, descrição e hashtags DEVEM estar em ${language}, natural para nativo.`,
-    '- canal alemão → alemão. canal brasileiro → português brasileiro.',
+    contentLanguagePromptBlock({
+      contentLanguage: contentLanguage || 'und',
+      languageName,
+    }),
+    '',
+    'Idioma do conteúdo (obrigatório, já resolvido pelo Atlas):',
+    `- título, descrição e hashtags DEVEM estar em ${languageName} (${contentLanguage || 'und'}).`,
+    '- NÃO use o idioma da interface do Atlas.',
+    '- NÃO traduza para português, a menos que contentLanguage seja português.',
     '- NÃO traduza automaticamente para inglês.',
-    '- reason/hook abaixo são notas internas; não os copie como título.',
+    '- reason/hook abaixo: reason é nota interna; hook já deve estar no idioma do conteúdo. Não copie reason como título.',
     '',
     musicRules.join('\n'),
     '',

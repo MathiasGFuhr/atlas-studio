@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseWhisperJson, cuesFromSilence } from './transcribeLocal'
+import { parseWhisperJson, parseWhisperTranscript, cuesFromSilence } from './transcribeLocal'
 
 describe('transcribeLocal', () => {
   it('lê segmentos do JSON do Whisper', () => {
@@ -12,6 +12,17 @@ describe('transcribeLocal', () => {
       }),
     )
     expect(cues).toEqual([{ start: 1.2, end: 3.4, text: 'refrão' }])
+  })
+
+  it('lê o idioma detectado no JSON do Whisper', () => {
+    const parsed = parseWhisperTranscript(
+      JSON.stringify({
+        language: 'de',
+        segments: [{ start: 1.2, end: 3.4, text: ' Gegen den Takt ' }],
+      }),
+    )
+    expect(parsed.language).toBe('de')
+    expect(parsed.cues).toEqual([{ start: 1.2, end: 3.4, text: 'Gegen den Takt' }])
   })
 
   it('cria faixas de fala a partir de silêncio, sem inventar texto', () => {

@@ -41,6 +41,7 @@ import type {
   ShortsProgressEvent,
 } from '../shared/shorts'
 import type { ShortsProjectListFilters } from '../shared/shortsProject'
+import type { ShortsImportResult } from '../shared/shortsProjectIdentity'
 import type { CustomPrompt } from '../shared/quickPrompts/types'
 import type {
   ChatAgentStatusSnapshot,
@@ -205,7 +206,9 @@ const api = {
       ipcRenderer.invoke(IPC.shorts.list, filters) as Promise<ShortsJob[]>,
     get: (id: string) => ipcRenderer.invoke(IPC.shorts.get, id) as Promise<ShortsJob | null>,
     import: (projectId?: string | null) =>
-      ipcRenderer.invoke(IPC.shorts.import, projectId) as Promise<ShortsJob | null>,
+      ipcRenderer.invoke(IPC.shorts.import, projectId) as Promise<ShortsImportResult | null>,
+    createFromSourceVideo: (input: { sourcePath: string; projectId?: string | null; forceNew?: boolean }) =>
+      ipcRenderer.invoke(IPC.shorts.createFromSourceVideo, input) as Promise<ShortsImportResult>,
     analyze: (request: ShortsAnalyzeInput) =>
       ipcRenderer.invoke(IPC.shorts.analyze, request) as Promise<ShortsJob>,
     updateClip: (jobId: string, clipId: string, patch: ShortsClipPatch) =>
@@ -217,7 +220,7 @@ const api = {
       patch: Partial<
         Pick<
           ShortsJob,
-          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled'
+          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled' | 'languageOverride'
         >
       >,
     ) => ipcRenderer.invoke(IPC.shorts.updateSettings, jobId, patch) as Promise<ShortsJob | null>,
