@@ -15,6 +15,7 @@ import type {
   AppSettings,
   TaskStatus,
   TaskWriteInput,
+  VideoListFilters,
 } from '../../shared/types'
 import { nicheRepository } from '../repositories/nicheRepository'
 import { projectRepository } from '../repositories/projectRepository'
@@ -196,8 +197,7 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle(
     IPC.videos.list,
-    (_e, filters: { channelId: string; from?: string; to?: string }) =>
-      channelRepository.listVideos(filters),
+    (_e, filters?: VideoListFilters) => channelRepository.listVideos(filters ?? {}),
   )
   ipcMain.handle(IPC.videos.get, (_e, id: string) => channelRepository.getVideo(id))
   ipcMain.handle(
@@ -224,9 +224,13 @@ export function registerIpcHandlers(deps: {
     const savedPath = importChannelImage(sourcePath, video.channelId, `thumb-${videoId}`)
     return channelRepository.updateVideo(videoId, { thumbnailPath: savedPath })
   })
-  ipcMain.handle(IPC.videos.analyzeTitle, (_e, request: AnalyzeTitleRequest) =>
-    antigravityService.analyzeTitle(request),
-  )
+  ipcMain.handle(IPC.videos.analyzeTitle, async (_e, request: AnalyzeTitleRequest) => {
+    try {
+      return await antigravityService.analyzeTitle(request)
+    } catch (error) {
+      throw error instanceof Error ? error : new Error('Não foi possível analisar o título.')
+    }
+  })
 
   ipcMain.handle(
     IPC.prompts.list,

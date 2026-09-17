@@ -25,6 +25,7 @@ import type {
   AtlasTask,
   TaskStatus,
   TaskWriteInput,
+  VideoListFilters,
 } from '../src/shared/types'
 import type { MusicTrack } from '../src/shared/musicAnalysis'
 import type { CustomPrompt } from '../src/shared/quickPrompts/types'
@@ -332,13 +333,26 @@ export const mockApi = {
     pendingCount: async () => tasks.filter((t) => t.status === 'pending').length,
   },
   videos: {
-    list: async (filters: { channelId: string; from?: string; to?: string }) =>
-      videos.filter((v) => {
-        if (v.channelId !== filters.channelId) return false
-        if (filters.from && v.scheduledDate < filters.from) return false
-        if (filters.to && v.scheduledDate > filters.to) return false
-        return true
-      }),
+    list: async (filters?: VideoListFilters) => {
+      const matched = videos
+        .filter((v) => {
+          if (filters?.channelId && v.channelId !== filters.channelId) return false
+          if (filters?.from && v.scheduledDate < filters.from) return false
+          if (filters?.to && v.scheduledDate > filters.to) return false
+          return true
+        })
+        .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.createdAt.localeCompare(b.createdAt))
+        .map((v) => {
+          const channel = channels.find((c) => c.id === v.channelId)
+          return {
+            ...v,
+            channelName: channel?.name ?? v.channelName ?? null,
+            channelType: channel?.channelType ?? v.channelType ?? null,
+            channelColor: channel?.color ?? v.channelColor ?? null,
+          }
+        })
+      return filters?.limit != null ? matched.slice(0, filters.limit) : matched
+    },
     get: async (id: string) => videos.find((v) => v.id === id) ?? null,
     create: async (
       input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl' | 'folderExists'>,

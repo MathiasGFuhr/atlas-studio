@@ -28,6 +28,7 @@ import type {
   AtlasTask,
   TaskStatus,
   TaskWriteInput,
+  VideoListFilters,
 } from '../shared/types'
 import type { MusicCutMode, MusicSegment, MusicTrack } from '../shared/musicAnalysis'
 import type { CustomPrompt } from '../shared/quickPrompts/types'
@@ -106,7 +107,7 @@ const api = {
     pendingCount: () => ipcRenderer.invoke(IPC.tasks.pendingCount) as Promise<number>,
   },
   videos: {
-    list: (filters: { channelId: string; from?: string; to?: string }) =>
+    list: (filters?: VideoListFilters) =>
       ipcRenderer.invoke(IPC.videos.list, filters) as Promise<ChannelVideo[]>,
     get: (id: string) => ipcRenderer.invoke(IPC.videos.get, id) as Promise<ChannelVideo | null>,
     create: (
