@@ -1,14 +1,13 @@
-// Contexto de palco — compartilhado pelas duas categorias.
 export * from './stageContext'
+export * from './helpers'
 
-// Categoria "Animar / Lipsync" (vídeo).
 export * from './types'
 export * from './presets'
 export * from './sceneBlocks'
 export * from './composePrompt'
+export * from './animationPromptPresets'
 
-// Categoria "Criar imagem" (imagem estática). Mantida separada de propósito:
-// composição de imagem não compartilha presets com movimento de câmera.
 export * from './imageTypes'
 export * from './imagePresets'
 export * from './composeImagePrompt'
+export * from './imagePromptPresets'

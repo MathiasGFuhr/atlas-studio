@@ -430,6 +430,16 @@ export interface AppSettings {
   codexOnboardingDismissed: boolean
   /** Chaves estáveis de notificações já lidas (ex.: task-overdue:<id>:<dueDate>). */
   notificationReadKeys: string[]
+  /** Quando true, História/Música aparecem conforme canais e projetos existentes. */
+  contentAreasAutoDetect: boolean
+  /** Usado só com detecção automática desligada. */
+  contentAreasHistoryEnabled: boolean
+  /** Usado só com detecção automática desligada. */
+  contentAreasMusicEnabled: boolean
+  /** Largura persistida do painel flutuante de Chat (px). */
+  chatPanelWidth: number
+  /** Altura persistida do painel flutuante de Chat (px). */
+  chatPanelHeight: number
 }
 
 export type CodexAuthState =
@@ -725,6 +735,9 @@ export const IPC = {
     update: 'settings:update',
     setProfilePhoto: 'settings:setProfilePhoto',
     clearProfilePhoto: 'settings:clearProfilePhoto',
+  },
+  workspace: {
+    capabilities: 'workspace:capabilities',
   },
   codex: {
     status: 'codex:status',

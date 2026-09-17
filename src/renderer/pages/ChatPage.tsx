@@ -6,6 +6,7 @@ import {
   MessageSquarePlus,
   Music,
   Paperclip,
+  MoreVertical,
   Pencil,
   SendHorizontal,
   Trash2,
@@ -25,6 +26,7 @@ import { cn } from '../lib/utils'
 import { Button } from '../components/Button'
 import { ChatActionCards } from '../components/chat/ChatActionCards'
 import { notifyProjectsChanged } from '../lib/projectEvents'
+import { notifyChannelsChanged } from '../lib/channelEvents'
 import { notifyTasksChanged } from '../lib/taskEvents'
 import { useToast } from '../components/Toast'
 
@@ -54,11 +56,13 @@ export function ChatPage({
   launchProjectId = null,
   onClose,
   onLaunchConsumed,
+  onResetSize,
 }: {
   variant?: 'page' | 'dock'
   launchProjectId?: string | null
   onClose?: () => void
   onLaunchConsumed?: () => void
+  onResetSize?: () => void
 }) {
   const api = getAtlasApi()
   const navigate = useNavigate()
@@ -77,6 +81,8 @@ export function ChatPage({
   const [useProjectContext, setUseProjectContext] = useState(false)
   const [contextProject, setContextProject] = useState<Project | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [sizeMenuOpen, setSizeMenuOpen] = useState(false)
+  const sizeMenuRef = useRef<HTMLDivElement>(null)
   const [renameValue, setRenameValue] = useState('')
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const listRef = useRef<HTMLDivElement>(null)
@@ -122,6 +128,24 @@ export function ChatPage({
       if (list[0]) await loadConversation(list[0].id)
     })()
   }, [api, loadConversation, loadList])
+
+  useEffect(() => {
+    if (!sizeMenuOpen) return
+    function onPointer(event: MouseEvent) {
+      if (sizeMenuRef.current && !sizeMenuRef.current.contains(event.target as Node)) {
+        setSizeMenuOpen(false)
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setSizeMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [sizeMenuOpen])
 
   useEffect(() => {
     if (!launchProjectId || consumedLaunch.current === launchProjectId) return
@@ -232,8 +256,11 @@ export function ChatPage({
 
   function notifyFromActions(message: ChatMessage) {
     const names = message.actions.map((item) => item.name)
-    if (names.some((name) => name.includes('project') || name.includes('channel') || name.includes('script'))) {
+    if (names.some((name) => name.includes('project') || name.includes('script'))) {
       notifyProjectsChanged()
+    }
+    if (names.some((name) => name.includes('channel'))) {
+      notifyChannelsChanged()
     }
     if (names.some((name) => name.includes('task'))) notifyTasksChanged()
   }
@@ -291,8 +318,13 @@ export function ChatPage({
   const compact = variant === 'dock'
 
   return (
-    <div className="flex h-full min-h-0">
-      <aside className={cn('flex shrink-0 flex-col border-r border-border-soft bg-sidebar', compact ? 'w-[168px]' : 'w-[240px]')}>
+    <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
+      <aside
+        className={cn(
+          'flex shrink-0 flex-col overflow-hidden border-r border-border-soft bg-sidebar',
+          compact ? 'w-[min(10.5rem,38%)] min-w-[8.75rem] max-w-[13.75rem]' : 'w-[240px]',
+        )}
+      >
         <div className="p-3">
           <Button fullWidth className="h-9 text-xs" icon={<MessageSquarePlus className="h-3.5 w-3.5" />} onClick={() => void startNewConversation()}>
             Nova conversa
@@ -358,7 +390,7 @@ export function ChatPage({
         </div>
       </aside>
 
-      <section className="flex min-w-0 flex-1 flex-col">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className={cn('flex items-center justify-between gap-3 border-b border-border-soft', compact ? 'px-3 py-2.5' : 'px-6 py-4')}>
           <div>
             {compact ? null : <p className="text-xs text-muted-2">Atlas / Chat</p>}
@@ -392,6 +424,33 @@ export function ChatPage({
               <Button variant="secondary" className="h-8 text-xs" onClick={() => navigate('/configuracoes')}>
                 Configurar
               </Button>
+            ) : null}
+            {onResetSize ? (
+              <div ref={sizeMenuRef} className="relative">
+                <button
+                  type="button"
+                  className="rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-text"
+                  aria-label="Mais opções do chat"
+                  aria-expanded={sizeMenuOpen}
+                  onClick={() => setSizeMenuOpen((open) => !open)}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+                {sizeMenuOpen ? (
+                  <div className="absolute right-0 top-full z-30 mt-1 min-w-[10.5rem] rounded-xl border border-border bg-card-2 py-1 shadow-lg">
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-2 text-left text-xs text-text hover:bg-white/5"
+                      onClick={() => {
+                        setSizeMenuOpen(false)
+                        onResetSize()
+                      }}
+                    >
+                      Restaurar tamanho
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
             {onClose ? (
               <button

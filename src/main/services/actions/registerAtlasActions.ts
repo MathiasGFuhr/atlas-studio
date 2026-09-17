@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { ChatActionResult } from '../../../shared/chat/types'
 import { isProjectType, type Project, type ProjectType, type TaskRelatedType } from '../../../shared/types'
+import { MUSIC_PROMPTS_PATH } from '../../../shared/workspaceCapabilities'
 import { isTaskCategory, isTaskPriority, isTaskRelatedType, todayYmd } from '../../../shared/tasks'
 import { channelRepository } from '../../repositories/channelRepository'
 import { nicheRepository } from '../../repositories/nicheRepository'
@@ -644,7 +645,7 @@ export function createAtlasActionRegistry(deps: {
       title: prompt.name,
       entityType: 'quick_prompt',
       entityId: prompt.id,
-      navigateTo: '/prompts',
+      navigateTo: MUSIC_PROMPTS_PATH,
       navigateLabel: 'Ver em Prompts rápidos',
       data: prompt,
     })
@@ -672,7 +673,7 @@ export function createAtlasActionRegistry(deps: {
       subtitle: created.name,
       entityType: 'quick_prompt',
       entityId: created.id,
-      navigateTo: '/prompts',
+      navigateTo: MUSIC_PROMPTS_PATH,
       navigateLabel: 'Ver em Prompts rápidos',
       data: { id: created.id, name: created.name },
     })
@@ -695,7 +696,7 @@ export function createAtlasActionRegistry(deps: {
       subtitle: updated.name,
       entityType: 'quick_prompt',
       entityId: updated.id,
-      navigateTo: '/prompts',
+      navigateTo: MUSIC_PROMPTS_PATH,
       navigateLabel: 'Ver em Prompts rápidos',
     })
   })
@@ -721,7 +722,7 @@ export function createAtlasActionRegistry(deps: {
       title: bool(input, 'favorite', true) ? 'Prompt favoritado' : 'Favorito removido',
       entityType: 'quick_prompt',
       entityId: id,
-      navigateTo: '/prompts',
+      navigateTo: MUSIC_PROMPTS_PATH,
       navigateLabel: 'Ver em Prompts rápidos',
     })
   })

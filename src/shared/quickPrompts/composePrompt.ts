@@ -1,30 +1,22 @@
 import {
-  ACTION_BY_ID,
   ACTIONS,
   AUTO_CAMERA_BY_ACTION,
   AUTO_FRAMING_BY_ACTION,
   CAMERA_BY_ID,
-  CAMERA_STYLE,
   CAMERAS,
-  FORBIDDEN_CAMERA_MOVES,
   FRAMING_BY_ID,
   FRAMINGS,
-  LIP_SYNC_BLOCK,
   PERFORMANCE_BY_ID,
   PERFORMANCES,
-  QUALITY_CONSTRAINTS,
-  REFERENCE_PRESERVATION,
-  TARGET_INTRO,
 } from './presets'
 import {
-  NO_LIP_SYNC_REQUIREMENT,
   SCENE_CAMERAS,
   SCENE_FRAMINGS,
   isNonSingerScene,
   sceneBlocksFor,
   sceneKindFor,
 } from './sceneBlocks'
-import { composeStageContextText, stageContextConstraints } from './stageContext'
+import { composeAnimationScenePrompt } from './animationPromptPresets/compose'
 import type {
   ActionId,
   ActionPreset,
@@ -178,75 +170,15 @@ export function resolveFraming(
   return pool[0] ?? null
 }
 
-function joinSentences(parts: string[]): string {
-  return parts
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(' ')
-}
-
-/** Cantor + banda, banda instrumental, ou ação de conjunto. */
-function isEnsembleScene(performanceId: PerformanceId, actionId: ActionId): boolean {
-  return performanceId === 'singer-band' || performanceId === 'band-no-singer' || actionId === 'band'
-}
-
-/**
- * Monta o prompt final a partir dos blocos selecionados.
- * Retorna apenas a string — nenhum efeito colateral.
- */
 export function composePrompt(input: ComposePromptInput): string {
-  const performance = PERFORMANCE_BY_ID.get(input.performanceId)
-  const action = ACTION_BY_ID.get(input.actionId)
   const camera = resolveCamera(input.cameraId, input.actionId, input.performanceId)
-  const scene = sceneBlocksFor(input.performanceId)
-  const kind = sceneKindFor(input.performanceId)
-
-  // Lipsync só entra em performances com vocal. As 4 cenas sem cantor nunca
-  // recebem o bloco de sincronização labial, mesmo com o toggle ligado.
+  const performance = PERFORMANCE_BY_ID.get(input.performanceId)
   const lipSync =
-    !scene && input.lipSync && (performance?.supportsLipSync ?? false)
+    !isNonSingerScene(input.performanceId) &&
+    input.lipSync &&
+    (performance?.supportsLipSync ?? false)
   const framing = resolveFraming(input.framingId, input.actionId, lipSync, input.performanceId)
-  const stageOptions = {
-    stageContextId: input.stageContextId,
-    ensemble: isEnsembleScene(input.performanceId, input.actionId),
-    keepLeadSinger: Boolean(
-      performance?.supportsLipSync && isEnsembleScene(input.performanceId, input.actionId),
-    ),
-    animation: true,
-    sceneKind: kind,
-  }
-
-  const intro = scene ? scene.intro[input.target] : TARGET_INTRO[input.target]
-  const preservation = scene ? scene.preservation : REFERENCE_PRESERVATION
-  // Plateia usa ações próprias no prompt; as outras cenas sem cantor já descrevem
-  // o movimento no bloco de performance, então não reaproveitam texto de performer.
-  const actionText = scene && kind !== 'audience' ? '' : (action?.text ?? '')
-
-  const sections: string[] = [
-    intro,
-    preservation,
-    performance?.text ?? '',
-    actionText,
-    framing?.text ?? '',
-    joinSentences([camera?.text ?? '', CAMERA_STYLE]),
-    composeStageContextText(stageOptions),
-  ]
-
-  if (lipSync) sections.push(LIP_SYNC_BLOCK)
-  if (scene) sections.push(NO_LIP_SYNC_REQUIREMENT)
-
-  const negatives = [
-    ...(scene ? scene.forbiddenCameraMoves : FORBIDDEN_CAMERA_MOVES),
-    ...QUALITY_CONSTRAINTS,
-    ...(scene ? scene.constraints : []),
-    ...stageContextConstraints(stageOptions),
-  ]
-  sections.push(`Avoid: ${negatives.join(', ')}.`)
-
-  return sections
-    .map((section) => section.trim())
-    .filter(Boolean)
-    .join('\n\n')
+  return composeAnimationScenePrompt(input, framing, camera)
 }
 
 /** Rótulo curto de uma combinação, usado na lista de variações. */

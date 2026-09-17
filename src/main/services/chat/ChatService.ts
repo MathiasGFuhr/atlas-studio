@@ -1,7 +1,9 @@
 import type { BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '../../../shared/types'
-import { actionRequiresConfirmation, formatActionCatalogForPrompt } from '../../../shared/chat/actionCatalog'
+import { ATLAS_ACTION_CATALOG, actionRequiresConfirmation, formatActionCatalogForPrompt } from '../../../shared/chat/actionCatalog'
+import { chatAreasPromptNote, filterChatActions } from '../../../shared/workspaceCapabilities'
+import { getWorkspaceCapabilities } from '../workspace/getWorkspaceCapabilities'
 import { parseAgentResponse, titleFromFirstMessage } from '../../../shared/chat/parseAgentResponse'
 import type {
   ChatActionCall,
@@ -89,6 +91,7 @@ function confirmationCopy(actions: ChatActionCall[]): ChatPendingConfirmation {
 }
 
 function buildSystemPrompt(ctx: ChatClientContext, today: string): string {
+  const capabilities = getWorkspaceCapabilities()
   const contextLines: string[] = [
     `Hoje é ${today}.`,
     'Você é o assistente do Atlas Studio. Pode conversar normalmente OU solicitar ações oficiais.',
@@ -100,9 +103,10 @@ function buildSystemPrompt(ctx: ChatClientContext, today: string): string {
     'Responda em JSON com: message (texto para o usuário), actions (array de {name, input}), conversationTitle opcional.',
     'Se for só conversa (ideias, prompts de texto), actions deve ser [].',
     'Não misture agentes: você é um único agente nesta resposta.',
+    chatAreasPromptNote(capabilities),
     '',
     'Ações:',
-    formatActionCatalogForPrompt(),
+    formatActionCatalogForPrompt(filterChatActions(ATLAS_ACTION_CATALOG, capabilities)),
   ]
   if (ctx.useProjectContext && ctx.projectId) {
     contextLines.push(

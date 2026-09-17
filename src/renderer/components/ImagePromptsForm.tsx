@@ -2,14 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check, Copy, Layers } from 'lucide-react'
 import {
   IMAGE_SUBJECTS,
-  STAGE_CONTEXTS,
   buildAngleVariations,
   composeImagePrompt,
   defaultImagePerformanceFor,
+  defaultStageContextFor,
   framingsForSubject,
+  imageSceneKind,
   lipSyncApplies,
   performancesForSubject,
   resolveImageFraming,
+  stageContextsFor,
 } from '@shared/quickPrompts'
 import type {
   ImageAngleVariation,
@@ -69,6 +71,11 @@ export function ImagePromptsForm({
     [subjectId, purpose, performanceId],
   )
   const lipSyncOn = lipSyncApplies(subjectId, purpose)
+  const sceneKind = useMemo(
+    () => imageSceneKind(subject?.framingGroup, subject?.hasSinger),
+    [subject],
+  )
+  const availableContexts = useMemo(() => stageContextsFor(sceneKind), [sceneKind])
 
   const composedPrompt = useMemo(
     () => composeImagePrompt({ subjectId, performanceId, framingId, purpose, stageContextId }),
@@ -95,6 +102,18 @@ export function ImagePromptsForm({
   }, [availableFramings, framingId])
 
   useEffect(() => {
+    if (!availableContexts.some((item) => item.id === stageContextId)) {
+      setStageContextId(defaultStageContextFor(sceneKind))
+    }
+  }, [availableContexts, sceneKind, stageContextId])
+
+  useEffect(() => {
+    if (!subject?.hasSinger && purpose === 'lipsync') {
+      setPurpose('scene')
+    }
+  }, [purpose, subject?.hasSinger])
+
+  useEffect(() => {
     setVariations([])
     setPromptOverride(null)
   }, [subjectId, performanceId, purpose, stageContextId, framingId])
@@ -113,11 +132,12 @@ export function ImagePromptsForm({
         .filter(Boolean)
         .join(' · '),
       framing: resolvedFraming?.label ?? framingId,
-      context: STAGE_CONTEXTS.find((item) => item.id === stageContextId)?.label ?? stageContextId,
+      context: availableContexts.find((item) => item.id === stageContextId)?.label ?? stageContextId,
       lipSync: lipSyncOn,
       purpose: purpose === 'lipsync' ? 'Lipsync' : 'Cena geral',
     }),
     [
+      availableContexts,
       availablePerformances,
       framingId,
       lipSyncOn,
@@ -180,17 +200,18 @@ export function ImagePromptsForm({
         </FavoriteField>
 
         <FavoriteField
-          label="Contexto de palco"
+          label={sceneKind === 'audience' ? 'Contexto da plateia' : 'Contexto de palco'}
           favorite={favorites.has(presetFavoriteKey('stage-context', stageContextId))}
           onToggleFavorite={() => onToggleFavorite('stage-context', stageContextId)}
         >
           <Select
-            options={toOptions(STAGE_CONTEXTS, favorites, 'stage-context')}
+            options={toOptions(availableContexts, favorites, 'stage-context')}
             value={stageContextId}
             onChange={(e) => setStageContextId(e.target.value as StageContextId)}
           />
         </FavoriteField>
 
+        {subject?.hasSinger ? (
         <div className="flex flex-col gap-2">
           <div className="flex h-5 items-center">
             <span className="text-sm font-medium text-muted">Finalidade</span>
@@ -204,6 +225,7 @@ export function ImagePromptsForm({
             onChange={(e) => setPurpose(e.target.value as ImagePurpose)}
           />
         </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -226,12 +248,6 @@ export function ImagePromptsForm({
           onClean={audit.clean}
         />
       </div>
-
-      {purpose === 'lipsync' && !subject?.hasSinger ? (
-        <p className="text-xs text-muted-2">
-          Não há cantor nesta seleção, então as instruções de lipsync ficam fora do prompt.
-        </p>
-      ) : null}
 
       <div className="space-y-2">
         <div className="flex items-center justify-between text-xs text-muted">

@@ -8,6 +8,7 @@ import {
   resolveImageFraming,
 } from './composeImagePrompt'
 import { IMAGE_FRAMINGS, IMAGE_SUBJECTS } from './imagePresets'
+import { wordCount } from './helpers'
 import { STAGE_CONTEXTS } from './stageContext'
 import type { ComposeImagePromptInput } from './imageTypes'
 
@@ -31,18 +32,18 @@ const VIDEO_TERMS = [
   'walking speed',
   'lip sync to the provided audio',
   'locked cinematic',
+  'animate the reference',
 ]
 
 describe('composeImagePrompt', () => {
-  it('monta o prompt com todos os blocos', () => {
+  it('monta um prompt curto e específico de cantor + violão', () => {
     const prompt = composeImagePrompt(BASE)
 
-    expect(prompt).toContain('highly realistic professional music performance image')
     expect(prompt).toContain('acoustic guitar')
-    expect(prompt).toContain('Medium close-up that keeps')
-    expect(prompt).toContain('Preserve exactly the identity')
-    expect(prompt).toContain('Professional realistic concert photography')
-    expect(prompt).toContain('physically positioned on the stage platform')
+    expect(prompt).toContain('later lip-sync')
+    expect(prompt).not.toContain('highly realistic professional music performance image')
+    expect(prompt).not.toContain('Preserve exactly the identity')
+    expect(wordCount(prompt)).toBeLessThanOrEqual(130)
   })
 
   it('nunca inclui movimento de câmera', () => {
@@ -82,14 +83,14 @@ describe('composeImagePrompt', () => {
 describe('finalidade lipsync', () => {
   it('adiciona o bloco de rosto visível quando há cantor', () => {
     const prompt = composeImagePrompt({ ...BASE, purpose: 'lipsync' })
-    expect(prompt).toContain('mouth fully visible and naturally positioned for later lip-sync')
-    expect(prompt).toContain('no microphone blocking the mouth')
+    expect(prompt).toContain('later lip-sync')
+    expect(prompt.toLowerCase()).toContain('unobstructed')
   })
 
   it('não adiciona instruções de lipsync em Cena geral', () => {
     const prompt = composeImagePrompt({ ...BASE, purpose: 'scene' })
-    expect(prompt).not.toContain('lip-sync')
-    expect(prompt).not.toContain('no microphone blocking the mouth')
+    expect(prompt).not.toContain('later lip-sync')
+    expect(prompt).not.toContain('unobstructed')
   })
 
   it('ignora lipsync para guitarrista e baterista sem cantor', () => {
@@ -364,15 +365,14 @@ describe('variações de ângulo', () => {
 })
 
 describe('contexto de palco', () => {
-  it('em No palco deixa o performer sobre a plataforma e bloqueia a frente do palco', () => {
+  it('em No palco usa uma frase curta', () => {
     const prompt = composeImagePrompt({ ...BASE, stageContextId: 'on-stage' })
-    expect(prompt).toContain('physically positioned on the stage platform')
-    expect(prompt).toContain('not in front of the stage')
-    expect(prompt).toContain('no performer in front of the stage')
-    expect(prompt).toContain('no performer on the sand or ground in front of the stage')
+    expect(prompt).toContain('on the existing stage')
+    expect(prompt).not.toContain('The performer remains on the stage platform')
+    expect(prompt).not.toContain('not in front of the stage')
   })
 
-  it('em Cantor + banda coloca todos sobre o palco e mantém o cantor como assunto principal', () => {
+  it('em Cantor + banda mantém o cantor como assunto no palco', () => {
     const prompt = composeImagePrompt({
       subjectId: 'singer-full-band',
       performanceId: 'natural-with-band',
@@ -380,24 +380,21 @@ describe('contexto de palco', () => {
       purpose: 'lipsync',
       stageContextId: 'on-stage',
     })
-    expect(prompt).toContain('All performers must be positioned on the stage platform')
-    expect(prompt).toContain('The singer remains the main subject')
-    expect(prompt).toContain('Nobody stands off the stage structure')
+    expect(prompt).toContain('large in the foreground')
+    expect(prompt).toMatch(/clear visual separation between the singer and the band/i)
+    expect(prompt).not.toContain('The performer remains on the stage platform')
   })
 
   it('em Fora do palco tira o performer da plataforma', () => {
     const prompt = composeImagePrompt({ ...BASE, stageContextId: 'off-stage' })
     expect(prompt).toContain('outside the stage structure')
-    expect(prompt).toContain('Do not place the performer on the stage platform')
-    expect(prompt).toContain('no performer on the stage platform')
-    expect(prompt).not.toContain('physically positioned on the stage platform')
+    expect(prompt).not.toContain('The performer remains on the stage platform.')
   })
 
   it('em Sem palco evita estrutura de palco automática', () => {
     const prompt = composeImagePrompt({ ...BASE, stageContextId: 'no-stage' })
-    expect(prompt).toContain('No concert stage structure should appear')
-    expect(prompt).toContain('no concert stage structure')
-    expect(prompt).not.toContain('physically positioned on the stage platform')
+    expect(prompt).toContain('No concert stage structure')
+    expect(prompt).not.toContain('The performer remains on the stage platform.')
   })
 
   it('vale para guitarrista e baterista sozinhos', () => {
@@ -415,9 +412,47 @@ describe('contexto de palco', () => {
       purpose: 'scene',
       stageContextId: 'on-stage',
     })
-    expect(guitar).toContain('physically positioned on the stage platform')
-    expect(drums).toContain('physically positioned on the stage platform')
-    expect(guitar).not.toContain('All performers must be positioned')
-    expect(drums).not.toContain('All performers must be positioned')
+    expect(guitar).toContain('on the existing stage')
+    expect(drums).toContain('on the existing stage')
+    expect(guitar).toContain('fretboard')
+    expect(drums).toContain('snare')
+    expect(guitar).not.toContain('The guitarist remains on the stage platform')
+    expect(drums).not.toContain('The drummer and the drum kit remain')
+  })
+})
+
+describe('identidade própria e plateia', () => {
+  it('cantor sozinho não é cantor + violão com uma frase extra', () => {
+    const solo = composeImagePrompt({
+      subjectId: 'singer-solo',
+      performanceId: 'singing-mic',
+      framingId: 'auto',
+      purpose: 'scene',
+      stageContextId: 'on-stage',
+    })
+    const acoustic = composeImagePrompt({ ...BASE, purpose: 'scene' })
+    expect(solo).not.toBe(acoustic)
+    expect(solo).not.toContain('acoustic guitar')
+    expect(acoustic).toContain('acoustic guitar')
+  })
+
+  it('plateia é só plateia', () => {
+    const prompt = composeImagePrompt({
+      subjectId: 'audience',
+      performanceId: 'crowd-watching',
+      framingId: 'auto',
+      purpose: 'scene',
+      stageContextId: 'audience-area',
+    })
+    expect(prompt).toContain('Keep the audience as the only subject')
+    expect(prompt.toLowerCase()).toContain('no singer')
+    expect(prompt).not.toContain('The singer from the reference')
+    expect(lipSyncApplies('audience', 'lipsync')).toBe(false)
+  })
+
+  it('banda sem cantor não usa ângulo de cantor no automático', () => {
+    expect(resolveImageFraming('auto', 'band-no-singer', 'scene')?.id).not.toBe(
+      'singer-foreground',
+    )
   })
 })

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileText, FolderKanban, Lightbulb, Search, Tv } from 'lucide-react'
 import { PROJECT_TYPE_LABEL, type Channel, type Niche, type Project, type ScriptRecord } from '@shared/types'
+import { isContentAreaEnabled } from '@shared/workspaceCapabilities'
 import { getAtlasApi } from '../lib/api'
 import { projectPath } from '../lib/environments'
 import { cn, statusLabel } from '../lib/utils'
+import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 
 type SearchKind = 'project' | 'script' | 'channel' | 'niche'
 
@@ -14,6 +16,7 @@ interface SearchHit {
   title: string
   subtitle: string
   to: string
+  hiddenArea?: boolean
 }
 
 const KIND_META: Record<
@@ -35,27 +38,44 @@ function isMacPlatform(): boolean {
   return /Mac|iPhone|iPad/.test(navigator.platform)
 }
 
-function mapProject(project: Project): SearchHit {
+function mapProject(
+  project: Project,
+  hiddenArea: boolean,
+): SearchHit {
   const extra = project.channelName?.trim()
+  const areaLabel = PROJECT_TYPE_LABEL[project.projectType]
   return {
     id: `project:${project.id}`,
     kind: 'project',
     title: project.name,
-    subtitle: extra
-      ? `${PROJECT_TYPE_LABEL[project.projectType]} · ${extra}`
-      : PROJECT_TYPE_LABEL[project.projectType],
+    subtitle: [hiddenArea ? `${areaLabel} (área oculta)` : areaLabel, extra].filter(Boolean).join(' · '),
     to: projectPath(project.projectType, project.id),
+    hiddenArea,
   }
 }
 
-function mapScript(script: ScriptRecord): SearchHit {
+function mapScript(script: ScriptRecord, hiddenArea: boolean): SearchHit {
   const extra = script.projectName || script.nicheName || statusLabel(script.status)
   return {
     id: `script:${script.id}`,
     kind: 'script',
     title: script.title || script.topic || 'Roteiro sem título',
-    subtitle: extra,
+    subtitle: hiddenArea ? [extra, 'área oculta'].filter(Boolean).join(' · ') : extra,
     to: `/historia/roteiros/${script.id}`,
+    hiddenArea,
+  }
+}
+
+function mapNiche(niche: Niche, hiddenArea: boolean): SearchHit {
+  return {
+    id: `niche:${niche.id}`,
+    kind: 'niche',
+    title: niche.name,
+    subtitle: hiddenArea
+      ? `${niche.defaultLanguage || 'Tema'} · área oculta`
+      : niche.defaultLanguage || 'Tema',
+    to: `/historia/nichos?q=${encodeURIComponent(niche.name)}`,
+    hiddenArea,
   }
 }
 
@@ -69,19 +89,10 @@ function mapChannel(channel: Channel): SearchHit {
   }
 }
 
-function mapNiche(niche: Niche): SearchHit {
-  return {
-    id: `niche:${niche.id}`,
-    kind: 'niche',
-    title: niche.name,
-    subtitle: niche.defaultLanguage || 'Tema',
-    to: `/historia/nichos?q=${encodeURIComponent(niche.name)}`,
-  }
-}
-
 export function GlobalSearch() {
   const api = getAtlasApi()
   const navigate = useNavigate()
+  const { capabilities } = useWorkspaceCapabilities()
   const listId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -156,11 +167,15 @@ export function GlobalSearch() {
             api.niches.list({ query: term }),
           ])
           if (cancelled) return
+          const historyHidden = !isContentAreaEnabled(capabilities, 'history')
+          const musicHidden = !isContentAreaEnabled(capabilities, 'music')
           setHits([
-            ...projects.slice(0, PER_KIND).map(mapProject),
-            ...scripts.slice(0, PER_KIND).map(mapScript),
+            ...projects.slice(0, PER_KIND).map((project) =>
+              mapProject(project, project.projectType === 'history' ? historyHidden : musicHidden),
+            ),
+            ...scripts.slice(0, PER_KIND).map((script) => mapScript(script, historyHidden)),
             ...channels.slice(0, PER_KIND).map(mapChannel),
-            ...niches.slice(0, PER_KIND).map(mapNiche),
+            ...niches.slice(0, PER_KIND).map((niche) => mapNiche(niche, historyHidden)),
           ])
           setActiveIndex(0)
         } catch {
@@ -175,7 +190,7 @@ export function GlobalSearch() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [api, open, query])
+  }, [api, capabilities, open, query])
 
   function onInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Escape') {

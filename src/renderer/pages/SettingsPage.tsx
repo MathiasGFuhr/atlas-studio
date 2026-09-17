@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Database, Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn } from 'lucide-react'
+import { Database, Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid } from 'lucide-react'
 import type { AntigravityStatus, AppSettings } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
@@ -13,6 +13,8 @@ import { UpdatesSettingsCard } from '../components/UpdatesSettingsCard'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import type { CodexAuth } from '../hooks/useCodexAuth'
+import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
+import { notifySettingsChanged } from '../lib/settingsEvents'
 
 export function SettingsPage({
   onSettingsSaved,
@@ -25,6 +27,7 @@ export function SettingsPage({
 }) {
   const api = getAtlasApi()
   const { push } = useToast()
+  const { capabilities } = useWorkspaceCapabilities()
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [niches, setNiches] = useState<Array<{ id: string; name: string }>>([])
   const [codexModels, setCodexModels] = useState<Array<{ id: string; label: string }>>([])
@@ -147,6 +150,7 @@ export function SettingsPage({
     const next = await api.settings.update(patch)
     setSettings(next)
     onSettingsSaved?.(next)
+    notifySettingsChanged()
     push('Alterações salvas.', 'success')
   }
 
@@ -210,6 +214,72 @@ export function SettingsPage({
           value={settings.backupEnabled ? 'Ativo' : 'Inativo'}
           ok={settings.backupEnabled}
         />
+      </div>
+
+      <div className="mb-4">
+        <SettingsCard title="Áreas do Atlas" icon={LayoutGrid}>
+          <p className="text-xs leading-relaxed text-muted">
+            Controla só o que aparece na interface. Projetos, canais e roteiros continuam no Atlas.
+          </p>
+          <label className="flex items-center gap-2 text-sm text-text">
+            <input
+              type="checkbox"
+              checked={settings.contentAreasAutoDetect}
+              onChange={(e) => {
+                const autoDetect = e.target.checked
+                setSettings({
+                  ...settings,
+                  contentAreasAutoDetect: autoDetect,
+                  contentAreasHistoryEnabled: autoDetect
+                    ? settings.contentAreasHistoryEnabled
+                    : capabilities.historyEnabled,
+                  contentAreasMusicEnabled: autoDetect
+                    ? settings.contentAreasMusicEnabled
+                    : capabilities.musicEnabled,
+                })
+              }}
+            />
+            Detectar automaticamente
+          </label>
+          <label
+            className={`flex items-center gap-2 text-sm ${
+              settings.contentAreasAutoDetect ? 'text-muted' : 'text-text'
+            }`}
+          >
+            <input
+              type="checkbox"
+              disabled={settings.contentAreasAutoDetect}
+              checked={
+                settings.contentAreasAutoDetect
+                  ? capabilities.historyEnabled
+                  : settings.contentAreasHistoryEnabled
+              }
+              onChange={(e) =>
+                setSettings({ ...settings, contentAreasHistoryEnabled: e.target.checked })
+              }
+            />
+            História
+          </label>
+          <label
+            className={`flex items-center gap-2 text-sm ${
+              settings.contentAreasAutoDetect ? 'text-muted' : 'text-text'
+            }`}
+          >
+            <input
+              type="checkbox"
+              disabled={settings.contentAreasAutoDetect}
+              checked={
+                settings.contentAreasAutoDetect
+                  ? capabilities.musicEnabled
+                  : settings.contentAreasMusicEnabled
+              }
+              onChange={(e) =>
+                setSettings({ ...settings, contentAreasMusicEnabled: e.target.checked })
+              }
+            />
+            Música
+          </label>
+        </SettingsCard>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

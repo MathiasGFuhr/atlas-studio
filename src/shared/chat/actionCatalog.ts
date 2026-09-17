@@ -330,8 +330,8 @@ export function actionRequiresConfirmation(name: string): boolean {
   return BY_NAME.get(name)?.confirmationRequired === true
 }
 
-export function formatActionCatalogForPrompt(): string {
-  return ATLAS_ACTION_CATALOG.map((action) => {
+export function formatActionCatalogForPrompt(actions = ATLAS_ACTION_CATALOG): string {
+  return actions.map((action) => {
     const confirm = action.confirmationRequired ? ' [EXIGE CONFIRMAÇÃO]' : ''
     return `- ${action.name}${confirm}: ${action.description} Entrada: ${JSON.stringify(action.inputSchema)}`
   }).join('\n')

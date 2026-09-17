@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { getDb } from '../db/database'
 import type { AppSettings } from '../../shared/types'
+import { CHAT_DOCK_DEFAULT_HEIGHT, CHAT_DOCK_DEFAULT_WIDTH } from '../../shared/chat/chatDockSize'
 import { normalizeNotificationReadKeys } from '../../shared/notifications'
 import {
   isRealCodexModelId,
@@ -46,6 +47,11 @@ const DEFAULTS: AppSettings = {
   antigravityBinaryPath: '',
   codexOnboardingDismissed: false,
   notificationReadKeys: [],
+  contentAreasAutoDetect: true,
+  contentAreasHistoryEnabled: true,
+  contentAreasMusicEnabled: true,
+  chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
+  chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
 }
 
 export const settingsRepository = {

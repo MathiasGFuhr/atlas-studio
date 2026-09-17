@@ -16,12 +16,16 @@ import { Card } from '../components/Card'
 import { StatusBadge } from '../components/StatusBadge'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
+import { MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { ENVIRONMENTS } from '../lib/environments'
+import { notifyChannelsChanged } from '../lib/channelEvents'
+import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 
 export function ChannelsPage() {
   const api = getAtlasApi()
   const navigate = useNavigate()
   const { push } = useToast()
+  const { capabilities } = useWorkspaceCapabilities()
   const [channels, setChannels] = useState<Channel[]>([])
   const [niches, setNiches] = useState<Niche[]>([])
   const [query, setQuery] = useState('')
@@ -115,6 +119,7 @@ export function ChannelsPage() {
         await api.channels.setAvatar(saved.id, pendingAvatar)
       }
       setModalOpen(false)
+      notifyChannelsChanged()
       await load()
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao salvar canal', 'error')
@@ -127,6 +132,7 @@ export function ChannelsPage() {
       await api.channels.remove(deleting.id)
       push('Canal removido.', 'success')
       setDeleting(null)
+      notifyChannelsChanged()
       await load()
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao remover canal', 'error')
@@ -152,13 +158,15 @@ export function ChannelsPage() {
           />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
-          <Button
-            variant="secondary"
-            icon={<MessageSquareText className="h-4 w-4" />}
-            onClick={() => navigate('/prompts')}
-          >
-            Prompts
-          </Button>
+          {capabilities.musicEnabled ? (
+            <Button
+              variant="secondary"
+              icon={<MessageSquareText className="h-4 w-4" />}
+              onClick={() => navigate(MUSIC_PROMPTS_PATH)}
+            >
+              Prompts
+            </Button>
+          ) : null}
           <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
             Novo canal
           </Button>
@@ -213,7 +221,10 @@ export function ChannelsPage() {
                 >
                   {PROJECT_TYPE_LABEL[channel.channelType ?? 'history']}
                 </span>
-                {channel.nicheName ? (
+                {capabilities.historyEnabled &&
+                (channels.some((item) => (item.channelType ?? 'history') === 'history') ||
+                  channels.length === 0) &&
+                channel.nicheName ? (
                   <span className="min-w-0 truncate">Nicho: {channel.nicheName}</span>
                 ) : null}
               </div>
@@ -260,6 +271,7 @@ export function ChannelsPage() {
         form={form}
         niches={niches}
         pendingAvatar={pendingAvatar}
+        hideNiche={!capabilities.historyEnabled}
         onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
         onClose={() => setModalOpen(false)}
         onSubmit={() => void save()}

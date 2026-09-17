@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isSidebarUpdateRelevant,
   normalizeReleaseNotes,
   realDownloadPercent,
+  safeUpdateErrorText,
+  shouldToastAvailableUpdate,
+  sidebarDownloadProgressLabel,
+  sidebarUpdateToastMessage,
   summarizeReleaseNotes,
   updateNotificationId,
   updateStateLabel,
@@ -69,5 +74,34 @@ describe('atualizações', () => {
     expect(first?.id).toBe(updateNotificationId('1.6.0'))
     expect(again?.id).toBe(first?.id)
     expect(deriveUpdateNotification({ state: 'up-to-date', availableVersion: null })).toBeNull()
+  })
+
+  it('só mostra o card da sidebar em estados relevantes', () => {
+    expect(isSidebarUpdateRelevant({ state: 'idle', availableVersion: null })).toBe(false)
+    expect(isSidebarUpdateRelevant({ state: 'checking', availableVersion: null })).toBe(false)
+    expect(isSidebarUpdateRelevant({ state: 'up-to-date', availableVersion: null })).toBe(false)
+    expect(isSidebarUpdateRelevant({ state: 'dev', availableVersion: null })).toBe(false)
+    expect(isSidebarUpdateRelevant({ state: 'available', availableVersion: '1.5.3' })).toBe(true)
+    expect(isSidebarUpdateRelevant({ state: 'downloading', availableVersion: '1.5.3' })).toBe(true)
+    expect(isSidebarUpdateRelevant({ state: 'ready', availableVersion: '1.5.3' })).toBe(true)
+    expect(isSidebarUpdateRelevant({ state: 'error', availableVersion: '1.5.3' })).toBe(false)
+    expect(
+      isSidebarUpdateRelevant({ state: 'error', availableVersion: '1.5.3' }, { userDownloadError: true }),
+    ).toBe(true)
+  })
+
+  it('não inventa porcentagem no rótulo de download', () => {
+    expect(sidebarDownloadProgressLabel(null)).toBe('Baixando...')
+    expect(sidebarDownloadProgressLabel(64)).toBe('Baixando... 64%')
+  })
+
+  it('não repete toast da mesma versão e sanitiza erro técnico', () => {
+    expect(shouldToastAvailableUpdate({ state: 'available', availableVersion: '1.5.3' }, null)).toBe('1.5.3')
+    expect(shouldToastAvailableUpdate({ state: 'available', availableVersion: '1.5.3' }, '1.5.3')).toBeNull()
+    expect(shouldToastAvailableUpdate({ state: 'checking', availableVersion: null }, null)).toBeNull()
+    expect(sidebarUpdateToastMessage('1.5.3')).toBe('Atlas Studio 1.5.3 está disponível.')
+    expect(safeUpdateErrorText('ENOTFOUND github.com\n    at ClientRequest')).toBe(
+      'Não foi possível concluir a atualização. Tente novamente em alguns instantes.',
+    )
   })
 })

@@ -36,6 +36,8 @@ export function ChannelEditorModal({
   niches,
   pendingAvatar,
   saving,
+  allowedTypes,
+  hideNiche,
   onChange,
   onClose,
   onSubmit,
@@ -47,15 +49,19 @@ export function ChannelEditorModal({
   niches: Niche[]
   pendingAvatar: string | null
   saving?: boolean
+  allowedTypes?: ChannelType[]
+  hideNiche?: boolean
   onChange: (patch: Partial<ChannelFormValues>) => void
   onClose: () => void
   onSubmit: () => void
   onPickAvatar: () => void
 }) {
+  const types = allowedTypes?.length ? allowedTypes : (['history', 'music'] as ChannelType[])
   const nicheOptions = [
     { value: '', label: 'Nenhum nicho vinculado' },
     ...niches.map((n) => ({ value: n.id, label: n.name })),
   ]
+  const showNiche = !hideNiche && (form.channelType === 'history' || types.includes('history'))
 
   return (
     <Modal
@@ -86,19 +92,18 @@ export function ChannelEditorModal({
         />
         <Select
           label="Ambiente"
-          value={form.channelType}
+          value={types.includes(form.channelType) ? form.channelType : types[0]}
           onChange={(e) => onChange({ channelType: e.target.value as ChannelType })}
-          options={[
-            { value: 'history', label: PROJECT_TYPE_LABEL.history },
-            { value: 'music', label: PROJECT_TYPE_LABEL.music },
-          ]}
+          options={types.map((type) => ({ value: type, label: PROJECT_TYPE_LABEL[type] }))}
         />
+        {showNiche ? (
         <Select
           label="Nicho vinculado"
           value={form.nicheId}
           onChange={(e) => onChange({ nicheId: e.target.value })}
           options={nicheOptions}
         />
+        ) : null}
         <Input
           label="URL do YouTube"
           value={form.youtubeUrl}

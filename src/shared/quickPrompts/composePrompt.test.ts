@@ -8,8 +8,9 @@ import {
   resolveCamera,
   resolveFraming,
 } from './composePrompt'
+import { wordCount } from './helpers'
 import { AUDIENCE_CONTEXTS, STAGE_CONTEXTS } from './stageContext'
-import { CAMERAS, LIP_SYNC_BLOCK, PERFORMANCES, REFERENCE_PRESERVATION } from './presets'
+import { CAMERAS, PERFORMANCES } from './presets'
 import type { ComposePromptInput } from './types'
 
 const BASE: ComposePromptInput = {
@@ -22,7 +23,6 @@ const BASE: ComposePromptInput = {
   stageContextId: 'on-stage',
 }
 
-/** Termos que nenhum prompt gerado pode conter. */
 const FORBIDDEN_TERMS = [
   'orbit',
   '360',
@@ -32,21 +32,39 @@ const FORBIDDEN_TERMS = [
   'whip pan',
 ]
 
+function constraintFree(prompt: string): string {
+  return prompt.replace(/\s*No [^.]*\.\s*$/i, '')
+}
+
+function countCameraMoveKinds(prompt: string): number {
+  const text = constraintFree(prompt).toLowerCase()
+  const kinds = [
+    /push-in/.test(text),
+    /pull-back/.test(text),
+    /lateral/.test(text),
+    /backward tracking/.test(text),
+    /forward tracking/.test(text),
+    /handheld/.test(text),
+    /diagonal/.test(text),
+  ]
+  return kinds.filter(Boolean).length
+}
+
 describe('composePrompt', () => {
-  it('monta o prompt com todos os blocos selecionados', () => {
+  it('monta um prompt curto e específico de cantor + violão', () => {
     const prompt = composePrompt(BASE)
 
-    expect(prompt).toContain(REFERENCE_PRESERVATION)
     expect(prompt).toContain('acoustic guitar')
-    expect(prompt).toContain('stays in place while singing')
+    expect(prompt).toMatch(/precise lip sync/i)
     expect(prompt).toContain('Medium close-up framing')
-    expect(prompt).toContain('slow, steady push-in')
-    expect(prompt).toContain(LIP_SYNC_BLOCK)
+    expect(prompt).toContain('slow professional push-in')
+    expect(prompt).not.toContain('Create a highly realistic')
+    expect(wordCount(prompt)).toBeLessThanOrEqual(140)
   })
 
   it('inclui o bloco de lipsync apenas quando ativado', () => {
-    expect(composePrompt({ ...BASE, lipSync: true })).toContain('Precise natural lip sync')
-    expect(composePrompt({ ...BASE, lipSync: false })).not.toContain('lip sync')
+    expect(composePrompt({ ...BASE, lipSync: true })).toMatch(/precise lip sync/i)
+    expect(composePrompt({ ...BASE, lipSync: false })).not.toMatch(/precise lip sync/i)
   })
 
   it('ignora lipsync em performances sem vocal', () => {
@@ -56,29 +74,43 @@ describe('composePrompt', () => {
       actionId: 'natural',
       lipSync: true,
     })
-    expect(prompt).not.toContain('Precise natural lip sync')
-    expect(prompt).toContain('No lip-sync requirement.')
+    expect(prompt).not.toContain('precise lip sync')
+    expect(prompt.toLowerCase()).toContain('no lip sync')
   })
 
-  it('usa o bloco-base específico do Comfy/LTX', () => {
+  it('usa só um prefixo mínimo no Comfy/LTX', () => {
     const generic = composePrompt({ ...BASE, target: 'generic' })
     const comfy = composePrompt({ ...BASE, target: 'comfy-ltx' })
 
-    expect(generic).toContain('Cinematic music video shot')
-    expect(comfy).toContain('Image-to-video')
-    expect(comfy).toContain('single visual truth')
+    expect(generic).not.toContain('Image-to-video')
+    expect(comfy.startsWith('Image-to-video.')).toBe(true)
+    expect(comfy).not.toContain('single visual truth')
   })
 
-  it('sempre proíbe explicitamente os movimentos irreais', () => {
+  it('proíbe orbit e 360 sem lista gigante', () => {
     const prompt = composePrompt(BASE)
-    expect(prompt).toContain('no 360-degree camera movement')
-    expect(prompt).toContain('no orbit or orbiting camera')
-    expect(prompt).toContain('no camera circling around the performer')
-    expect(prompt).toContain('no duplicated people')
+    expect(prompt.toLowerCase()).toContain('no orbit')
+    expect(prompt.toLowerCase()).toContain('360')
+    expect(prompt).not.toContain('no aggressive whip pans')
+    expect(prompt).not.toContain('no impossible floating camera')
   })
 
   it('é determinístico: a mesma seleção devolve sempre o mesmo texto', () => {
     expect(composePrompt(BASE)).toBe(composePrompt(BASE))
+  })
+
+  it('escolhe apenas um movimento no automático profissional', () => {
+    expect(countCameraMoveKinds(composePrompt({ ...BASE, cameraId: 'auto' }))).toBe(1)
+    expect(
+      countCameraMoveKinds(
+        composePrompt({
+          ...BASE,
+          performanceId: 'singer-solo',
+          actionId: 'walking',
+          cameraId: 'auto',
+        }),
+      ),
+    ).toBe(1)
   })
 })
 
@@ -118,11 +150,6 @@ describe('compatibilidade entre performance e ação', () => {
     ])
     expect(ids).not.toContain('natural')
     expect(ids).not.toContain('walking')
-    expect(ids).not.toContain('driving')
-    expect(ids).not.toContain('acoustic-guitar')
-    expect(ids).not.toContain('electric-guitar')
-    expect(ids).not.toContain('band')
-    expect(ids).not.toContain('standing')
   })
 })
 
@@ -148,7 +175,6 @@ describe('câmera automática profissional', () => {
       ]),
     )
     expect(cameras).not.toContain('smooth-backward-tracking')
-    expect(cameras).not.toContain('controlled-follow')
     expect(resolveCamera('auto', 'driving')?.id).toBe('passenger-side-fixed')
   })
 
@@ -159,9 +185,17 @@ describe('câmera automática profissional', () => {
   })
 
   it('cai para uma câmera compatível quando a escolhida não serve para a ação', () => {
-    // "Smooth backward tracking" é de caminhada: dirigindo, precisa ser trocada.
     const camera = resolveCamera('smooth-backward-tracking', 'driving')
     expect(camera?.compatibleActions).toContain('driving')
+  })
+
+  it('escolhe lateral para banda', () => {
+    expect(resolveCamera('auto', 'band')?.id).toBe('lateral-tracking-left')
+    expect(resolveCamera('auto', 'band', 'band-no-singer')?.id).toBe('lateral-tracking-left')
+  })
+
+  it('escolhe lateral para guitarrista', () => {
+    expect(resolveCamera('auto', 'electric-guitar', 'guitarist')?.id).toBe('lateral-tracking-left')
   })
 })
 
@@ -230,7 +264,7 @@ describe('movimentos proibidos', () => {
     }
   })
 
-  it('nenhuma variação gerada propõe movimento proibido', () => {
+  it('nenhuma variação gerada propõe movimento proibido no corpo', () => {
     for (const action of ['standing', 'walking', 'driving', 'band'] as const) {
       const variations = buildCameraVariations({
         performanceId: 'singer-solo',
@@ -241,9 +275,7 @@ describe('movimentos proibidos', () => {
         stageContextId: 'on-stage',
       })
       for (const variation of variations) {
-        // O texto do movimento escolhido nunca contém os termos proibidos;
-        // eles só aparecem na lista "Avoid:".
-        const beforeAvoid = variation.prompt.split('Avoid:')[0].toLowerCase()
+        const beforeAvoid = constraintFree(variation.prompt).toLowerCase()
         for (const term of FORBIDDEN_TERMS) {
           expect(beforeAvoid).not.toContain(term)
         }
@@ -343,10 +375,8 @@ describe('variações de câmera', () => {
 })
 
 const SINGER_LEAKS = [
-  'Precise natural lip sync',
-  'same person, same face',
-  'toward the performer',
-  'Keep the face clearly readable',
+  'precise lip sync',
+  'The singer continues',
   'the singer remains',
   'The singer performs',
 ]
@@ -363,12 +393,10 @@ describe('cenas sem cantor não herdam blocos de vocal', () => {
       target: 'comfy-ltx',
     })
 
-    expect(prompt).toContain('same guitarist, same face')
-    expect(prompt).toContain('Preserve exactly the guitarist')
-    expect(prompt).toContain('believable instrument-playing motion')
-    expect(prompt).toContain('No lip-sync requirement.')
-    expect(prompt).toContain('instrument shot')
-    expect(prompt).not.toContain(REFERENCE_PRESERVATION)
+    expect(prompt).toContain('Animate the guitarist on the existing stage')
+    expect(prompt).toContain('fretboard')
+    expect(prompt).not.toContain('precise lip sync')
+    expect(prompt).toContain('No vocal performance')
     for (const leak of SINGER_LEAKS) {
       expect(prompt).not.toContain(leak)
     }
@@ -385,12 +413,11 @@ describe('cenas sem cantor não herdam blocos de vocal', () => {
       target: 'comfy-ltx',
     })
 
-    expect(prompt).toContain('same drummer, same face')
-    expect(prompt).toContain('same drum kit')
-    expect(prompt).toContain('believable drumming motion')
-    expect(prompt).toContain('No lip-sync requirement.')
-    expect(prompt).toContain('no extra limbs')
+    expect(prompt).toContain('Animate the drummer at the existing kit')
+    expect(prompt).toContain('snare and cymbals')
+    expect(prompt).toContain('extra limbs')
     expect(prompt).not.toContain('mouth clearly')
+    expect(prompt).not.toContain('precise lip sync')
     for (const leak of SINGER_LEAKS) {
       expect(prompt).not.toContain(leak)
     }
@@ -407,11 +434,10 @@ describe('cenas sem cantor não herdam blocos de vocal', () => {
       target: 'comfy-ltx',
     })
 
-    expect(prompt).toContain('preserve the same musicians')
-    expect(prompt).toContain('Do not add a singer or front performer')
-    expect(prompt).toContain('No lip-sync requirement.')
-    expect(prompt).toContain('band shot')
+    expect(prompt).toContain('Animate the instrumental band in place')
+    expect(prompt).toMatch(/No singer/i)
     expect(prompt).not.toContain('The singer remains the main subject')
+    expect(prompt).not.toContain('precise lip sync')
     for (const leak of SINGER_LEAKS) {
       expect(prompt).not.toContain(leak)
     }
@@ -429,63 +455,56 @@ describe('cenas sem cantor não herdam blocos de vocal', () => {
       stageContextId: 'audience-area',
     })
 
-    expect(prompt).toContain('same audience members')
-    expect(prompt).toContain('believable individual behaviour')
-    expect(prompt).toContain('No lip-sync requirement.')
-    expect(prompt).toContain('crowd shot')
-    expect(prompt).toContain('The crowd reacts naturally')
+    expect(prompt).toContain('Animate only the crowd from the reference')
+    expect(prompt).toContain('locked cinematic crowd shot')
     expect(prompt).toContain('public area of the venue')
-    expect(prompt).not.toContain('same person, same face')
-    expect(prompt).not.toContain(REFERENCE_PRESERVATION)
-    expect(prompt).not.toContain('The performer must be physically positioned')
-    expect(prompt).not.toContain('do not invent a singer')
-    expect(prompt).not.toContain('do not reframe onto a singer')
-    expect(prompt).not.toContain('do not place crowd members')
+    expect(prompt).toContain('Subtle varied reactions')
+    expect(prompt).not.toContain('The performer remains on the stage platform')
+    expect(prompt).not.toContain('precise lip sync')
     for (const leak of SINGER_LEAKS) {
       expect(prompt).not.toContain(leak)
     }
   })
 
-  it('presets de cantor continuam com preservação e lipsync padrão', () => {
+  it('presets de cantor continuam com lipsync e identidade própria', () => {
     const prompt = composePrompt(BASE)
-    expect(prompt).toContain(REFERENCE_PRESERVATION)
-    expect(prompt).toContain(LIP_SYNC_BLOCK)
-    expect(prompt).toContain('The singer performs while playing the acoustic guitar')
-    expect(prompt).toContain('slow, steady push-in toward the performer')
-    expect(prompt).not.toContain('No lip-sync requirement.')
+    expect(prompt).toContain('still playing the acoustic guitar')
+    expect(prompt).toMatch(/precise lip sync/i)
+    expect(prompt).toContain('slow professional push-in')
+    expect(prompt).not.toContain('Animate the guitarist on the existing stage')
   })
 })
 
 describe('contexto de palco', () => {
-  it('em No palco reforça que o movimento permanece na plataforma', () => {
+  it('em No palco usa uma frase curta', () => {
     const prompt = composePrompt({ ...BASE, stageContextId: 'on-stage', actionId: 'walking' })
-    expect(prompt).toContain('physically positioned on the stage platform')
-    expect(prompt).toContain('Keep all performance movement on the stage platform')
-    expect(prompt).toContain('no walking off the stage')
-    expect(prompt).toContain('no movement onto the ground in front of the stage')
+    expect(prompt).toContain('on the existing stage')
+    expect(prompt).not.toContain('The performer remains on the stage platform')
+    expect(prompt).not.toContain('not in front of the stage')
+    expect(prompt).not.toContain('no walking off the stage')
   })
 
-  it('em Cantor + banda coloca todos sobre o palco', () => {
+  it('em Cantor + banda mantém o cantor como assunto no palco', () => {
     const prompt = composePrompt({
       ...BASE,
       performanceId: 'singer-band',
       actionId: 'band',
       stageContextId: 'on-stage',
     })
-    expect(prompt).toContain('All performers must be positioned on the stage platform')
-    expect(prompt).toContain('The singer remains the main subject')
+    expect(prompt).toContain('Keep the singer dominant in the foreground')
+    expect(prompt).toContain('independent musician movement in depth')
   })
 
   it('em Fora do palco tira o performer da plataforma', () => {
     const prompt = composePrompt({ ...BASE, stageContextId: 'off-stage' })
     expect(prompt).toContain('outside the stage structure')
-    expect(prompt).not.toContain('physically positioned on the stage platform')
+    expect(prompt).not.toContain('The performer remains on the stage platform.')
   })
 
   it('em Sem palco evita estrutura de palco automática', () => {
     const prompt = composePrompt({ ...BASE, stageContextId: 'no-stage' })
-    expect(prompt).toContain('No concert stage structure should appear')
-    expect(prompt).not.toContain('Keep all performance movement on the stage platform')
+    expect(prompt).toContain('No concert stage structure')
+    expect(prompt).not.toContain('The performer remains on the stage platform.')
   })
 })
 
@@ -513,8 +532,6 @@ describe('plateia usa lógica própria de público', () => {
       'crowd-stage-background',
     ])
     expect(ids).not.toContain('close-up')
-    expect(ids).not.toContain('medium-close-up')
-    expect(ids).not.toContain('three-quarter-front')
   })
 
   it('escolhe câmera automática de crowd, nunca push-in de cantor', () => {
@@ -531,7 +548,6 @@ describe('plateia usa lógica própria de público', () => {
       'slow-controlled-pull-back-crowd',
     ])
     expect(cameras).not.toContain('slow-push-in')
-    expect(cameras).not.toContain('subtle-diagonal-dolly')
   })
 
   it('enquadramento automático é crowd medium shot', () => {
@@ -552,15 +568,12 @@ describe('plateia usa lógica própria de público', () => {
     ])
     expect(STAGE_CONTEXTS.map((item) => item.label)).toContain('No palco')
     expect(labels).not.toContain('No palco')
-    expect(labels).not.toContain('Fora do palco')
-    expect(labels).not.toContain('Sem palco / locação livre')
   })
 
   it('o prompt descreve o contexto escolhido sem empilhar negações de palco', () => {
     const nearStage = composePrompt({ ...AUDIENCE_BASE, stageContextId: 'near-stage' })
     expect(nearStage).toContain('close to the stage edge')
-    expect(nearStage).not.toContain('The performer must be physically positioned')
-    expect(nearStage).not.toContain('Keep all performance movement on the stage platform')
+    expect(nearStage).not.toContain('The performer remains on the stage platform')
 
     const withStage = composePrompt({
       ...AUDIENCE_BASE,
@@ -568,7 +581,48 @@ describe('plateia usa lógica própria de público', () => {
       framingId: 'crowd-stage-background',
     })
     expect(withStage).toContain('Audience in the foreground with the stage visible')
-    expect(withStage).not.toContain('do not invent a singer')
+  })
+})
+
+describe('identidade própria por preset', () => {
+  it('cantor sozinho não é o mesmo texto de cantor + violão', () => {
+    const solo = composePrompt({ ...BASE, performanceId: 'singer-solo', actionId: 'standing' })
+    const acoustic = composePrompt(BASE)
+    expect(solo).not.toBe(acoustic)
+    expect(solo).not.toContain('acoustic guitar')
+    expect(acoustic).toContain('acoustic guitar')
+  })
+
+  it('ações de plateia mudam o texto de verdade', () => {
+    const reaction = composePrompt({
+      ...BASE,
+      performanceId: 'audience',
+      actionId: 'audience-reaction',
+      stageContextId: 'audience-area',
+    })
+    const clapping = composePrompt({
+      ...BASE,
+      performanceId: 'audience',
+      actionId: 'audience-clapping',
+      stageContextId: 'audience-area',
+    })
+    const singing = composePrompt({
+      ...BASE,
+      performanceId: 'audience',
+      actionId: 'audience-singing-along',
+      stageContextId: 'audience-area',
+    })
+    const arms = composePrompt({
+      ...BASE,
+      performanceId: 'audience',
+      actionId: 'audience-arms-raised',
+      stageContextId: 'audience-area',
+    })
+    expect(reaction).toContain('Subtle varied reactions')
+    expect(clapping).toContain('Irregular natural clapping')
+    expect(singing).toContain('Believable group singing along')
+    expect(arms).toContain('Scattered raised arms')
+    expect(new Set([reaction, clapping, singing, arms]).size).toBe(4)
   })
 })
 

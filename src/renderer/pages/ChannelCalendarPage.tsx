@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Check, ChevronLeft, ChevronRight, Copy, FolderOpen, FolderSearch, ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react'
 import type { Channel, ChannelVideo, ChannelVideoStatus, TitleStrengthAnalysis } from '@shared/types'
+import { channelVideoPath, toDateKey, todayDateKey } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
 import { Button } from '../components/Button'
 import { Modal, ConfirmDialog } from '../components/Modal'
@@ -13,15 +14,10 @@ import { StatusBadge } from '../components/StatusBadge'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { TitleScoreBadge, TitleScorePanel } from '../components/TitleScore'
+import { notifyVideosChanged } from '../lib/videoEvents'
 import { cn } from '../lib/utils'
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-
-function toDateKey(year: number, month: number, day: number): string {
-  const mm = String(month + 1).padStart(2, '0')
-  const dd = String(day).padStart(2, '0')
-  return `${year}-${mm}-${dd}`
-}
 
 function monthLabel(year: number, month: number): string {
   const label = new Date(year, month, 1).toLocaleDateString('pt-BR', {
@@ -31,17 +27,13 @@ function monthLabel(year: number, month: number): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
-function todayKey(): string {
-  const now = new Date()
-  return toDateKey(now.getFullYear(), now.getMonth(), now.getDate())
-}
-
 export function ChannelCalendarPage() {
-  const { id } = useParams()
+  const { id, videoId } = useParams()
   const api = getAtlasApi()
   const navigate = useNavigate()
   const { push } = useToast()
   const now = new Date()
+  const openedFromRoute = useRef<string | null>(null)
   const [channel, setChannel] = useState<Channel | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [videos, setVideos] = useState<ChannelVideo[]>([])
@@ -59,7 +51,7 @@ export function ChannelCalendarPage() {
   const [form, setForm] = useState({
     title: '',
     description: '',
-    scheduledDate: todayKey(),
+    scheduledDate: todayDateKey(),
     status: 'colocando' as ChannelVideoStatus,
     projectFolderPath: null as string | null,
     thumbnailText: '',
@@ -144,7 +136,7 @@ export function ChannelCalendarPage() {
     setForm({
       title: '',
       description: '',
-      scheduledDate: dateKey ?? todayKey(),
+      scheduledDate: dateKey ?? todayDateKey(),
       status: 'colocando',
       projectFolderPath: null,
       thumbnailText: '',
@@ -175,6 +167,54 @@ export function ChannelCalendarPage() {
     setModalOpen(true)
   }
 
+  function closeModal() {
+    setModalOpen(false)
+    openedFromRoute.current = null
+    if (id && videoId) {
+      navigate(`/canais/${id}`, { replace: true })
+    }
+  }
+
+  function openExistingVideo(video: ChannelVideo) {
+    if (!id) return
+    if (videoId === video.id) {
+      openEdit(video)
+      return
+    }
+    navigate(channelVideoPath(id, video.id))
+  }
+
+  useEffect(() => {
+    if (!videoId || !id) {
+      openedFromRoute.current = null
+      return
+    }
+    if (openedFromRoute.current === videoId) return
+    let cancelled = false
+    void (async () => {
+      const video = await api.videos.get(videoId)
+      if (cancelled) return
+      if (!video || video.channelId !== id) {
+        push('Vídeo não encontrado neste canal.', 'error')
+        navigate(`/canais/${id}`, { replace: true })
+        return
+      }
+      const parsed = video.scheduledDate.split('-').map(Number)
+      const nextYear = parsed[0]
+      const nextMonth = (parsed[1] ?? 1) - 1
+      if (nextYear !== year || nextMonth !== month) {
+        setYear(nextYear)
+        setMonth(nextMonth)
+      }
+      openEdit(video)
+      openedFromRoute.current = videoId
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoId, id])
+
   async function pickThumb() {
     const file = await api.dialog.selectImage()
     if (!file) return
@@ -183,6 +223,7 @@ export function ChannelCalendarPage() {
         const updated = await api.videos.setThumbnail(editing.id, file)
         if (updated) setEditing(updated)
         push('Thumbnail atualizada.', 'success')
+        notifyVideosChanged()
         await load()
       } catch (error) {
         push(error instanceof Error ? error.message : 'Falha ao salvar a thumbnail', 'error')
@@ -252,6 +293,7 @@ export function ChannelCalendarPage() {
       setAnalyzedTitle(form.title.trim())
       if (result.video) setEditing(result.video)
       push(`Força do título: ${result.analysis.score}/100`, 'success')
+      notifyVideosChanged()
       await load()
     } catch (error) {
       setAnalysis(null)
@@ -314,7 +356,8 @@ export function ChannelCalendarPage() {
           titleAnalyzedAt: new Date().toISOString(),
         })
       }
-      setModalOpen(false)
+      notifyVideosChanged()
+      closeModal()
       await load()
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao salvar vídeo', 'error')
@@ -326,8 +369,9 @@ export function ChannelCalendarPage() {
     try {
       await api.videos.remove(deleting.id)
       push('Vídeo removido.', 'success')
+      notifyVideosChanged()
       setDeleting(null)
-      setModalOpen(false)
+      closeModal()
       await load()
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao remover vídeo', 'error')
@@ -396,7 +440,7 @@ export function ChannelCalendarPage() {
         <div className="grid grid-cols-7">
           {cells.map((cell) => {
             const dayVideos = videosByDate.get(cell.key) ?? []
-            const isToday = cell.key === todayKey()
+            const isToday = cell.key === todayDateKey()
             return (
               <div
                 key={cell.key}
@@ -434,7 +478,7 @@ export function ChannelCalendarPage() {
                     className="mb-1 w-full overflow-hidden rounded-lg border border-border-soft bg-card-2 text-left"
                     onClick={(event) => {
                       event.stopPropagation()
-                      openEdit(video)
+                      openExistingVideo(video)
                     }}
                   >
                     {video.thumbnailDataUrl ? (
@@ -487,7 +531,7 @@ export function ChannelCalendarPage() {
                     ) : null}
                   </div>
                 </div>
-                <Button variant="secondary" className="h-9 self-start px-3 text-xs" onClick={() => openEdit(video)}>
+                <Button variant="secondary" className="h-9 self-start px-3 text-xs" onClick={() => openExistingVideo(video)}>
                   Editar
                 </Button>
               </Card>
@@ -500,7 +544,7 @@ export function ChannelCalendarPage() {
         open={modalOpen}
         title={editing ? 'Editar vídeo' : 'Novo vídeo'}
         size="lg"
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         footer={
           <>
             {editing ? (
@@ -513,7 +557,7 @@ export function ChannelCalendarPage() {
                 Excluir
               </Button>
             ) : null}
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+            <Button variant="secondary" onClick={closeModal}>
               Cancelar
             </Button>
             <Button onClick={() => void save()}>Salvar</Button>

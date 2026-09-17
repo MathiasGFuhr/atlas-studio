@@ -10,69 +10,19 @@ import type {
 } from './types'
 
 /**
- * Biblioteca global de presets dos Prompts rápidos.
- *
- * Este arquivo é a ÚNICA fonte de verdade dos blocos de texto e das regras de
- * compatibilidade. Para adicionar um preset novo, acrescente a entrada aqui:
- * a interface e a composição se adaptam sozinhas.
+ * Biblioteca global de presets dos Prompts rápidos (IDs, labels, compatibilidade).
+ * O corpo de cada cena de vídeo vive em `animationPromptPresets/bodies.ts`.
  */
 
-/** Regra-base: o prompt nunca pode reinventar pessoa, roupa, instrumento ou cenário. */
-export const REFERENCE_PRESERVATION =
-  'Preserve exactly the performer, face, hair, clothing, body proportions, microphone, ' +
-  'instruments, environment and lighting from the reference image. Do not change the ' +
-  'identity of the person, do not add or remove people, do not alter the wardrobe, the ' +
-  'instruments or the location.'
-
-/** Estilo de câmera exigido em todos os prompts. */
-export const CAMERA_STYLE =
-  'Professional cinematic camera work: natural, controlled, smooth, stable and physically ' +
-  'plausible, as if operated by a real camera crew.'
-
-/**
- * Movimentos proibidos. Entram em todo prompt gerado, qualquer que seja a câmera
- * escolhida — é o que impede orbit, giro 360 e câmera circulando o cantor.
- */
-export const FORBIDDEN_CAMERA_MOVES = [
-  'no 360-degree camera movement',
-  'no orbit or orbiting camera',
-  'no camera circling around the performer',
-  'no spinning or rotating camera',
-  'no circular camera paths',
-  'no aggressive whip pans',
-  'no aggressive or snap zooms',
-  'no very fast camera movement',
-  'no abrupt changes of direction',
-  'no impossible floating camera',
-  'no physically unrealistic camera motion',
-  'no exaggerated handheld shake',
-]
-
-/** Defeitos visuais recusados em qualquer geração. */
-export const QUALITY_CONSTRAINTS = [
-  'no duplicated people',
-  'no extra limbs or extra fingers',
-  'no warped or melting anatomy',
-  'no face deformation',
-  'no identity change',
-  'no flickering or morphing clothing',
-  'no text or watermark overlays',
-]
-
-/** Bloco de sincronização labial, aplicado somente quando o lipsync está ligado. */
-export const LIP_SYNC_BLOCK =
-  'Precise natural lip sync to the provided audio, with accurate mouth articulation, ' +
-  'realistic jaw movement, natural breathing, blinking and subtle restrained facial ' +
-  'expressions. Keep the face clearly visible throughout the shot, with natural head ' +
-  'movement. Do not exaggerate the expressions, do not deform the mouth, do not deform ' +
-  'the face and preserve the identity of the performer at all times.'
+export const LIP_SYNC_PHRASE =
+  'Natural precise lip sync to the provided audio, subtle breathing, blinking and restrained head and body movement.'
 
 export const PERFORMANCES: PerformancePreset[] = [
   {
     id: 'singer-solo',
     category: 'performance',
     label: 'Cantor sozinho',
-    text: 'The singer performs alone in the frame, as the single clear subject of the shot, with confident and natural stage presence.',
+    text: 'The singer performs alone as the single subject.',
     compatibleActions: ['standing', 'seated', 'walking', 'driving', 'natural'],
     supportsLipSync: true,
   },
@@ -80,7 +30,7 @@ export const PERFORMANCES: PerformancePreset[] = [
     id: 'singer-mic',
     category: 'performance',
     label: 'Cantor no microfone',
-    text: 'The singer performs into the microphone from the reference image, holding it naturally, with a steady and believable grip and relaxed shoulders.',
+    text: 'The singer performs into the microphone from the reference image.',
     compatibleActions: ['standing', 'seated', 'natural'],
     supportsLipSync: true,
   },
@@ -88,7 +38,7 @@ export const PERFORMANCES: PerformancePreset[] = [
     id: 'singer-acoustic',
     category: 'performance',
     label: 'Cantor + violão',
-    text: 'The singer performs while playing the acoustic guitar from the reference image, with correct hand placement on the fretboard and a natural strumming motion synchronised with the performance.',
+    text: 'The singer performs while playing the acoustic guitar from the reference image.',
     compatibleActions: ['standing', 'seated', 'acoustic-guitar', 'band', 'natural'],
     supportsLipSync: true,
   },
@@ -96,7 +46,7 @@ export const PERFORMANCES: PerformancePreset[] = [
     id: 'singer-electric',
     category: 'performance',
     label: 'Cantor + guitarra',
-    text: 'The singer performs while playing the electric guitar from the reference image, with credible fretting and picking motion and a grounded, confident stance.',
+    text: 'The singer performs while playing the electric guitar from the reference image.',
     compatibleActions: ['standing', 'electric-guitar', 'band', 'natural'],
     supportsLipSync: true,
   },
@@ -104,7 +54,7 @@ export const PERFORMANCES: PerformancePreset[] = [
     id: 'singer-band',
     category: 'performance',
     label: 'Cantor + banda',
-    text: 'The singer performs in front of the band from the reference image. The singer remains the main subject and stays in focus, while the musicians play naturally behind and around him.',
+    text: 'The singer performs in front of the band from the reference image.',
     compatibleActions: ['standing', 'band', 'natural'],
     supportsLipSync: true,
   },
@@ -112,9 +62,7 @@ export const PERFORMANCES: PerformancePreset[] = [
     id: 'guitarist',
     category: 'performance',
     label: 'Guitarrista sozinho',
-    text:
-      'The guitarist performs naturally with believable instrument-playing motion: subtle body movement, ' +
-      'realistic arm and hand motion, natural posture and authentic stage presence.',
+    text: 'The guitarist performs naturally with realistic instrument-playing motion.',
     compatibleActions: ['electric-guitar', 'natural'],
     supportsLipSync: false,
   },
@@ -122,9 +70,7 @@ export const PERFORMANCES: PerformancePreset[] = [
     id: 'drummer',
     category: 'performance',
     label: 'Baterista',
-    text:
-      'The drummer performs naturally with believable drumming motion: realistic arm movement, natural stick ' +
-      'motion, subtle upper-body movement and authentic live-performance behaviour.',
+    text: 'The drummer performs naturally with realistic stick and arm movement.',
     compatibleActions: ['natural'],
     supportsLipSync: false,
   },
@@ -132,9 +78,7 @@ export const PERFORMANCES: PerformancePreset[] = [
     id: 'band-no-singer',
     category: 'performance',
     label: 'Banda sem cantor',
-    text:
-      'The musicians perform naturally with believable independent movement appropriate to a live band performance. ' +
-      'Each musician moves subtly and naturally according to their instrument. Do not add a singer or front performer.',
+    text: 'The musicians perform naturally. Do not add a singer or front performer.',
     compatibleActions: ['band', 'natural'],
     supportsLipSync: false,
   },
@@ -142,9 +86,7 @@ export const PERFORMANCES: PerformancePreset[] = [
     id: 'audience',
     category: 'performance',
     label: 'Plateia',
-    text:
-      'The shot stays on the concert audience as the subject. People in the crowd react with believable individual ' +
-      'behaviour, independent timing, natural head motion, breathing, blinking and small body shifts typical of a live audience.',
+    text: 'The shot stays on the concert audience as the subject.',
     compatibleActions: [
       'audience-reaction',
       'audience-clapping',
@@ -163,98 +105,91 @@ export const ACTIONS: ActionPreset[] = [
     id: 'standing',
     category: 'action',
     label: 'Cantando parado',
-    text: 'The performer stays in place while singing, with subtle weight shifts, natural micro-movements of the head and shoulders and relaxed, believable body language.',
+    text: 'The performer stays in place while singing, with subtle weight shifts.',
   },
   {
     id: 'seated',
     category: 'action',
     label: 'Sentado cantando',
-    text: 'The performer sings while seated, with a stable and comfortable posture, natural upper-body movement and grounded contact with the seat.',
+    text: 'The performer sings while seated, with a stable upper-body posture.',
   },
   {
     id: 'walking',
     category: 'action',
     label: 'Caminhando e cantando',
-    text: 'The performer walks forward while singing, at a natural and steady walking speed. Realistic footsteps with correct ground contact, natural arm swing, believable body balance and natural breathing between phrases. The walk never speeds up or slows down abruptly.',
+    text: 'The performer walks forward while singing, at a natural steady pace with realistic footsteps.',
   },
   {
     id: 'driving',
     category: 'action',
     label: 'Dirigindo e cantando',
-    text: 'The performer drives the vehicle while singing, behaving realistically at the wheel. The main attention stays on the road, with occasional natural glances toward the camera or the side window. The hands behave naturally on the steering wheel, with small realistic corrections. The vehicle interior and the motion outside the windows stay consistent.',
+    text: 'The performer drives while singing, attention mainly on the road, hands natural on the wheel.',
   },
   {
     id: 'acoustic-guitar',
     category: 'action',
     label: 'Tocando violão',
-    text: 'The performer plays the acoustic guitar with a natural strumming pattern, correct left-hand chord shapes and a relaxed posture around the instrument.',
+    text: 'The performer plays the acoustic guitar with a natural strumming pattern.',
   },
   {
     id: 'electric-guitar',
     category: 'action',
     label: 'Tocando guitarra',
-    text: 'The performer plays the electric guitar with credible picking and fretting motion, a grounded stance and natural body movement following the rhythm.',
+    text: 'The performer plays the electric guitar with credible picking and fretting.',
   },
   {
     id: 'band',
     category: 'action',
     label: 'Cantando com banda',
-    text: 'The performance happens with the full band playing together, with coherent ensemble timing and each musician staying consistent with their instrument.',
+    text: 'The full band plays together with coherent ensemble timing.',
   },
   {
     id: 'natural',
     category: 'action',
     label: 'Performance natural',
-    text: 'A natural, unforced performance with subtle spontaneous movement and authentic presence, without theatrical or exaggerated gestures.',
+    text: 'A natural unforced performance, without theatrical gestures.',
   },
   {
     id: 'audience-reaction',
     category: 'action',
     label: 'Reação natural',
-    text:
-      'The crowd reacts naturally to the show, each person moving independently with small spontaneous shifts rather than a single choreographed gesture.',
+    text: 'Subtle varied reactions, independent from person to person.',
   },
   {
     id: 'audience-clapping',
     category: 'action',
     label: 'Aplaudindo',
-    text:
-      'Audience members clap with believable, unsynchronized timing and natural arm motion, as a live crowd rather than a staged choir of identical claps.',
+    text: 'Irregular natural clapping, not a single shared rhythm.',
   },
   {
     id: 'audience-singing-along',
     category: 'action',
     label: 'Cantando junto',
-    text:
-      'Some audience members sing along at varied intensity, remaining part of the crowd rather than featured vocalists, with independent mouth movement and relaxed body language.',
+    text: 'Believable group singing along, varied timing and intensity, still clearly crowd.',
   },
   {
     id: 'audience-arms-raised',
     category: 'action',
     label: 'Braços erguidos',
-    text:
-      'Several audience members raise their arms with unsynchronized live-concert energy, some higher than others, never as a uniform choreography.',
+    text: 'Scattered raised arms, not everyone identical.',
   },
   {
     id: 'audience-emotional',
     category: 'action',
     label: 'Emocionada',
-    text:
-      'The audience watches with restrained emotion: absorbed faces, quiet body language and individual reactions rather than theatrical weeping or identical expressions.',
+    text: 'Restrained facial emotion and attentive body language.',
   },
   {
     id: 'audience-high-energy',
     category: 'action',
     label: 'Energia alta',
-    text:
-      'High-energy crowd reaction with lively but physically plausible motion, cheers and body bounce that stay independent from person to person.',
+    text: 'Stronger movement and energy, still physically believable.',
   },
   {
     id: 'audience-watching',
     category: 'action',
     label: 'Observando o show',
-    text:
-      'The audience watches the show attentively, mostly still, with natural head turns, blinking and small shifts of weight while remaining clearly in the public area.',
+    text: 'Focused attention on the show, only subtle movement.',
   },
 ]
 
@@ -346,7 +281,7 @@ export const CAMERAS: CameraPreset[] = [
     id: 'slow-push-in',
     category: 'camera',
     label: 'Slow push-in',
-    text: 'The camera performs a slow, steady push-in toward the performer, gaining intimacy gradually without ever rushing.',
+    text: 'Use a slow professional push-in, stable and controlled.',
     compatibleActions: ON_FOOT_ACTIONS,
     blockedActions: ['driving'],
   },
@@ -354,7 +289,7 @@ export const CAMERAS: CameraPreset[] = [
     id: 'very-slow-push-in',
     category: 'camera',
     label: 'Very slow push-in',
-    text: 'The camera performs an almost imperceptible push-in, barely closing the distance across the shot, holding a calm and controlled pace.',
+    text: 'Use a very slow cinematic push-in.',
     compatibleActions: ON_FOOT_ACTIONS,
     blockedActions: ['driving'],
   },
@@ -362,7 +297,7 @@ export const CAMERAS: CameraPreset[] = [
     id: 'gentle-pull-back',
     category: 'camera',
     label: 'Gentle pull-back',
-    text: 'The camera pulls back gently and steadily, slowly revealing more of the scene around the performer.',
+    text: 'Use a gentle, steady pull-back.',
     compatibleActions: ON_FOOT_ACTIONS,
     blockedActions: ['driving'],
   },
@@ -370,7 +305,7 @@ export const CAMERAS: CameraPreset[] = [
     id: 'lateral-tracking-left',
     category: 'camera',
     label: 'Lateral tracking esquerdo',
-    text: 'The camera slides laterally to the left on a smooth dolly or slider, keeping the performer centred and the distance constant.',
+    text: 'Use a slow lateral movement to the left, keeping a consistent distance.',
     compatibleActions: [...ON_FOOT_ACTIONS, 'walking'],
     blockedActions: ['driving'],
   },
@@ -378,7 +313,7 @@ export const CAMERAS: CameraPreset[] = [
     id: 'lateral-tracking-right',
     category: 'camera',
     label: 'Lateral tracking direito',
-    text: 'The camera slides laterally to the right on a smooth dolly or slider, keeping the performer centred and the distance constant.',
+    text: 'Use a slow lateral movement to the right, keeping a consistent distance.',
     compatibleActions: [...ON_FOOT_ACTIONS, 'walking'],
     blockedActions: ['driving'],
   },
@@ -386,7 +321,7 @@ export const CAMERAS: CameraPreset[] = [
     id: 'smooth-backward-tracking',
     category: 'camera',
     label: 'Smooth backward tracking',
-    text: 'A smooth stabilized tracking shot moving backward in front of the performer, matching his walking speed exactly and holding a constant distance and framing.',
+    text: 'Use a smooth backward tracking shot matching the walk.',
     compatibleActions: ['walking'],
     blockedActions: ['driving'],
   },
@@ -394,7 +329,7 @@ export const CAMERAS: CameraPreset[] = [
     id: 'smooth-forward-tracking',
     category: 'camera',
     label: 'Smooth forward tracking',
-    text: 'A smooth stabilized tracking shot moving forward behind the performer, following the walk at a steady matched pace.',
+    text: 'Use a smooth forward tracking shot behind the walk.',
     compatibleActions: ['walking'],
     blockedActions: ['driving'],
   },
@@ -402,14 +337,14 @@ export const CAMERAS: CameraPreset[] = [
     id: 'parallel-tracking',
     category: 'camera',
     label: 'Parallel tracking',
-    text: 'The camera tracks parallel to the subject, travelling alongside at the same speed on a straight and stable path.',
+    text: 'Use a parallel tracking shot at the same speed.',
     compatibleActions: ['walking', 'driving'],
   },
   {
     id: 'controlled-follow',
     category: 'camera',
     label: 'Controlled follow shot',
-    text: 'A controlled stabilized follow shot that accompanies the performer at a consistent distance, with gentle reframing and no sudden corrections.',
+    text: 'Use a controlled follow shot at a consistent distance.',
     compatibleActions: ['walking'],
     blockedActions: ['driving'],
   },
@@ -417,7 +352,7 @@ export const CAMERAS: CameraPreset[] = [
     id: 'three-quarter-tracking',
     category: 'camera',
     label: 'Three-quarter tracking',
-    text: 'The camera tracks the performer from a three-quarter position, slightly ahead and to the side, matching the walking speed without drifting.',
+    text: 'Use a three-quarter tracking shot matching the walk.',
     compatibleActions: ['walking'],
     blockedActions: ['driving'],
   },
@@ -425,14 +360,14 @@ export const CAMERAS: CameraPreset[] = [
     id: 'locked-cinematic',
     category: 'camera',
     label: 'Locked cinematic',
-    text: 'A locked-off cinematic frame on a tripod, completely stable, letting the performance carry the shot.',
+    text: 'Use a locked cinematic camera on a tripod.',
     compatibleActions: [...ON_FOOT_ACTIONS, 'driving'],
   },
   {
     id: 'subtle-diagonal-dolly',
     category: 'camera',
     label: 'Subtle diagonal dolly',
-    text: 'The camera moves on a subtle diagonal dolly, combining a slight forward and lateral drift in one continuous, controlled motion.',
+    text: 'Use a subtle diagonal dolly, one continuous controlled motion.',
     compatibleActions: ON_FOOT_ACTIONS,
     blockedActions: ['driving'],
   },
@@ -440,28 +375,28 @@ export const CAMERAS: CameraPreset[] = [
     id: 'passenger-side-fixed',
     category: 'camera',
     label: 'Passageiro frontal (fixo)',
-    text: 'A fixed camera mounted at the passenger seat, facing the driver from a realistic in-car position, completely stable except for the natural vibration of the moving vehicle.',
+    text: 'Use a passenger-side stable camera inside the vehicle.',
     compatibleActions: ['driving'],
   },
   {
     id: 'dashboard-mounted',
     category: 'camera',
     label: 'Dashboard mounted',
-    text: 'A dashboard-mounted camera framing the driver from a fixed, physically plausible position inside the vehicle, rigidly attached and moving only with the car.',
+    text: 'Use a dashboard-mounted camera fixed to the vehicle.',
     compatibleActions: ['driving'],
   },
   {
     id: 'passenger-three-quarter',
     category: 'camera',
     label: 'Passageiro 3/4',
-    text: 'A camera at the passenger side capturing the driver from a three-quarter angle, mounted in a realistic in-car position and staying fixed relative to the interior.',
+    text: 'Use a passenger-side three-quarter camera, fixed to the interior.',
     compatibleActions: ['driving'],
   },
   {
     id: 'exterior-vehicle-tracking',
     category: 'camera',
     label: 'Exterior acompanhando o veículo',
-    text: 'An exterior camera tracking parallel to the vehicle from a chase car or car rig, matching the speed of the vehicle on a straight and stable path.',
+    text: 'Use an exterior camera tracking parallel to the vehicle.',
     compatibleActions: ['driving'],
   },
 ]
@@ -521,8 +456,8 @@ export const AUTO_CAMERA_BY_ACTION: Record<ActionId, Array<Exclude<CameraId, 'au
     'exterior-vehicle-tracking',
   ],
   'acoustic-guitar': [
+    'very-slow-push-in',
     'slow-push-in',
-    'subtle-diagonal-dolly',
     'lateral-tracking-right',
     'locked-cinematic',
   ],
@@ -533,8 +468,8 @@ export const AUTO_CAMERA_BY_ACTION: Record<ActionId, Array<Exclude<CameraId, 'au
     'locked-cinematic',
   ],
   band: [
-    'slow-push-in',
     'lateral-tracking-left',
+    'slow-push-in',
     'subtle-diagonal-dolly',
     'locked-cinematic',
   ],
@@ -583,12 +518,10 @@ export const AUTO_CAMERA_BY_ACTION: Record<ActionId, Array<Exclude<CameraId, 'au
   ],
 }
 
-/** Bloco-base por destino. Comfy/LTX recebe uma instrução mais objetiva. */
+/** Prefixo mínimo por destino. O corpo da cena não é compartilhado. */
 export const TARGET_INTRO: Record<'generic' | 'comfy-ltx', string> = {
-  generic:
-    'Cinematic music video shot, photorealistic, consistent with the reference image.',
-  'comfy-ltx':
-    'Image-to-video. Animate the reference image without changing it. Keep the source frame as the single visual truth: same person, same face, same clothing, same instruments, same set, same lighting.',
+  generic: '',
+  'comfy-ltx': 'Image-to-video.',
 }
 
 export const PERFORMANCE_BY_ID = new Map<PerformanceId, PerformancePreset>(

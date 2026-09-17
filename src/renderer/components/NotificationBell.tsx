@@ -10,19 +10,19 @@ import {
   unreadNotifications,
   type AtlasNotification,
 } from '@shared/notifications'
-import type { AppUpdateStatus } from '@shared/updates'
 import { getAtlasApi } from '../lib/api'
 import { onTasksChanged } from '../lib/taskEvents'
 import { cn } from '../lib/utils'
+import { useAppUpdate } from '../hooks/useAppUpdate'
 
 export function NotificationBell() {
   const api = getAtlasApi()
   const navigate = useNavigate()
+  const { status: updateStatus } = useAppUpdate()
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [tasks, setTasks] = useState<AtlasTask[]>([])
   const [readKeys, setReadKeys] = useState<string[]>([])
-  const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const writeGen = useRef(0)
 
@@ -37,15 +37,10 @@ export function NotificationBell() {
       if (writeGen.current !== 0) return
       setReadKeys(normalizeNotificationReadKeys(settings.notificationReadKeys))
     })
-    void api.updates.status().then(setUpdateStatus)
     const offTasks = onTasksChanged(() => {
       void loadTasks()
     })
-    const offUpdates = api.updates.onChanged(setUpdateStatus)
-    return () => {
-      offTasks()
-      offUpdates()
-    }
+    return offTasks
   }, [api, loadTasks])
 
   const items = useMemo(() => {

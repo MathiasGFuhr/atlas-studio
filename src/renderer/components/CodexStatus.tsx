@@ -50,9 +50,11 @@ function accountLabel(status: CodexStatus | null): string {
 export function CodexStatusCard({
   status,
   onClick,
+  compact = false,
 }: {
   status: CodexStatus | null
   onClick?: () => void
+  compact?: boolean
 }) {
   const authState: CodexAuthState = status?.authState ?? 'initializing'
   const config = stateConfig[authState]
@@ -75,6 +77,24 @@ export function CodexStatusCard({
             : 'Preparando integração...'
 
   const showAction = Boolean(config.action)
+  const compactLabel = `Codex · ${config.label}`
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        title={compactLabel}
+        aria-label={compactLabel}
+        onClick={onClick}
+        className={cn(
+          'flex h-11 w-full items-center justify-center rounded-xl border border-border-soft bg-card-2 transition-colors',
+          'hover:border-[#334049]',
+        )}
+      >
+        <span className={cn('h-2 w-2 rounded-full', config.dotClass)} />
+      </button>
+    )
+  }
 
   return (
     <button

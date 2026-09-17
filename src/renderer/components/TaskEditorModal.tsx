@@ -37,6 +37,12 @@ export function TaskEditorModal({
   editing,
   form,
   relatedOptions,
+  relatedTypeOptions = [
+    { value: '', label: 'Nada — tarefa geral' },
+    { value: 'history', label: TASK_RELATED_LABEL.history },
+    { value: 'music', label: TASK_RELATED_LABEL.music },
+    { value: 'channel', label: TASK_RELATED_LABEL.channel },
+  ],
   saving,
   onChange,
   onClose,
@@ -46,6 +52,7 @@ export function TaskEditorModal({
   editing: boolean
   form: TaskFormValues
   relatedOptions: Array<{ value: string; label: string }>
+  relatedTypeOptions?: Array<{ value: string; label: string }>
   saving: boolean
   onChange: (patch: Partial<TaskFormValues>) => void
   onClose: () => void
@@ -111,12 +118,7 @@ export function TaskEditorModal({
         <Select
           label="Relacionar com (opcional)"
           value={form.relatedType}
-          options={[
-            { value: '', label: 'Nada — tarefa geral' },
-            { value: 'history', label: TASK_RELATED_LABEL.history },
-            { value: 'music', label: TASK_RELATED_LABEL.music },
-            { value: 'channel', label: TASK_RELATED_LABEL.channel },
-          ]}
+          options={relatedTypeOptions}
           onChange={(e) =>
             onChange({
               relatedType: e.target.value as '' | TaskRelatedType,

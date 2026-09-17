@@ -371,15 +371,16 @@ export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) 
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
+          {performance?.supportsLipSync ? (
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium text-muted">Lipsync</span>
             <Toggle
               checked={lipSyncOn}
-              disabled={!performance?.supportsLipSync}
               onChange={setLipSync}
               label={lipSyncOn ? 'Ligado' : 'Desligado'}
             />
           </div>
+          ) : null}
 
           <div className="w-full max-w-[220px]">
             <Select
@@ -419,8 +420,7 @@ export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) 
 
         {!performance?.supportsLipSync ? (
           <p className="text-xs text-muted-2">
-            Esta performance não tem vocal em cena, então o bloco de sincronização labial fica fora
-            do prompt.
+            Esta performance não tem vocal em cena, então o lipsync não se aplica.
           </p>
         ) : null}
 

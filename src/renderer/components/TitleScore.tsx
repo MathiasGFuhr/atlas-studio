@@ -54,7 +54,7 @@ export function TitleScorePanel({
   }
 
   const facts = currentTitle?.trim() ? computeTitleLocalFacts(currentTitle) : analysis.localFacts
-  const metrics = [
+  const metrics: Array<{ label: string; value: number | null | undefined }> = [
     { label: 'Gancho', value: analysis.metrics.hook },
     { label: 'Clareza', value: analysis.metrics.clarity },
     { label: 'Curiosidade', value: analysis.metrics.curiosity },

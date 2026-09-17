@@ -77,6 +77,13 @@ export const projectRepository = {
     return (getDb().prepare(sql).all(...params) as ProjectRow[]).map(mapProject)
   },
 
+  existsOfType(type: ProjectType): boolean {
+    const row = getDb()
+      .prepare('SELECT 1 AS ok FROM projects WHERE project_type = ? LIMIT 1')
+      .get(type) as { ok: number } | undefined
+    return Boolean(row)
+  },
+
   get(id: string): Project | null {
     const row = getDb().prepare(`${SELECT_WITH_COUNTS} WHERE p.id = ?`).get(id) as
       | ProjectRow

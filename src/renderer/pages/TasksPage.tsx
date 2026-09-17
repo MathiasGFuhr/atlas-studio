@@ -21,6 +21,8 @@ import { getAtlasApi } from '../lib/api'
 import { notifyTasksChanged, onTasksChanged } from '../lib/taskEvents'
 import { useToast } from '../components/Toast'
 import { cn } from '../lib/utils'
+import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
+import { taskRelatedTypeOptions } from '@shared/workspaceCapabilities'
 
 const FILTERS: TaskFilter[] = ['all', 'today', 'pending', 'completed']
 
@@ -30,6 +32,7 @@ export function TasksPage() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const { push } = useToast()
+  const { capabilities } = useWorkspaceCapabilities()
   const [tasks, setTasks] = useState<AtlasTask[]>([])
   const [historyProjects, setHistoryProjects] = useState<Project[]>([])
   const [musicProjects, setMusicProjects] = useState<Project[]>([])
@@ -338,6 +341,7 @@ export function TasksPage() {
         editing={Boolean(editing)}
         form={form}
         relatedOptions={relatedOptions}
+        relatedTypeOptions={taskRelatedTypeOptions(capabilities)}
         saving={saving}
         onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
         onClose={() => setModalOpen(false)}

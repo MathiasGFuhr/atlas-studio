@@ -1,18 +1,12 @@
 import {
   AUTO_IMAGE_FRAMING_BY_GROUP,
-  IMAGE_CONSTRAINTS,
+  AUTO_IMAGE_FRAMING_BY_SUBJECT,
   IMAGE_FRAMINGS,
-  IMAGE_INTRO,
-  IMAGE_LIPSYNC_BLOCK,
-  IMAGE_LIPSYNC_CONSTRAINTS,
-  IMAGE_PERFORMANCE_BY_ID,
   IMAGE_PERFORMANCES,
-  IMAGE_PRESERVATION,
-  IMAGE_QUALITY,
   IMAGE_SUBJECT_BY_ID,
   SINGER_LIPSYNC_VARIATIONS,
 } from './imagePresets'
-import { composeStageContextText, stageContextConstraints } from './stageContext'
+import { composeImageScenePrompt } from './imagePromptPresets/compose'
 import type {
   ComposeImagePromptInput,
   ImageAngleVariation,
@@ -26,7 +20,6 @@ import type {
   ImagePerformancePreset,
   ImagePurpose,
   ImageSubjectId,
-  ImageSubjectPreset,
 } from './imageTypes'
 
 /**
@@ -120,7 +113,9 @@ export function resolveImageFraming(
     if (explicit) return explicit
   }
   const subject = IMAGE_SUBJECT_BY_ID.get(subjectId)
-  const priority = subject ? AUTO_IMAGE_FRAMING_BY_GROUP[subject.framingGroup] : []
+  const priority =
+    (subject ? AUTO_IMAGE_FRAMING_BY_SUBJECT[subject.id] : undefined) ??
+    (subject ? AUTO_IMAGE_FRAMING_BY_GROUP[subject.framingGroup] : [])
   for (const id of priority) {
     const found = pool.find((framing) => framing.id === id)
     if (found) return found
@@ -135,46 +130,13 @@ export function resolveImageFraming(
  * + finalidade + restrições.
  */
 export function composeImagePrompt(input: ComposeImagePromptInput): string {
-  const subject = IMAGE_SUBJECT_BY_ID.get(input.subjectId)
-  const performance = IMAGE_PERFORMANCE_BY_ID.get(input.performanceId)
   const framing = resolveImageFraming(
     input.framingId,
     input.subjectId,
     input.purpose,
     input.performanceId,
   )
-  const lipSync = lipSyncApplies(input.subjectId, input.purpose)
-  const ensemble = subject?.framingGroup === 'band'
-  const stageOptions = {
-    stageContextId: input.stageContextId,
-    ensemble,
-    keepLeadSinger: Boolean(subject?.hasSinger && ensemble),
-    sceneKind: imageSceneKind(subject?.framingGroup, subject?.hasSinger),
-  }
-
-  const sections: string[] = [
-    IMAGE_INTRO,
-    subject?.text ?? '',
-    performance?.text ?? '',
-    framing?.text ?? '',
-    composeStageContextText(stageOptions),
-  ]
-
-  if (lipSync) sections.push(IMAGE_LIPSYNC_BLOCK)
-
-  sections.push(IMAGE_PRESERVATION, IMAGE_QUALITY)
-
-  const negatives = [
-    ...IMAGE_CONSTRAINTS,
-    ...(lipSync ? IMAGE_LIPSYNC_CONSTRAINTS : []),
-    ...stageContextConstraints(stageOptions),
-  ]
-  sections.push(`Avoid: ${negatives.join(', ')}.`)
-
-  return sections
-    .map((section) => section.trim())
-    .filter(Boolean)
-    .join('\n\n')
+  return composeImageScenePrompt(input, input.framingId === 'auto' ? null : framing)
 }
 
 /**
@@ -289,14 +251,4 @@ function selectDiverseFramings(
 /** Primeira performance válida — usada ao trocar de sujeito na UI. */
 export function defaultImagePerformanceFor(subjectId: ImageSubjectId) {
   return performancesForSubject(subjectId)[0]?.id ?? 'natural'
-}
-
-function imageSceneKind(
-  framingGroup: ImageSubjectPreset['framingGroup'] | undefined,
-  hasSinger: boolean | undefined,
-): 'singer' | 'guitarist' | 'drummer' | 'band-no-singer' {
-  if (framingGroup === 'guitarist') return 'guitarist'
-  if (framingGroup === 'drummer') return 'drummer'
-  if (framingGroup === 'band' && !hasSinger) return 'band-no-singer'
-  return 'singer'
 }

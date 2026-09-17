@@ -53,6 +53,7 @@ import type { AntigravityService } from '../services/antigravity/AntigravityServ
 import type { MusicSegment, MusicCutMode } from '../../shared/musicAnalysis'
 import type { ChatSendMessageRequest } from '../../shared/chat/types'
 import { ChatService } from '../services/chat/ChatService'
+import { getWorkspaceCapabilities } from '../services/workspace/getWorkspaceCapabilities'
 import {
   checkForAppUpdates,
   downloadAppUpdate,
@@ -408,6 +409,7 @@ export function registerIpcHandlers(deps: {
     },
   )
 
+  ipcMain.handle(IPC.workspace.capabilities, () => getWorkspaceCapabilities())
   ipcMain.handle(IPC.settings.get, () => settingsRepository.get())
   ipcMain.handle(IPC.settings.update, (_e, patch: Partial<AppSettings>) => {
     const next = settingsRepository.update(patch)

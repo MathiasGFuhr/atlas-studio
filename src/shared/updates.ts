@@ -71,6 +71,7 @@ const MAX_NOTE_TEXT = 480
 
 export const UPDATE_ERROR_CHECK =
   'Não foi possível verificar atualizações. Tente novamente em alguns instantes.'
+export const UPDATE_ERROR_DOWNLOAD_SHORT = 'Não foi possível baixar a atualização.'
 export const UPDATE_ERROR_DOWNLOAD =
   'Não foi possível baixar a atualização. Tente novamente em alguns instantes.'
 export const UPDATE_ERROR_INSTALL = 'Não foi possível instalar a atualização. Tente novamente.'
@@ -286,4 +287,55 @@ export function realDownloadPercent(transferred: number, total: number, percent?
 
 export function updateNotificationId(version: string): string {
   return `app-update:${version}`
+}
+
+export const SIDEBAR_UPDATE_TOAST_PREFIX = 'atlas.update.toast:'
+export const SIDEBAR_UPDATE_MINIMIZED_KEY = 'atlas.update.sidebarMinimized'
+
+export function isSidebarUpdateRelevant(
+  status: Pick<AppUpdateStatus, 'state' | 'availableVersion'> | null | undefined,
+  options: { userDownloadError?: boolean } = {},
+): boolean {
+  if (!status) return false
+  const { state, availableVersion } = status
+  if (state === 'available' || state === 'downloading' || state === 'ready') {
+    return Boolean(availableVersion?.trim())
+  }
+  if (state === 'error' && options.userDownloadError) return true
+  return false
+}
+
+export function sidebarUpdateToastMessage(version: string): string {
+  return `Atlas Studio ${version} está disponível.`
+}
+
+export function sidebarDownloadProgressLabel(percent: number | null): string {
+  if (percent == null) return 'Baixando...'
+  const rounded = Number.isInteger(percent) ? String(percent) : String(Math.round(percent))
+  return `Baixando... ${rounded}%`
+}
+
+export function safeUpdateErrorText(message: string | null | undefined): string | null {
+  if (!message) return null
+  const compact = message.replace(/\s+/g, ' ').trim()
+  if (!compact) return null
+  if (
+    compact.length > 180 ||
+    /https?:\/\//i.test(compact) ||
+    /\b(ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EPERM|ENOENT)\b/i.test(compact) ||
+    /\bat\s+\S+\s+\(/i.test(compact)
+  ) {
+    return UPDATE_ERROR_GENERIC
+  }
+  return compact
+}
+
+export function shouldToastAvailableUpdate(
+  status: Pick<AppUpdateStatus, 'state' | 'availableVersion'> | null | undefined,
+  alreadyToastedVersion: string | null,
+): string | null {
+  const version = status?.availableVersion?.trim()
+  if (!version || status?.state !== 'available') return null
+  if (alreadyToastedVersion === version) return null
+  return version
 }

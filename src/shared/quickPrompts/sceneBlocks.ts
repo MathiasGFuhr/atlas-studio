@@ -62,7 +62,7 @@ const GUITARIST_FRAMING: SceneBlockSet['framingTexts'] = {
   'medium-close-up':
     'Medium close-up instrument shot from the chest up, keeping the guitarist and the guitar clearly in frame.',
   'medium-shot':
-    'Medium shot framing from the waist up, showing the guitarist together with realistic guitar-playing motion.',
+    'Medium shot from the waist up, with the guitar fully visible.',
   'three-quarter-front':
     'Three-quarter frontal instrument shot of the guitarist, with the guitar fully visible.',
   'three-quarter-left':
@@ -81,7 +81,7 @@ const DRUMMER_FRAMING: SceneBlockSet['framingTexts'] = {
   'three-quarter-right':
     'Three-quarter angle from the right side of the drummer, keeping the kit, sticks and playing motion visible.',
   'medium-shot':
-    'Medium shot of the drummer that keeps the kit, arms and stick motion readable.',
+    'Medium shot of the drummer that keeps the kit, arms and stick motion clearly visible.',
   'medium-wide':
     'Controlled medium-wide drummer shot that includes the drummer and the kit without opening into a crowd or singer frame.',
   'low-angle-slight':
@@ -92,7 +92,7 @@ const BAND_FRAMING: SceneBlockSet['framingTexts'] = {
   'medium-shot':
     'Stable band shot from a medium distance, keeping the visible musicians and instruments in a coherent ensemble frame.',
   'medium-wide':
-    'Controlled medium-wide band shot that holds the group together without hunting for a singer.',
+    'Controlled medium-wide band shot that holds the group together as a coherent ensemble.',
   'three-quarter-front':
     'Three-quarter band shot covering the ensemble layout from the reference image.',
   'three-quarter-left':
@@ -113,7 +113,7 @@ export const SCENE_FRAMINGS: FramingPreset[] = [
     id: 'crowd-medium-shot',
     category: 'framing',
     label: 'Crowd medium shot',
-    text: 'Crowd medium shot holding a readable group of audience members, with the public area as the subject.',
+    text: 'Crowd medium shot of a coherent group of audience members, with the public area as the subject.',
     lipSyncFriendly: false,
   },
   {
@@ -182,51 +182,49 @@ export const SCENE_CAMERAS: CameraPreset[] = [
     id: 'subtle-handheld',
     category: 'camera',
     label: 'Handheld documental sutil',
-    text:
-      'A subtle documentary-style handheld camera, coherent with an audience shot: tiny natural micro-movement only, ' +
-      'never shaky, never circling and never hunting for a singer.',
+    text: 'Subtle documentary-style handheld: tiny natural micro-movement only.',
     compatibleActions: ['natural'],
   },
   {
     id: 'locked-cinematic-crowd',
     category: 'camera',
     label: 'Locked cinematic crowd shot',
-    text: 'A locked cinematic crowd shot on a tripod, completely stable, letting the audience reaction carry the frame.',
+    text: 'Use a locked cinematic crowd shot.',
     compatibleActions: [...AUDIENCE_ACTION_IDS],
   },
   {
     id: 'very-slow-push-in-crowd',
     category: 'camera',
     label: 'Very slow push-in on crowd',
-    text: 'A very slow push-in on the crowd, barely closing the distance while remaining on the audience.',
+    text: 'Use a very slow push-in on the crowd.',
     compatibleActions: [...AUDIENCE_ACTION_IDS],
   },
   {
     id: 'gentle-lateral-crowd',
     category: 'camera',
     label: 'Gentle lateral crowd movement',
-    text: 'Gentle lateral crowd movement on a smooth slider, holding a constant distance across the audience.',
+    text: 'Use a gentle lateral crowd movement, keeping a consistent distance.',
     compatibleActions: [...AUDIENCE_ACTION_IDS],
   },
   {
     id: 'stable-crowd',
     category: 'camera',
     label: 'Stable crowd shot',
-    text: 'A stable crowd shot with a locked, controlled frame that stays on the audience throughout.',
+    text: 'Use a stable professional crowd shot.',
     compatibleActions: [...AUDIENCE_ACTION_IDS],
   },
   {
     id: 'subtle-handheld-crowd',
     category: 'camera',
     label: 'Subtle documentary-style handheld',
-    text: 'Subtle documentary-style handheld on the crowd: tiny natural micro-movement only, never shaky.',
+    text: 'Subtle documentary-style handheld on the crowd.',
     compatibleActions: [...AUDIENCE_ACTION_IDS],
   },
   {
     id: 'slow-controlled-pull-back-crowd',
     category: 'camera',
     label: 'Slow controlled pull-back',
-    text: 'A slow controlled pull-back that gradually reveals more of the audience while staying on the crowd.',
+    text: 'Use a slow controlled pull-back on the crowd.',
     compatibleActions: [...AUDIENCE_ACTION_IDS],
   },
 ]
@@ -259,25 +257,19 @@ export const SCENE_BLOCKS: Record<Exclude<SceneKind, 'singer'>, SceneBlockSet> =
       'locked-cinematic',
     ],
     cameraTexts: {
-      'slow-push-in':
-        'The camera performs a slow, steady push-in toward the guitarist and the guitar, gaining intimacy gradually without ever rushing.',
-      'very-slow-push-in':
-        'The camera performs an almost imperceptible push-in on the guitarist and the guitar, barely closing the distance across the shot.',
-      'subtle-diagonal-dolly':
-        'The camera moves on a subtle diagonal dolly around the guitarist and the guitar, combining a slight forward and lateral drift in one continuous, controlled motion.',
-      'lateral-tracking-left':
-        'The camera slides laterally to the left on a smooth dolly or slider, keeping the guitarist and the guitar centred and the distance constant.',
-      'lateral-tracking-right':
-        'The camera slides laterally to the right on a smooth dolly or slider, keeping the guitarist and the guitar centred and the distance constant.',
-      'locked-cinematic':
-        'A locked-off cinematic instrument shot on a tripod, completely stable, letting the guitar performance carry the shot.',
+      'slow-push-in': 'Use a slow professional push-in on the guitarist and the guitar.',
+      'very-slow-push-in': 'Use a very slow cinematic push-in on the guitarist.',
+      'subtle-diagonal-dolly': 'Use a subtle diagonal dolly on the guitarist.',
+      'lateral-tracking-left': 'Use a slow lateral movement to the left, keeping the guitarist and guitar stable in frame.',
+      'lateral-tracking-right': 'Use a slow lateral movement to the right, keeping the guitarist and guitar stable in frame.',
+      'locked-cinematic': 'Use a locked cinematic instrument shot.',
     },
     autoFraming: ['medium-shot', 'three-quarter-front', 'medium-close-up', 'low-angle-slight'],
     autoCamera: [
+      'lateral-tracking-left',
       'locked-cinematic',
       'slow-push-in',
       'subtle-diagonal-dolly',
-      'lateral-tracking-left',
     ],
     constraints: [
       'no lip-sync',
@@ -319,18 +311,12 @@ export const SCENE_BLOCKS: Record<Exclude<SceneKind, 'singer'>, SceneBlockSet> =
       'subtle-diagonal-dolly',
     ],
     cameraTexts: {
-      'locked-cinematic':
-        'A locked-off cinematic drummer shot on a tripod, completely stable, letting the drumming carry the shot.',
-      'slow-push-in':
-        'The camera performs a slow, steady push-in toward the drummer and the drum kit, gaining presence gradually without ever rushing.',
-      'very-slow-push-in':
-        'The camera performs an almost imperceptible push-in on the drummer and the kit, holding a calm and controlled pace.',
-      'lateral-tracking-left':
-        'The camera slides laterally to the left on a smooth dolly or slider, keeping the drummer and the kit in frame at a constant distance.',
-      'lateral-tracking-right':
-        'The camera slides laterally to the right on a smooth dolly or slider, keeping the drummer and the kit in frame at a constant distance.',
-      'subtle-diagonal-dolly':
-        'The camera moves on a subtle diagonal dolly across the drummer shot, combining a slight forward and lateral drift in one continuous, controlled motion.',
+      'locked-cinematic': 'Use a locked cinematic drummer shot.',
+      'slow-push-in': 'Use a slow professional push-in toward the drummer and the kit.',
+      'very-slow-push-in': 'Use a very slow cinematic push-in on the drummer.',
+      'lateral-tracking-left': 'Use a slow lateral movement to the left, keeping the drummer and kit stable in frame.',
+      'lateral-tracking-right': 'Use a slow lateral movement to the right, keeping the drummer and kit stable in frame.',
+      'subtle-diagonal-dolly': 'Use a subtle diagonal dolly across the drummer shot.',
     },
     autoFraming: [
       'medium-shot',
@@ -383,21 +369,16 @@ export const SCENE_BLOCKS: Record<Exclude<SceneKind, 'singer'>, SceneBlockSet> =
       'subtle-diagonal-dolly',
     ],
     cameraTexts: {
-      'locked-cinematic':
-        'A locked-off cinematic band shot on a tripod, completely stable, holding the ensemble in a coherent live-band frame.',
-      'lateral-tracking-left':
-        'The camera slides laterally to the left with gentle movement across the band, keeping the group composition and a constant distance.',
-      'lateral-tracking-right':
-        'The camera slides laterally to the right with gentle movement across the band, keeping the group composition and a constant distance.',
-      'slow-push-in':
-        'The camera performs a slow, controlled push-in on the band as a group, without moving toward a singer or a single front performer.',
-      'subtle-diagonal-dolly':
-        'The camera moves on a subtle diagonal across the band, combining a slight forward and lateral drift in one continuous, controlled motion.',
+      'locked-cinematic': 'Use a locked cinematic band shot.',
+      'lateral-tracking-left': 'Use a slow controlled camera movement across the band to the left.',
+      'lateral-tracking-right': 'Use a slow controlled camera movement across the band to the right.',
+      'slow-push-in': 'Use a slow controlled push-in on the band as a group.',
+      'subtle-diagonal-dolly': 'Use a subtle diagonal across the band.',
     },
     autoFraming: ['medium-wide', 'medium-shot', 'three-quarter-front'],
     autoCamera: [
-      'locked-cinematic',
       'lateral-tracking-left',
+      'locked-cinematic',
       'slow-push-in',
       'subtle-diagonal-dolly',
     ],

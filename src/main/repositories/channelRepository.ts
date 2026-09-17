@@ -133,6 +133,22 @@ export const channelRepository = {
     return (db.prepare(sql).all(...params) as ChannelRow[]).map(mapChannel)
   },
 
+  existsOfType(type: Channel['channelType']): boolean {
+    const db = getDb()
+    if (type === 'music') {
+      const row = db
+        .prepare(`SELECT 1 AS ok FROM channels WHERE channel_type = 'music' LIMIT 1`)
+        .get() as { ok: number } | undefined
+      return Boolean(row)
+    }
+    const row = db
+      .prepare(
+        `SELECT 1 AS ok FROM channels WHERE channel_type IS NULL OR channel_type != 'music' LIMIT 1`,
+      )
+      .get() as { ok: number } | undefined
+    return Boolean(row)
+  },
+
   get(id: string): Channel | null {
     const row = getDb()
       .prepare(

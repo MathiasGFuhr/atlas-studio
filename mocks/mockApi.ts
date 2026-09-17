@@ -38,7 +38,13 @@ import type {
   ChatSendMessageRequest,
   ChatSendMessageResult,
 } from '../src/shared/chat/types'
+import { CHAT_DOCK_DEFAULT_HEIGHT, CHAT_DOCK_DEFAULT_WIDTH } from '../src/shared/chat/chatDockSize'
 import { GENERATION_STEPS } from '../src/shared/types'
+import {
+  detectContentAreaPresence,
+  preferenceFromSettings,
+  resolveWorkspaceCapabilities,
+} from '../src/shared/workspaceCapabilities'
 
 /**
  * Mock API para preview no navegador (sem Electron).
@@ -103,6 +109,11 @@ const settings: AppSettings = {
   antigravityBinaryPath: '',
   codexOnboardingDismissed: true,
   notificationReadKeys: [],
+  contentAreasAutoDetect: true,
+  contentAreasHistoryEnabled: true,
+  contentAreasMusicEnabled: true,
+  chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
+  chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
 }
 
 let progressListener: ((event: GenerationProgressEvent) => void) | null = null
@@ -602,6 +613,16 @@ export const mockApi = {
       return settings
     },
   },
+  workspace: {
+    capabilities: async () =>
+      resolveWorkspaceCapabilities(
+        detectContentAreaPresence({
+          channelTypes: channels.map((channel) => channel.channelType),
+          projectTypes: projects.map((project) => project.projectType),
+        }),
+        preferenceFromSettings(settings),
+      ),
+  },
   codex: {
     status: async (): Promise<CodexStatus> => ({
       connected: false,
@@ -688,7 +709,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.5.2',
+      currentVersion: '1.5.3',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

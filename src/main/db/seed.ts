@@ -1,6 +1,7 @@
 import type { AppDatabase } from './database'
 import path from 'node:path'
 import type { AppSettings, OutputStyle } from '../../shared/types'
+import { CHAT_DOCK_DEFAULT_HEIGHT, CHAT_DOCK_DEFAULT_WIDTH } from '../../shared/chat/chatDockSize'
 
 /**
  * Popula apenas as settings padrão quando o banco é recém-criado.
@@ -46,6 +47,11 @@ export function seedIfEmpty(db: AppDatabase, workspaceRoot: string) {
     antigravityBinaryPath: '',
     codexOnboardingDismissed: false,
     notificationReadKeys: [],
+    contentAreasAutoDetect: true,
+    contentAreasHistoryEnabled: true,
+    contentAreasMusicEnabled: true,
+    chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
+    chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
   }
 
   const upsert = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')

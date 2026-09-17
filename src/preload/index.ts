@@ -43,6 +43,7 @@ import type {
 } from '../shared/chat/types'
 import type { AppUpdateStatus } from '../shared/updates'
 import { IPC } from '../shared/types'
+import type { WorkspaceCapabilities } from '../shared/workspaceCapabilities'
 
 const api = {
   projects: {
@@ -228,6 +229,10 @@ const api = {
       ipcRenderer.invoke(IPC.settings.setProfilePhoto, sourcePath) as Promise<AppSettings>,
     clearProfilePhoto: () =>
       ipcRenderer.invoke(IPC.settings.clearProfilePhoto) as Promise<AppSettings>,
+  },
+  workspace: {
+    capabilities: () =>
+      ipcRenderer.invoke(IPC.workspace.capabilities) as Promise<WorkspaceCapabilities>,
   },
   codex: {
     status: () => ipcRenderer.invoke(IPC.codex.status) as Promise<CodexStatus>,

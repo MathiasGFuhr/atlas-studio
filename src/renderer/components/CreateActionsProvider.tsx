@@ -18,9 +18,12 @@ import {
 import { TaskEditorModal, EMPTY_TASK_FORM, type TaskFormValues } from './TaskEditorModal'
 import { getAtlasApi } from '../lib/api'
 import { notifyProjectsChanged } from '../lib/projectEvents'
+import { notifyChannelsChanged } from '../lib/channelEvents'
 import { notifyTasksChanged } from '../lib/taskEvents'
 import { projectPath } from '../lib/environments'
 import { useToast } from './Toast'
+import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
+import { enabledContentAreas, taskRelatedTypeOptions } from '@shared/workspaceCapabilities'
 
 const EMPTY_PROJECT_FORM: ProjectFormValues = { name: '', description: '', channelId: '' }
 
@@ -45,6 +48,7 @@ export function CreateActionsProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { push } = useToast()
+  const { capabilities } = useWorkspaceCapabilities()
 
   const [projectType, setProjectType] = useState<ProjectType | null>(null)
   const [projectForm, setProjectForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
@@ -101,11 +105,14 @@ export function CreateActionsProvider({ children }: { children: ReactNode }) {
         if (kind === 'channel') {
           const niches = await api.niches.list()
           const area = createMenuAreaFromPath(location.pathname)
+          const enabled = enabledContentAreas(capabilities)
+          const preferred =
+            area !== 'home' && enabled.includes(area) ? area : (enabled[0] ?? 'history')
           setChannelNiches(niches)
           setPendingAvatar(null)
           setChannelForm({
             ...EMPTY_CHANNEL_FORM,
-            channelType: area === 'music' ? 'music' : 'history',
+            channelType: preferred,
           })
           setChannelOpen(true)
           return
@@ -123,7 +130,7 @@ export function CreateActionsProvider({ children }: { children: ReactNode }) {
         setTaskOpen(true)
       })()
     },
-    [api, location.pathname],
+    [api, capabilities, location.pathname],
   )
 
   async function saveProject() {
@@ -178,6 +185,7 @@ export function CreateActionsProvider({ children }: { children: ReactNode }) {
       }
       setChannelOpen(false)
       setPendingAvatar(null)
+      notifyChannelsChanged()
       navigate(`/canais/${saved.id}`)
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao salvar canal', 'error')
@@ -236,6 +244,7 @@ export function CreateActionsProvider({ children }: { children: ReactNode }) {
         niches={channelNiches}
         pendingAvatar={pendingAvatar}
         saving={channelSaving}
+        hideNiche={!capabilities.historyEnabled}
         onChange={(patch) => setChannelForm((current) => ({ ...current, ...patch }))}
         onClose={() => setChannelOpen(false)}
         onSubmit={() => void saveChannel()}
@@ -246,6 +255,7 @@ export function CreateActionsProvider({ children }: { children: ReactNode }) {
         editing={false}
         form={taskForm}
         relatedOptions={relatedOptions}
+        relatedTypeOptions={taskRelatedTypeOptions(capabilities)}
         saving={taskSaving}
         onChange={(patch) => setTaskForm((current) => ({ ...current, ...patch }))}
         onClose={() => setTaskOpen(false)}

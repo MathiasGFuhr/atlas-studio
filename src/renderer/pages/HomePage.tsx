@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, FolderKanban, ListTodo, Tv } from 'lucide-react'
-import type { AtlasTask, Channel, Project, ProjectType, ScriptRecord } from '@shared/types'
+import type { AtlasTask, Channel, ChannelVideo, Project, ProjectType, ScriptRecord } from '@shared/types'
 import type { MusicTrack } from '@shared/musicAnalysis'
 import { dueDateState, pendingDueTodayCount, pendingTasksForHome } from '@shared/tasks'
 import { buildHomeActivity } from '@shared/homeActivity'
 import { buildHomeModuleStats } from '@shared/homeStats'
+import {
+  HOME_UPCOMING_VIDEO_LIMIT,
+  channelAgendaPath,
+  channelVideoPath,
+  todayDateKey,
+} from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import {
@@ -16,45 +22,53 @@ import { HomeModuleCard } from '../components/home/HomeModuleCard'
 import { HomeStatCard } from '../components/home/HomeStatCard'
 import { HomeTaskRow } from '../components/home/HomeTaskRow'
 import { HomeActivityRow } from '../components/home/HomeActivityRow'
+import { HomeScheduledVideoCard } from '../components/home/HomeScheduledVideoCard'
 import { getAtlasApi } from '../lib/api'
 import { ENVIRONMENTS } from '../lib/environments'
 import { notifyProjectsChanged, onProjectsChanged } from '../lib/projectEvents'
 import { notifyTasksChanged, onTasksChanged } from '../lib/taskEvents'
+import { onChannelsChanged } from '../lib/channelEvents'
+import { onVideosChanged } from '../lib/videoEvents'
 import { useToast } from '../components/Toast'
 import { formatRelativeDate } from '../lib/utils'
+import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
+import { enabledContentAreas } from '@shared/workspaceCapabilities'
 
 const EMPTY_FORM: ProjectFormValues = { name: '', description: '', channelId: '' }
-
-const MODULES: ProjectType[] = ['history', 'music']
 
 export function HomePage() {
   const api = getAtlasApi()
   const navigate = useNavigate()
   const { push } = useToast()
+  const { capabilities } = useWorkspaceCapabilities()
+  const modules = enabledContentAreas(capabilities)
 
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<AtlasTask[]>([])
   const [channels, setChannels] = useState<Channel[]>([])
   const [scripts, setScripts] = useState<ScriptRecord[]>([])
   const [tracks, setTracks] = useState<MusicTrack[]>([])
+  const [upcomingVideos, setUpcomingVideos] = useState<ChannelVideo[]>([])
   const [createType, setCreateType] = useState<ProjectType | null>(null)
   const [form, setForm] = useState<ProjectFormValues>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
-    const [history, music, taskList, channelList, scriptList, trackList] = await Promise.all([
+    const [history, music, taskList, channelList, scriptList, trackList, videoList] = await Promise.all([
       api.projects.list({ projectType: 'history' }),
       api.projects.list({ projectType: 'music' }),
       api.tasks.list(),
       api.channels.list(),
       api.scripts.list(),
       api.music.list(),
+      api.videos.list({ from: todayDateKey(), limit: HOME_UPCOMING_VIDEO_LIMIT }),
     ])
     setProjects([...history, ...music])
     setTasks(taskList)
     setChannels(channelList)
     setScripts(scriptList)
     setTracks(trackList)
+    setUpcomingVideos(videoList)
   }, [api])
 
   useEffect(() => {
@@ -64,6 +78,8 @@ export function HomePage() {
     }
     const stopTasks = onTasksChanged(refresh)
     const stopProjects = onProjectsChanged(refresh)
+    const stopVideos = onVideosChanged(refresh)
+    const stopChannels = onChannelsChanged(refresh)
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh()
     }
@@ -72,6 +88,8 @@ export function HomePage() {
     return () => {
       stopTasks()
       stopProjects()
+      stopVideos()
+      stopChannels()
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', refresh)
     }
@@ -128,6 +146,20 @@ export function HomePage() {
     }
   }
 
+  async function copyVideoField(value: string, emptyMessage: string, successMessage: string) {
+    const text = value.trim()
+    if (!text) {
+      push(emptyMessage, 'error')
+      return
+    }
+    try {
+      await api.system.copyText(text)
+      push(successMessage, 'success')
+    } catch {
+      push('Não foi possível copiar.', 'error')
+    }
+  }
+
   async function completeTask(task: AtlasTask) {
     try {
       await api.tasks.setStatus(task.id, 'completed')
@@ -149,8 +181,8 @@ export function HomePage() {
         hint="Gerencie projetos, canais, tarefas e produção em um só lugar."
       />
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {MODULES.map((type) => {
+      <div className={modules.length > 1 ? 'grid grid-cols-1 gap-5 lg:grid-cols-2' : 'grid grid-cols-1 gap-5'}>
+        {modules.map((type) => {
           const env = ENVIRONMENTS[type]
           const stats =
             type === 'history'
@@ -188,7 +220,15 @@ export function HomePage() {
           icon={<FolderKanban className="h-4 w-4" />}
           label="Projetos"
           value={projects.length}
-          hint="História e Música"
+          hint={
+            modules.length === 2
+              ? 'História e Música'
+              : modules[0] === 'music'
+                ? 'Música'
+                : modules[0] === 'history'
+                  ? 'História'
+                  : 'Projetos cadastrados'
+          }
         />
         <HomeStatCard
           icon={<Tv className="h-4 w-4" />}
@@ -211,6 +251,56 @@ export function HomePage() {
           hint={latestActivity?.detail}
         />
       </div>
+
+      <section className="mt-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="text-base font-semibold text-text">Vídeos agendados</h2>
+            <span className="rounded-full border border-border-soft bg-card-2 px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted">
+              {upcomingVideos.length}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(channelAgendaPath())}
+            className="shrink-0 text-xs font-medium text-accent hover:underline"
+          >
+            Ver todos
+          </button>
+        </div>
+        {upcomingVideos.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border-soft bg-card px-4 py-3">
+            <p className="text-sm text-muted">Nenhum vídeo agendado.</p>
+            <button
+              type="button"
+              onClick={() => navigate('/canais')}
+              className="text-xs font-medium text-accent hover:underline"
+            >
+              Abrir canais
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {upcomingVideos.map((video) => (
+              <HomeScheduledVideoCard
+                key={video.id}
+                video={video}
+                onOpen={() => navigate(channelVideoPath(video.channelId, video.id))}
+                onCopyTitle={() =>
+                  void copyVideoField(video.title, 'Este vídeo ainda não tem título.', 'Título copiado.')
+                }
+                onCopyDescription={() =>
+                  void copyVideoField(
+                    video.description,
+                    'Este vídeo ainda não tem descrição.',
+                    'Descrição copiada.',
+                  )
+                }
+              />
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-2">
         <section>

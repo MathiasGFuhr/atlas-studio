@@ -22,6 +22,7 @@ export type ImageSubjectId =
   | 'guitarist-drummer'
   | 'band-no-singer'
   | 'band-with-singer'
+  | 'audience'
 
 export type ImagePerformanceId =
   | 'singing-mic'
@@ -38,6 +39,9 @@ export type ImagePerformanceId =
   | 'band-playing'
   | 'chorus-moment'
   | 'natural'
+  | 'crowd-watching'
+  | 'crowd-reacting'
+  | 'crowd-clapping'
 
 export type ImageFramingId =
   | 'auto'
@@ -114,6 +118,12 @@ export type ImageFramingId =
   | 'band-off-center'
   | 'band-instrumental-portrait'
   | 'band-live-stage'
+  | 'crowd-medium'
+  | 'crowd-wide'
+  | 'crowd-front-row'
+  | 'crowd-section'
+  | 'crowd-side'
+  | 'crowd-stage-bg'
 
 /** Finalidade da imagem. Lipsync aperta as regras de rosto e distância. */
 export type ImagePurpose = 'lipsync' | 'scene'
@@ -122,7 +132,7 @@ export type ImagePurpose = 'lipsync' | 'scene'
  * Grupo de enquadramentos. Cada "quem aparece" puxa o grupo adequado, para
  * que um baterista nunca receba um ângulo pensado para close de cantor.
  */
-export type ImageFramingGroup = 'singer' | 'guitarist' | 'drummer' | 'band'
+export type ImageFramingGroup = 'singer' | 'guitarist' | 'drummer' | 'band' | 'audience'
 
 /** Distância do enquadramento — eixo principal de variedade visual. */
 export type ImageDistance = 'tight-close' | 'close-up' | 'mcu' | 'medium' | 'medium-wide'

@@ -1,16 +1,15 @@
-import { useEffect, useState } from 'react'
 import { Download, RefreshCw, RotateCcw } from 'lucide-react'
 import type { AppSettings } from '@shared/types'
-import type { AppUpdateStatus } from '@shared/updates'
 import {
-  UPDATE_ERROR_GENERIC,
   UPDATE_NOTES_FALLBACK,
   normalizeReleaseNotes,
+  safeUpdateErrorText,
   updateStateLabel,
 } from '@shared/updates'
 import { Button } from './Button'
 import { Card } from './Card'
 import { getAtlasApi } from '../lib/api'
+import { useAppUpdate } from '../hooks/useAppUpdate'
 
 export function UpdatesSettingsCard({
   settings,
@@ -22,28 +21,13 @@ export function UpdatesSettingsCard({
   highlight?: boolean
 }) {
   const api = getAtlasApi()
-  const [status, setStatus] = useState<AppUpdateStatus | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    void api.updates.status().then(setStatus)
-    return api.updates.onChanged(setStatus)
-  }, [api])
+  const { status, busy, check, download, install, minimizeSidebarCard } = useAppUpdate()
 
   async function persistAutoCheck(enabled: boolean) {
     const next = { ...settings, autoCheckUpdates: enabled }
     onSettingsChange(next)
     const saved = await api.settings.update({ autoCheckUpdates: enabled })
     onSettingsChange(saved)
-  }
-
-  async function run(action: () => Promise<AppUpdateStatus>) {
-    setBusy(true)
-    try {
-      setStatus(await action())
-    } finally {
-      setBusy(false)
-    }
   }
 
   const version = status?.currentVersion ?? '—'
@@ -153,7 +137,7 @@ export function UpdatesSettingsCard({
             variant="secondary"
             icon={<RefreshCw className={`h-4 w-4 ${busy && state === 'checking' ? 'animate-spin' : ''}`} />}
             disabled={busy || state === 'downloading'}
-            onClick={() => void run(() => api.updates.check())}
+            onClick={() => void check()}
           >
             Verificar atualizações
           </Button>
@@ -161,7 +145,7 @@ export function UpdatesSettingsCard({
             <Button
               icon={<Download className="h-4 w-4" />}
               disabled={busy}
-              onClick={() => void run(() => api.updates.download())}
+              onClick={() => void download()}
             >
               Baixar atualização
             </Button>
@@ -170,11 +154,11 @@ export function UpdatesSettingsCard({
             <>
               <Button
                 disabled={busy}
-                onClick={() => void run(() => api.updates.install())}
+                onClick={() => void install()}
               >
                 Reiniciar e atualizar
               </Button>
-              <Button variant="ghost" disabled={busy} onClick={() => undefined}>
+              <Button variant="ghost" disabled={busy} onClick={minimizeSidebarCard}>
                 Depois
               </Button>
             </>
@@ -183,19 +167,4 @@ export function UpdatesSettingsCard({
       </div>
     </Card>
   )
-}
-
-function safeUpdateErrorText(message: string | null | undefined): string | null {
-  if (!message) return null
-  const compact = message.replace(/\s+/g, ' ').trim()
-  if (!compact) return null
-  if (
-    compact.length > 180 ||
-    /https?:\/\//i.test(compact) ||
-    /\b(ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EPERM|ENOENT)\b/i.test(compact) ||
-    /\bat\s+\S+\s+\(/i.test(compact)
-  ) {
-    return UPDATE_ERROR_GENERIC
-  }
-  return compact
 }

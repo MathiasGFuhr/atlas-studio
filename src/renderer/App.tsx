@@ -5,6 +5,7 @@ import { AppSidebar } from './components/AppSidebar'
 import { TopBar } from './components/TopBar'
 import { ToastProvider } from './components/Toast'
 import { CreateActionsProvider } from './components/CreateActionsProvider'
+import { ContentAreaRoute } from './components/ContentAreaRoute'
 import { CodexLinkModal } from './components/CodexLinkModal'
 import { CodexOnboarding } from './components/CodexOnboarding'
 import { HomePage } from './pages/HomePage'
@@ -14,6 +15,7 @@ import { CreateScriptPage } from './pages/CreateScriptPage'
 import { NichesPage } from './pages/NichesPage'
 import { ChannelsPage } from './pages/ChannelsPage'
 import { ChannelCalendarPage } from './pages/ChannelCalendarPage'
+import { ChannelAgendaPage } from './pages/ChannelAgendaPage'
 import { PromptsPage } from './pages/PromptsPage'
 import { ScriptsPage } from './pages/ScriptsPage'
 import { ScriptDetailPage } from './pages/ScriptDetailPage'
@@ -25,6 +27,9 @@ import { ChatDock } from './components/chat/ChatDock'
 import { getAtlasApi } from './lib/api'
 import { openAtlasChat } from './lib/chatEvents'
 import { useCodexAuth } from './hooks/useCodexAuth'
+import { WorkspaceCapabilitiesProvider } from './hooks/useWorkspaceCapabilities'
+import { AppUpdateProvider } from './hooks/useAppUpdate'
+import { MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { version as appVersion } from '../../package.json'
 
 /** Mantém links antigos funcionando sem duplicar telas. */
@@ -65,8 +70,10 @@ export default function App() {
   }, [codexAuth])
 
   return (
-    <ToastProvider>
+        <ToastProvider>
       <HashRouter>
+        <AppUpdateProvider>
+        <WorkspaceCapabilitiesProvider>
         <CreateActionsProvider>
         <div className="flex h-full w-full overflow-hidden bg-bg text-text">
           <AppSidebar
@@ -79,40 +86,112 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<HomePage />} />
 
-                {/* Ambiente História */}
-                <Route path="/historia" element={<ProjectsPage projectType="history" />} />
+                <Route
+                  path="/historia"
+                  element={
+                    <ContentAreaRoute area="history">
+                      <ProjectsPage projectType="history" />
+                    </ContentAreaRoute>
+                  }
+                />
                 <Route
                   path="/historia/projetos/:id"
-                  element={<ProjectDetailPage projectType="history" />}
+                  element={
+                    <ContentAreaRoute area="history">
+                      <ProjectDetailPage projectType="history" />
+                    </ContentAreaRoute>
+                  }
                 />
                 <Route
                   path="/historia/criar"
                   element={
-                    <CreateScriptPage
-                      codexAuth={codexAuth}
-                      onRequestLink={() => setLinkModalOpen(true)}
-                    />
+                    <ContentAreaRoute area="history">
+                      <CreateScriptPage
+                        codexAuth={codexAuth}
+                        onRequestLink={() => setLinkModalOpen(true)}
+                      />
+                    </ContentAreaRoute>
                   }
                 />
-                <Route path="/historia/roteiros" element={<ScriptsPage />} />
-                <Route path="/historia/roteiros/:id" element={<ScriptDetailPage />} />
-                <Route path="/historia/nichos" element={<NichesPage />} />
+                <Route
+                  path="/historia/roteiros"
+                  element={
+                    <ContentAreaRoute area="history">
+                      <ScriptsPage />
+                    </ContentAreaRoute>
+                  }
+                />
+                <Route
+                  path="/historia/roteiros/:id"
+                  element={
+                    <ContentAreaRoute area="history">
+                      <ScriptDetailPage />
+                    </ContentAreaRoute>
+                  }
+                />
+                <Route
+                  path="/historia/nichos"
+                  element={
+                    <ContentAreaRoute area="history">
+                      <NichesPage />
+                    </ContentAreaRoute>
+                  }
+                />
 
                 {/* Ambiente Música */}
-                <Route path="/musica" element={<ProjectsPage projectType="music" />} />
+                <Route
+                  path="/musica"
+                  element={
+                    <ContentAreaRoute area="music">
+                      <ProjectsPage projectType="music" />
+                    </ContentAreaRoute>
+                  }
+                />
                 <Route
                   path="/musica/projetos/:id"
-                  element={<ProjectDetailPage projectType="music" />}
+                  element={
+                    <ContentAreaRoute area="music">
+                      <ProjectDetailPage projectType="music" />
+                    </ContentAreaRoute>
+                  }
                 />
-                <Route path="/musica/faixas" element={<MusicPage />} />
-                <Route path="/musica/faixas/:id" element={<MusicEditorPage />} />
+                <Route
+                  path="/musica/faixas"
+                  element={
+                    <ContentAreaRoute area="music">
+                      <MusicPage />
+                    </ContentAreaRoute>
+                  }
+                />
+                <Route
+                  path="/musica/faixas/:id"
+                  element={
+                    <ContentAreaRoute area="music">
+                      <MusicEditorPage />
+                    </ContentAreaRoute>
+                  }
+                />
+                <Route
+                  path={MUSIC_PROMPTS_PATH}
+                  element={
+                    <ContentAreaRoute
+                      area="music"
+                      unavailableTitle="Prompts rápidos fazem parte do ambiente Música."
+                      unavailableDescription={null}
+                    >
+                      <PromptsPage />
+                    </ContentAreaRoute>
+                  }
+                />
 
                 {/* Áreas compartilhadas */}
                 <Route path="/canais" element={<ChannelsPage />} />
+                <Route path="/canais/agenda" element={<ChannelAgendaPage />} />
+                <Route path="/canais/:id/videos/:videoId" element={<ChannelCalendarPage />} />
                 <Route path="/canais/:id" element={<ChannelCalendarPage />} />
                 <Route path="/tarefas" element={<TasksPage />} />
                 <Route path="/chat" element={<OpenChatRedirect />} />
-                <Route path="/prompts" element={<PromptsPage />} />
+                <Route path="/prompts" element={<Navigate to={MUSIC_PROMPTS_PATH} replace />} />
                 <Route
                   path="/configuracoes"
                   element={
@@ -177,6 +256,8 @@ export default function App() {
           onClose={() => setLinkModalOpen(false)}
         />
         </CreateActionsProvider>
+        </WorkspaceCapabilitiesProvider>
+        </AppUpdateProvider>
       </HashRouter>
     </ToastProvider>
   )

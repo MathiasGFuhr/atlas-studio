@@ -1,3 +1,4 @@
+import { IMAGE_SCENE_BODIES } from './imagePromptPresets/bodies'
 import type {
   ImageFramingId,
   ImageFramingPreset,
@@ -10,70 +11,24 @@ import type {
 /**
  * Biblioteca de presets da categoria "Criar imagem".
  *
- * Fonte única de verdade dos blocos e das compatibilidades de imagem estática.
- * Para adicionar um preset novo, acrescente a entrada no array correspondente.
- *
- * Textos em inglês usam sempre expressões neutras ("the singer from the
- * reference image"), para funcionarem com cantor ou cantora sem duplicar preset.
+ * IDs, labels e compatibilidade ficam aqui. O corpo textual de cada cena
+ * vive em `imagePromptPresets/bodies.ts`.
  */
 
-/** Abertura comum a todos os prompts de imagem. */
-export const IMAGE_INTRO =
-  'Create a highly realistic professional music performance image using the reference image ' +
-  'as the exact visual reference.'
-
-/** Preservação da referência: identidade, roupa, instrumento e cenário. */
-export const IMAGE_PRESERVATION =
-  'Preserve exactly the identity, face, hair, age, body proportions, clothing, instruments, ' +
-  'environment and lighting from the supplied reference image. Keep the same people, the same ' +
-  'wardrobe and the same location, without inventing anything that is not in the reference.'
-
-/** Padrão de qualidade fotográfica exigido. */
-export const IMAGE_QUALITY =
-  'Professional realistic concert photography, believable anatomy, natural posture, realistic ' +
-  'hands, coherent instrument proportions, sharp focus and cinematic composition.'
-
-/** Bloco de preparação para lipsync, aplicado só quando há cantor em cena. */
-export const IMAGE_LIPSYNC_BLOCK =
-  "The singer's face must remain clearly visible and unobstructed, with the mouth fully " +
-  'visible and naturally positioned for later lip-sync animation. The face is well lit, in ' +
-  'sharp focus, with the head in a natural upright position and the facial features sharp ' +
-  'and well defined.'
-
-/** Defeitos recusados em qualquer imagem gerada. */
-export const IMAGE_CONSTRAINTS = [
-  'no face changes',
-  'no identity changes',
-  'no clothing changes',
-  'no different instruments',
-  'no duplicated instruments',
-  'no distorted or warped instruments',
-  'no extra fingers',
-  'no extra limbs',
-  'no duplicated people',
-  'no additional musicians that are not requested',
-  'no incorrect anatomy',
-  'no deformed hands',
-]
-
-/** Obstruções que inviabilizam o lipsync posterior. */
-export const IMAGE_LIPSYNC_CONSTRAINTS = [
-  'no microphone blocking the mouth',
-  'no hair covering the mouth',
-  'no hands covering the face',
-  'no harsh shadows over the mouth',
-  'no objects in front of the face',
-  'no extreme 90-degree profile',
-  'no excessively tilted or turned head',
-  'no distant framing where the subject is small in frame',
-]
+function subject(
+  draft: Omit<ImageSubjectPreset, 'category' | 'text'> & { text?: string },
+): ImageSubjectPreset {
+  return {
+    category: 'image-subject',
+    ...draft,
+    text: draft.text ?? IMAGE_SCENE_BODIES[draft.id].text,
+  }
+}
 
 export const IMAGE_SUBJECTS: ImageSubjectPreset[] = [
-  {
+  subject({
     id: 'singer-solo',
-    category: 'image-subject',
     label: 'Cantor sozinho',
-    text: 'The singer from the reference image is alone in the frame, performing naturally with authentic posture and a restrained facial expression appropriate to a real music performance.',
     hasSinger: true,
     framingGroup: 'singer',
     compatiblePerformances: [
@@ -83,12 +38,10 @@ export const IMAGE_SUBJECTS: ImageSubjectPreset[] = [
       'seated-singing',
       'natural',
     ],
-  },
-  {
+  }),
+  subject({
     id: 'singer-acoustic',
-    category: 'image-subject',
     label: 'Cantor + violão',
-    text: 'The singer from the reference image performs naturally while holding and playing an acoustic guitar. The guitar position, the hands and the playing posture are anatomically realistic, with the left hand correctly placed on the fretboard and the right arm in a natural strumming position.',
     hasSinger: true,
     framingGroup: 'singer',
     compatiblePerformances: [
@@ -98,12 +51,10 @@ export const IMAGE_SUBJECTS: ImageSubjectPreset[] = [
       'seated-singing',
       'natural',
     ],
-  },
-  {
+  }),
+  subject({
     id: 'singer-electric',
-    category: 'image-subject',
     label: 'Cantor + guitarra',
-    text: 'The singer from the reference image performs naturally while holding and playing an electric guitar. The guitar body and neck are correctly proportioned, the hands are anatomically correct on the fretboard and strings, and the stance is grounded and realistic.',
     hasSinger: true,
     framingGroup: 'singer',
     compatiblePerformances: [
@@ -112,88 +63,77 @@ export const IMAGE_SUBJECTS: ImageSubjectPreset[] = [
       'standing-singing',
       'natural',
     ],
-  },
-  {
+  }),
+  subject({
     id: 'singer-full-band',
-    category: 'image-subject',
     label: 'Cantor + banda completa',
-    text: 'The singer from the reference image remains the primary subject in the foreground while the full band performs naturally behind and around the singer, distributed across the stage. No musician blocks or overlaps the face of the singer, who stays visually dominant in the composition.',
     hasSinger: true,
     framingGroup: 'band',
     compatiblePerformances: ['natural-with-band', 'singing-mic', 'chorus-moment', 'natural'],
-  },
-  {
+  }),
+  subject({
     id: 'singer-guitarist',
-    category: 'image-subject',
     label: 'Cantor + guitarrista',
-    text: 'The singer from the reference image is the primary subject in the foreground, with the guitarist performing naturally beside or slightly behind. The guitarist never blocks the face of the singer, and both keep realistic performance posture.',
     hasSinger: true,
     framingGroup: 'band',
     compatiblePerformances: ['natural-with-band', 'singing-mic', 'natural'],
-  },
-  {
+  }),
+  subject({
     id: 'singer-drummer',
-    category: 'image-subject',
     label: 'Cantor + baterista',
-    text: 'The singer from the reference image is the primary subject in the foreground, with the drummer performing behind the drum kit further back in the frame. The kit and the drummer stay clearly readable without competing with the singer.',
     hasSinger: true,
     framingGroup: 'band',
     compatiblePerformances: ['natural-with-band', 'singing-mic', 'natural'],
-  },
-  {
+  }),
+  subject({
     id: 'singer-guitarist-drummer',
-    category: 'image-subject',
     label: 'Cantor + guitarrista + baterista',
-    text: 'The singer from the reference image is the primary subject in the foreground, with the guitarist to the side and the drummer behind the kit further back, arranged in a natural stage layout. Exactly three musicians are present and nobody blocks the face of the singer.',
     hasSinger: true,
     framingGroup: 'band',
     compatiblePerformances: ['natural-with-band', 'chorus-moment', 'natural'],
-  },
-  {
+  }),
+  subject({
     id: 'guitarist-solo',
-    category: 'image-subject',
     label: 'Guitarrista sozinho',
-    text: 'The guitarist from the reference image is alone in the frame, playing the guitar with anatomically correct hand placement on the fretboard and strings. The guitarist is not singing and no microphone is added unless it already exists in the reference image.',
     hasSinger: false,
     framingGroup: 'guitarist',
     compatiblePerformances: ['guitar-playing', 'intense-controlled', 'natural'],
-  },
-  {
+  }),
+  subject({
     id: 'drummer-solo',
-    category: 'image-subject',
     label: 'Baterista sozinho',
-    text: 'The drummer from the reference image is alone in the frame, seated behind the drum kit and playing naturally. The posture is realistic, the sticks are correctly held in both hands and the kit is coherent, with the correct number of drums and cymbals.',
     hasSinger: false,
     framingGroup: 'drummer',
     compatiblePerformances: ['drums-playing', 'impact-moment', 'natural'],
-  },
-  {
+  }),
+  subject({
     id: 'guitarist-drummer',
-    category: 'image-subject',
     label: 'Guitarrista + baterista',
-    text: 'The guitarist and the drummer from the reference image perform together in a natural stage composition, with the guitarist in the foreground and the drummer behind the kit. Exactly two musicians are present, with no singer and no additional musicians.',
     hasSinger: false,
     framingGroup: 'band',
     compatiblePerformances: ['band-playing', 'intense-controlled', 'natural'],
-  },
-  {
+  }),
+  subject({
     id: 'band-no-singer',
-    category: 'image-subject',
     label: 'Banda completa sem cantor',
-    text: 'Only the instrumental members of the band from the reference image appear, performing together in a natural stage arrangement. No vocalist is created and no frontman is added: the number of musicians and their appearance follow the reference image.',
     hasSinger: false,
     framingGroup: 'band',
     compatiblePerformances: ['band-playing', 'chorus-moment', 'natural'],
-  },
-  {
+  }),
+  subject({
     id: 'band-with-singer',
-    category: 'image-subject',
     label: 'Banda completa com cantor',
-    text: 'The full band from the reference image performs together with the singer, arranged naturally across the stage as an ensemble. The singer is clearly readable in the composition and no musician blocks the face of the singer.',
     hasSinger: true,
     framingGroup: 'band',
     compatiblePerformances: ['band-playing', 'natural-with-band', 'chorus-moment', 'natural'],
-  },
+  }),
+  subject({
+    id: 'audience',
+    label: 'Plateia',
+    hasSinger: false,
+    framingGroup: 'audience',
+    compatiblePerformances: ['crowd-watching', 'crowd-reacting', 'crowd-clapping', 'natural'],
+  }),
 ]
 
 export const IMAGE_PERFORMANCES: ImagePerformancePreset[] = [
@@ -201,85 +141,103 @@ export const IMAGE_PERFORMANCES: ImagePerformancePreset[] = [
     id: 'singing-mic',
     category: 'image-performance',
     label: 'Cantando no microfone',
-    text: 'The singer is singing into the microphone, holding it naturally with a believable grip, with the microphone positioned just below the mouth so it never covers the lips.',
+    text: 'Microphone just below the mouth, not covering the lips.',
   },
   {
     id: 'singing-no-mic',
     category: 'image-performance',
     label: 'Cantando sem segurar microfone',
-    text: 'The singer is singing with both hands free, with nothing in front of the face and an open, natural upper-body posture.',
+    text: 'Hands free, nothing in front of the face.',
   },
   {
     id: 'acoustic-singing',
     category: 'image-performance',
     label: 'Tocando violão e cantando',
-    text: 'The singer performs while playing the acoustic guitar and singing at the same time, with realistic chord-shape hand placement and a natural strumming arm position.',
+    text: 'Singing while playing the acoustic guitar, with realistic chord shapes.',
   },
   {
     id: 'electric-singing',
     category: 'image-performance',
     label: 'Tocando guitarra e cantando',
-    text: 'The singer performs while playing the electric guitar and singing at the same time, with credible fretting and picking hand positions and a grounded stance.',
+    text: 'Singing while playing the electric guitar, with credible fretting and picking.',
   },
   {
     id: 'natural-with-band',
     category: 'image-performance',
     label: 'Performance natural com banda',
-    text: 'A natural ensemble performance moment, with each musician engaged in playing and the overall body language authentic rather than posed.',
+    text: 'Natural ensemble moment, each musician engaged with their instrument.',
   },
   {
     id: 'seated-singing',
     category: 'image-performance',
     label: 'Sentado cantando',
-    text: 'The singer performs seated, with a comfortable and stable posture, grounded contact with the seat and a relaxed upper body.',
+    text: 'The singer is seated, with a stable, relaxed posture.',
   },
   {
     id: 'standing-singing',
     category: 'image-performance',
     label: 'Em pé cantando',
-    text: 'The singer performs standing, with confident weight distribution and natural, believable stage presence.',
+    text: 'The singer is standing with natural stage presence.',
   },
   {
     id: 'guitar-playing',
     category: 'image-performance',
     label: 'Tocando guitarra',
-    text: 'The guitarist is actively playing, with correct left-hand fretting, a natural picking hand position and focused attention on the performance.',
+    text: 'Actively playing, with correct fretting and a natural picking hand.',
   },
   {
     id: 'intense-controlled',
     category: 'image-performance',
     label: 'Performance intensa controlada',
-    text: 'An intense but controlled performance moment, with committed body language and concentrated expression, without exaggerated or theatrical distortion.',
+    text: 'Intense but controlled body language, without theatrical distortion.',
   },
   {
     id: 'drums-playing',
     category: 'image-performance',
     label: 'Tocando bateria',
-    text: 'The drummer is actively playing, with the sticks correctly held, arms in a realistic striking position and coherent limb coordination across the kit.',
+    text: 'Actively playing, sticks correctly held, arms in a realistic striking position.',
   },
   {
     id: 'impact-moment',
     category: 'image-performance',
     label: 'Momento de impacto',
-    text: 'A peak impact moment of the performance, with the sticks meeting a drum or cymbal and the body committed to the hit, while remaining anatomically plausible.',
+    text: 'Peak hit on a drum or cymbal, anatomically plausible.',
   },
   {
     id: 'band-playing',
     category: 'image-performance',
     label: 'Banda tocando',
-    text: 'The band is playing together, each musician engaged with their own instrument in a coherent, believable ensemble moment.',
+    text: 'The band is playing together, each musician on their own instrument.',
   },
   {
     id: 'chorus-moment',
     category: 'image-performance',
     label: 'Refrão / momento forte',
-    text: 'The strongest moment of the song, with heightened energy in the body language of everyone in frame, still natural and free of exaggerated poses.',
+    text: 'Heightened energy in the body language, still natural.',
   },
   {
     id: 'natural',
     category: 'image-performance',
     label: 'Performance natural',
-    text: 'A natural, unforced performance moment with authentic presence and no theatrical or exaggerated gestures.',
+    text: 'Unforced performance moment, no theatrical gestures.',
+  },
+  {
+    id: 'crowd-watching',
+    category: 'image-performance',
+    label: 'Observando o show',
+    text: 'Focused attention, only subtle movement.',
+  },
+  {
+    id: 'crowd-reacting',
+    category: 'image-performance',
+    label: 'Reação natural',
+    text: 'Subtle varied reactions, independent from person to person.',
+  },
+  {
+    id: 'crowd-clapping',
+    category: 'image-performance',
+    label: 'Aplaudindo',
+    text: 'Irregular natural clapping, not a single shared rhythm.',
   },
 ]
 
@@ -1191,6 +1149,78 @@ export const IMAGE_FRAMINGS: ImageFramingPreset[] = [
     priority: 69,
     purposes: ['scene'],
   }),
+  framing({
+    id: 'crowd-medium',
+    label: 'Crowd medium shot',
+    text: 'Crowd medium shot holding a readable group of audience members as the subject.',
+    groups: ['audience'],
+    lipSyncSafe: false,
+    distance: 'medium',
+    direction: 'front',
+    height: 'eye',
+    composition: 'band-context',
+    priority: 90,
+  }),
+  framing({
+    id: 'crowd-wide',
+    label: 'Crowd medium-wide',
+    text: 'Crowd medium-wide covering a larger audience section, crowd as the subject.',
+    groups: ['audience'],
+    lipSyncSafe: false,
+    distance: 'medium-wide',
+    direction: 'front',
+    height: 'eye',
+    composition: 'layered',
+    priority: 84,
+  }),
+  framing({
+    id: 'crowd-front-row',
+    label: 'Front-row reaction',
+    text: 'Front-row audience faces and upper bodies in the public area closest to the show.',
+    groups: ['audience'],
+    lipSyncSafe: false,
+    distance: 'mcu',
+    direction: 'front',
+    height: 'eye',
+    composition: 'portrait',
+    priority: 82,
+  }),
+  framing({
+    id: 'crowd-section',
+    label: 'Audience section',
+    text: 'A coherent block of the crowd rather than a single featured person.',
+    groups: ['audience'],
+    lipSyncSafe: false,
+    distance: 'medium-wide',
+    direction: 'front',
+    height: 'eye',
+    composition: 'off-center',
+    priority: 80,
+  }),
+  framing({
+    id: 'crowd-side',
+    label: 'Side crowd view',
+    text: 'Lateral public angle, keeping the audience arrangement readable.',
+    groups: ['audience'],
+    lipSyncSafe: false,
+    distance: 'medium',
+    direction: 'tq-left',
+    height: 'eye',
+    composition: 'diagonal',
+    priority: 76,
+  }),
+  framing({
+    id: 'crowd-stage-bg',
+    label: 'Plateia com palco ao fundo',
+    text: 'Audience in the foreground with the stage visible behind them as venue context. The crowd remains the subject.',
+    groups: ['audience'],
+    lipSyncSafe: false,
+    distance: 'medium-wide',
+    direction: 'front',
+    height: 'eye',
+    composition: 'layered',
+    priority: 74,
+  }),
 ]
 
 /**
@@ -1198,13 +1228,23 @@ export const IMAGE_FRAMINGS: ImageFramingPreset[] = [
  * compatível vence — em Lipsync os ângulos abertos são descartados antes.
  */
 export const AUTO_IMAGE_FRAMING_BY_GROUP: Record<
-  'singer' | 'guitarist' | 'drummer' | 'band',
+  'singer' | 'guitarist' | 'drummer' | 'band' | 'audience',
   Array<Exclude<ImageFramingId, 'auto'>>
 > = {
   singer: ['mcu-front', 'close-up-front', 'mcu-tq-left', 'medium-front'],
   guitarist: ['mcu-instrument', 'mcu-front', 'medium-front', 'tq-left'],
   drummer: ['drums-front', 'medium-front', 'tq-left', 'mcu-front'],
   band: ['singer-foreground', 'medium-front', 'band-behind', 'tq-left'],
+  audience: ['crowd-medium', 'crowd-wide', 'crowd-front-row', 'crowd-section'],
+}
+
+/** Auto por sujeito quando o grupo sozinho escolheria um ângulo errado. */
+export const AUTO_IMAGE_FRAMING_BY_SUBJECT: Partial<
+  Record<ImageSubjectId, Array<Exclude<ImageFramingId, 'auto'>>>
+> = {
+  'band-no-singer': ['band-centered', 'band-layered', 'stage-diagonal', 'band-live-stage'],
+  'guitarist-drummer': ['band-guitar-fg', 'band-layered', 'stage-diagonal', 'band-centered'],
+  audience: ['crowd-medium', 'crowd-wide', 'crowd-front-row', 'crowd-section'],
 }
 
 /**
