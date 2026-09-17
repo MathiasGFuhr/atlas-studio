@@ -340,10 +340,13 @@ export const mockApi = {
         return true
       }),
     get: async (id: string) => videos.find((v) => v.id === id) ?? null,
-    create: async (input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl'>) => {
+    create: async (
+      input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl' | 'folderExists'>,
+    ) => {
       const video: ChannelVideo = {
         ...input,
         id: crypto.randomUUID(),
+        folderExists: Boolean(input.projectFolderPath),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }

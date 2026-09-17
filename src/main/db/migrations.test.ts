@@ -148,7 +148,7 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 1 })
+    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 2 })
 
     // Nenhum registro antigo foi perdido.
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -228,7 +228,7 @@ describe('migração para projetos de História e Música', () => {
 
     const second = migrateSchema(db)
 
-    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 1 })
+    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 2 })
     expect(db.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual(afterFirst)
   })
 
@@ -293,6 +293,16 @@ describe('migração para projetos de História e Música', () => {
     })
   })
 
+  it('adiciona pasta do projeto aos vídeos do calendário em bancos antigos', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+
+    migrateSchema(db)
+
+    const cols = db.prepare('PRAGMA table_info(channel_videos)').all() as Array<{ name: string }>
+    expect(cols.some((col) => col.name === 'project_folder_path')).toBe(true)
+  })
+
   it('cria a tabela de tarefas em bancos antigos sem apagar dados', async () => {
     const db = await createLegacyDatabase()
     seedLegacyContent(db)
@@ -307,12 +317,43 @@ describe('migração para projetos de História e Música', () => {
     const db = await createLegacyDatabase()
     seedLegacyContent(db)
     const first = migrateSchema(db)
-    expect(first.schemaVersion).toBe(1)
+    expect(first.schemaVersion).toBe(2)
     expect(first.backedUp).toBe(false)
     expect(migrateSchema(db).backedUp).toBe(false)
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
     expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([
       expect.objectContaining({ version: 1 }),
+      expect.objectContaining({ version: 2 }),
     ])
+  })
+
+  it('converte status antigos de vídeo para o pipeline atual', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    const at = '2025-01-01T00:00:00.000Z'
+    db.prepare(
+      `INSERT INTO channel_videos (id, channel_id, title, scheduled_date, status, created_at, updated_at)
+       VALUES ('v1', 'c1', 'Antigo planejado', '2025-01-10', 'planejado', ?, ?)`,
+    ).run(at, at)
+    db.prepare(
+      `INSERT INTO channel_videos (id, channel_id, title, scheduled_date, status, created_at, updated_at)
+       VALUES ('v2', 'c1', 'Antigo gravado', '2025-01-11', 'gravado', ?, ?)`,
+    ).run(at, at)
+    db.prepare(
+      `INSERT INTO channel_videos (id, channel_id, title, scheduled_date, status, created_at, updated_at)
+       VALUES ('v3', 'c1', 'Já publicado', '2025-01-12', 'publicado', ?, ?)`,
+    ).run(at, at)
+
+    migrateSchema(db)
+
+    expect(db.prepare('SELECT status FROM channel_videos WHERE id = ?').get('v1')).toEqual({
+      status: 'colocando',
+    })
+    expect(db.prepare('SELECT status FROM channel_videos WHERE id = ?').get('v2')).toEqual({
+      status: 'editando',
+    })
+    expect(db.prepare('SELECT status FROM channel_videos WHERE id = ?').get('v3')).toEqual({
+      status: 'publicado',
+    })
   })
 })

@@ -109,11 +109,14 @@ const api = {
     list: (filters: { channelId: string; from?: string; to?: string }) =>
       ipcRenderer.invoke(IPC.videos.list, filters) as Promise<ChannelVideo[]>,
     get: (id: string) => ipcRenderer.invoke(IPC.videos.get, id) as Promise<ChannelVideo | null>,
-    create: (input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl'>) =>
-      ipcRenderer.invoke(IPC.videos.create, input) as Promise<ChannelVideo>,
+    create: (
+      input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl' | 'folderExists'>,
+    ) => ipcRenderer.invoke(IPC.videos.create, input) as Promise<ChannelVideo>,
     update: (
       id: string,
-      patch: Partial<Omit<ChannelVideo, 'id' | 'channelId' | 'createdAt' | 'thumbnailDataUrl'>>,
+      patch: Partial<
+        Omit<ChannelVideo, 'id' | 'channelId' | 'createdAt' | 'thumbnailDataUrl' | 'folderExists'>
+      >,
     ) => ipcRenderer.invoke(IPC.videos.update, id, patch) as Promise<ChannelVideo | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.videos.remove, id) as Promise<boolean>,
     setThumbnail: (videoId: string, sourcePath: string) =>

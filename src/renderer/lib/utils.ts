@@ -29,10 +29,12 @@ export function statusLabel(status: string): string {
       return 'Rascunho'
     case 'erro':
       return 'Erro'
-    case 'planejado':
-      return 'Planejado'
-    case 'gravado':
-      return 'Gravado'
+    case 'colocando':
+      return 'Colocando'
+    case 'editando':
+      return 'Editando'
+    case 'agendando':
+      return 'Agendando'
     case 'publicado':
       return 'Publicado'
     default:

@@ -7,8 +7,9 @@ const tones: Record<string, string> = {
   rascunho: 'text-muted bg-white/5 border-border',
   erro: 'text-danger bg-danger/10 border-danger/20',
   ativo: 'text-accent bg-accent-dark/40 border-accent/20',
-  planejado: 'text-muted bg-white/5 border-border',
-  gravado: 'text-warning bg-warning/10 border-warning/20',
+  colocando: 'text-muted bg-white/5 border-border',
+  editando: 'text-warning bg-warning/10 border-warning/20',
+  agendando: 'text-warning bg-warning/10 border-warning/20',
   publicado: 'text-accent bg-accent-dark/40 border-accent/20',
 }
 
@@ -18,8 +19,9 @@ const dots: Record<string, string> = {
   rascunho: 'bg-muted-2',
   erro: 'bg-danger',
   ativo: 'bg-accent',
-  planejado: 'bg-muted-2',
-  gravado: 'bg-warning',
+  colocando: 'bg-muted-2',
+  editando: 'bg-warning',
+  agendando: 'bg-warning',
   publicado: 'bg-accent',
 }
 

@@ -4,6 +4,7 @@ import type { Channel, ChannelVideo, ChannelVideoStatus, TitleStrengthAnalysis }
 import { isProjectType } from '../../shared/types'
 import { readImageDataUrl } from '../services/storage/profilePhoto'
 import { removeChannelMedia, removeVideoThumbnailFile } from '../services/storage/channelMedia'
+import { folderExists } from '../services/storage/projectFolders'
 
 type ChannelRow = {
   id: string
@@ -33,11 +34,18 @@ type VideoRow = {
   title_score: number | null
   title_analysis: string | null
   title_analyzed_at: string | null
+  project_folder_path: string | null
   created_at: string
   updated_at: string
 }
 
-const VIDEO_STATUSES: ChannelVideoStatus[] = ['planejado', 'gravado', 'publicado']
+const VIDEO_STATUSES: ChannelVideoStatus[] = ['colocando', 'editando', 'agendando', 'publicado']
+
+function normalizeVideoStatus(value: string): ChannelVideoStatus {
+  if (value === 'planejado') return 'colocando'
+  if (value === 'gravado') return 'editando'
+  return VIDEO_STATUSES.includes(value as ChannelVideoStatus) ? (value as ChannelVideoStatus) : 'colocando'
+}
 
 function parseTitleAnalysis(value: string | null): TitleStrengthAnalysis | null {
   if (!value?.trim()) return null
@@ -70,9 +78,7 @@ function mapChannel(row: ChannelRow): Channel {
 }
 
 function mapVideo(row: VideoRow): ChannelVideo {
-  const status = VIDEO_STATUSES.includes(row.status as ChannelVideoStatus)
-    ? (row.status as ChannelVideoStatus)
-    : 'planejado'
+  const status = normalizeVideoStatus(row.status)
   return {
     id: row.id,
     channelId: row.channel_id,
@@ -83,6 +89,8 @@ function mapVideo(row: VideoRow): ChannelVideo {
     scheduledDate: row.scheduled_date,
     status,
     scriptId: row.script_id ?? null,
+    projectFolderPath: row.project_folder_path?.trim() ? row.project_folder_path : null,
+    folderExists: folderExists(row.project_folder_path),
     titleScore: row.title_score == null ? null : Number(row.title_score),
     titleAnalysis: parseTitleAnalysis(row.title_analysis),
     titleAnalyzedAt: row.title_analyzed_at ?? null,
@@ -221,19 +229,19 @@ export const channelRepository = {
   },
 
   createVideo(
-    input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl'>,
+    input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl' | 'folderExists'>,
   ): ChannelVideo {
     if (!this.get(input.channelId)) {
       throw new Error('Canal não encontrado')
     }
     const id = randomUUID()
     const timestamp = new Date().toISOString()
-    const status = VIDEO_STATUSES.includes(input.status) ? input.status : 'planejado'
+    const status = normalizeVideoStatus(input.status)
     getDb()
       .prepare(
         `INSERT INTO channel_videos
-          (id, channel_id, title, description, thumbnail_path, scheduled_date, status, script_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, channel_id, title, description, thumbnail_path, scheduled_date, status, script_id, project_folder_path, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -244,6 +252,7 @@ export const channelRepository = {
         input.scheduledDate,
         status,
         input.scriptId || null,
+        input.projectFolderPath?.trim() || null,
         timestamp,
         timestamp,
       )
@@ -252,7 +261,7 @@ export const channelRepository = {
 
   updateVideo(
     id: string,
-    patch: Partial<Omit<ChannelVideo, 'id' | 'channelId' | 'createdAt' | 'thumbnailDataUrl'>>,
+    patch: Partial<Omit<ChannelVideo, 'id' | 'channelId' | 'createdAt' | 'thumbnailDataUrl' | 'folderExists'>>,
   ): ChannelVideo | null {
     const current = this.getVideo(id)
     if (!current) return null
@@ -262,12 +271,12 @@ export const channelRepository = {
       next.titleAnalysis = null
       next.titleAnalyzedAt = null
     }
-    const status = VIDEO_STATUSES.includes(next.status) ? next.status : 'planejado'
+    const status = normalizeVideoStatus(next.status)
     getDb()
       .prepare(
         `UPDATE channel_videos SET
           title = ?, description = ?, thumbnail_path = ?, scheduled_date = ?,
-          status = ?, script_id = ?, title_score = ?, title_analysis = ?, title_analyzed_at = ?, updated_at = ?
+          status = ?, script_id = ?, project_folder_path = ?, title_score = ?, title_analysis = ?, title_analyzed_at = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -277,6 +286,7 @@ export const channelRepository = {
         next.scheduledDate,
         status,
         next.scriptId || null,
+        next.projectFolderPath?.trim() || null,
         next.titleScore ?? null,
         next.titleAnalysis ? JSON.stringify(next.titleAnalysis) : null,
         next.titleAnalyzedAt ?? null,

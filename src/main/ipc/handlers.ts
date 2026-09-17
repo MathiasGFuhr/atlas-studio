@@ -202,15 +202,19 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.videos.get, (_e, id: string) => channelRepository.getVideo(id))
   ipcMain.handle(
     IPC.videos.create,
-    (_e, input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl'>) =>
-      channelRepository.createVideo(input),
+    (
+      _e,
+      input: Omit<ChannelVideo, 'id' | 'createdAt' | 'updatedAt' | 'thumbnailDataUrl' | 'folderExists'>,
+    ) => channelRepository.createVideo(input),
   )
   ipcMain.handle(
     IPC.videos.update,
     (
       _e,
       id: string,
-      patch: Partial<Omit<ChannelVideo, 'id' | 'channelId' | 'createdAt' | 'thumbnailDataUrl'>>,
+      patch: Partial<
+        Omit<ChannelVideo, 'id' | 'channelId' | 'createdAt' | 'thumbnailDataUrl' | 'folderExists'>
+      >,
     ) => channelRepository.updateVideo(id, patch),
   )
   ipcMain.handle(IPC.videos.remove, (_e, id: string) => channelRepository.removeVideo(id))

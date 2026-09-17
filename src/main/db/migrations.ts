@@ -3,7 +3,7 @@ import type { AppDatabase } from './database'
 import { backupSqliteFile, isBackupSettingEnabled } from './backup'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 1
+export const CURRENT_SCHEMA_VERSION = 2
 
 type SchemaStep = {
   version: number
@@ -23,6 +23,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'incremental-base',
     backup: false,
     up: applyIncrementalBase,
+  },
+  {
+    version: 2,
+    name: 'channel-video-pipeline-status',
+    backup: false,
+    up: applyChannelVideoPipelineStatus,
   },
 ]
 
@@ -107,6 +113,17 @@ function readBackupEnabled(database: AppDatabase): boolean {
   }
 }
 
+function applyChannelVideoPipelineStatus(database: AppDatabase): {
+  historyCreated: number
+  musicCreated: number
+} {
+  database.exec(`
+    UPDATE channel_videos SET status = 'colocando' WHERE status = 'planejado';
+    UPDATE channel_videos SET status = 'editando' WHERE status = 'gravado';
+  `)
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
 function applyIncrementalBase(database: AppDatabase): {
   historyCreated: number
   musicCreated: number
@@ -115,6 +132,7 @@ function applyIncrementalBase(database: AppDatabase): {
   ensureColumn(database, 'channel_videos', 'title_score', 'REAL')
   ensureColumn(database, 'channel_videos', 'title_analysis', 'TEXT')
   ensureColumn(database, 'channel_videos', 'title_analyzed_at', 'TEXT')
+  ensureColumn(database, 'channel_videos', 'project_folder_path', 'TEXT')
   // Backfill só quando a coluna nasce: depois disso, project_id NULL significa
   // “desvinculado de propósito” (ex.: exclusão do projeto no Atlas).
   const addedScriptProjectId = ensureColumn(database, 'scripts', 'project_id', 'TEXT')

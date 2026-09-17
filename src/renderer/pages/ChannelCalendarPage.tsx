@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Copy, FolderOpen, FolderSearch, ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react'
 import type { Channel, ChannelVideo, ChannelVideoStatus, TitleStrengthAnalysis } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { Button } from '../components/Button'
@@ -54,11 +54,13 @@ export function ChannelCalendarPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [analysis, setAnalysis] = useState<TitleStrengthAnalysis | null>(null)
   const [analyzedTitle, setAnalyzedTitle] = useState<string | null>(null)
+  const [copied, setCopied] = useState<'title' | 'description' | null>(null)
   const [form, setForm] = useState({
     title: '',
     description: '',
     scheduledDate: todayKey(),
-    status: 'planejado' as ChannelVideoStatus,
+    status: 'colocando' as ChannelVideoStatus,
+    projectFolderPath: null as string | null,
   })
 
   const from = toDateKey(year, month, 1)
@@ -137,7 +139,8 @@ export function ChannelCalendarPage() {
       title: '',
       description: '',
       scheduledDate: dateKey ?? todayKey(),
-      status: 'planejado',
+      status: 'colocando',
+      projectFolderPath: null,
     })
     setModalOpen(true)
   }
@@ -152,6 +155,7 @@ export function ChannelCalendarPage() {
       description: video.description,
       scheduledDate: video.scheduledDate,
       status: video.status,
+      projectFolderPath: video.projectFolderPath ?? null,
     })
     setModalOpen(true)
   }
@@ -171,6 +175,38 @@ export function ChannelCalendarPage() {
       return
     }
     setPendingThumb(file)
+  }
+
+  async function copyField(key: 'title' | 'description', value: string, emptyMessage: string, successMessage: string) {
+    const text = value.trim()
+    if (!text) {
+      push(emptyMessage, 'error')
+      return
+    }
+    try {
+      await api.system.copyText(text)
+      setCopied(key)
+      push(successMessage, 'success')
+      window.setTimeout(() => setCopied((current) => (current === key ? null : current)), 1800)
+    } catch {
+      push('Não foi possível copiar.', 'error')
+    }
+  }
+
+  async function pickProjectFolder() {
+    const folder = await api.dialog.selectFolder()
+    if (!folder) return
+    setForm((f) => ({ ...f, projectFolderPath: folder }))
+    push('Pasta do projeto selecionada.', 'success')
+  }
+
+  async function openProjectFolder() {
+    if (!form.projectFolderPath) return
+    try {
+      await api.system.openPath(form.projectFolderPath)
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao abrir a pasta', 'error')
+    }
   }
 
   async function analyzeTitle() {
@@ -216,6 +252,7 @@ export function ChannelCalendarPage() {
           description: form.description,
           scheduledDate: form.scheduledDate,
           status: form.status,
+          projectFolderPath: form.projectFolderPath,
         })
         if (!updated) throw new Error('Vídeo não encontrado')
         saved = updated
@@ -229,6 +266,7 @@ export function ChannelCalendarPage() {
           scheduledDate: form.scheduledDate,
           status: form.status,
           scriptId: null,
+          projectFolderPath: form.projectFolderPath,
         })
         push('Vídeo adicionado ao calendário.', 'success')
       }
@@ -386,7 +424,7 @@ export function ChannelCalendarPage() {
       <div className="mt-6">
         <h2 className="mb-3 text-sm font-semibold text-text">Vídeos deste mês</h2>
         {videos.length === 0 ? (
-          <p className="text-sm text-muted">Nenhum vídeo planejado neste mês. Clique em um dia para adicionar.</p>
+          <p className="text-sm text-muted">Nenhum vídeo neste mês. Clique em um dia para adicionar.</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {videos.map((video) => (
@@ -408,6 +446,12 @@ export function ChannelCalendarPage() {
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <StatusBadge status={video.status} />
                     <TitleScoreBadge score={video.titleScore} />
+                    {video.projectFolderPath ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-2">
+                        <FolderOpen className="h-3 w-3" />
+                        Pasta
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <Button variant="secondary" className="h-9 self-start px-3 text-xs" onClick={() => openEdit(video)}>
@@ -444,12 +488,27 @@ export function ChannelCalendarPage() {
         }
       >
         <div className="space-y-3">
-          <Input
-            label="Título"
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            placeholder="Título que vai no YouTube"
-          />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-muted">Título</span>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-8 px-2 text-xs"
+                icon={copied === 'title' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                onClick={() =>
+                  void copyField('title', form.title, 'Escreva o título antes de copiar.', 'Título copiado.')
+                }
+              >
+                Copiar
+              </Button>
+            </div>
+            <Input
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Título que vai no YouTube"
+            />
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
@@ -472,12 +531,34 @@ export function ChannelCalendarPage() {
               Usar a primeira sugestão como título
             </button>
           ) : null}
-          <Textarea
-            label="Descrição"
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            placeholder="Descrição do vídeo"
-          />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-muted">Descrição</span>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-8 px-2 text-xs"
+                icon={
+                  copied === 'description' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />
+                }
+                onClick={() =>
+                  void copyField(
+                    'description',
+                    form.description,
+                    'Escreva a descrição antes de copiar.',
+                    'Descrição copiada.',
+                  )
+                }
+              >
+                Copiar
+              </Button>
+            </div>
+            <Textarea
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="Descrição do vídeo"
+            />
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
               label="Data"
@@ -490,11 +571,63 @@ export function ChannelCalendarPage() {
               value={form.status}
               onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ChannelVideoStatus }))}
               options={[
-                { value: 'planejado', label: 'Planejado' },
-                { value: 'gravado', label: 'Gravado' },
+                { value: 'colocando', label: 'Colocando' },
+                { value: 'editando', label: 'Editando' },
+                { value: 'agendando', label: 'Agendando' },
                 { value: 'publicado', label: 'Publicado' },
               ]}
             />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium text-muted">Pasta do projeto</p>
+            {form.projectFolderPath ? (
+              <>
+                <p className="mb-2 break-all rounded-xl border border-border-soft bg-card-2 px-3 py-2.5 font-mono text-xs text-muted">
+                  {form.projectFolderPath}
+                </p>
+                {editing?.projectFolderPath === form.projectFolderPath && editing.folderExists === false ? (
+                  <p className="mb-2 text-xs text-yellow-500/80">A pasta vinculada não foi encontrada no disco.</p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-9 px-3 text-xs"
+                    icon={<FolderOpen className="h-3.5 w-3.5" />}
+                    onClick={() => void openProjectFolder()}
+                  >
+                    Abrir pasta
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-9 px-3 text-xs"
+                    icon={<FolderSearch className="h-3.5 w-3.5" />}
+                    onClick={() => void pickProjectFolder()}
+                  >
+                    Alterar pasta
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 px-3 text-xs"
+                    onClick={() => setForm((f) => ({ ...f, projectFolderPath: null }))}
+                  >
+                    Desvincular
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                icon={<FolderSearch className="h-3.5 w-3.5" />}
+                onClick={() => void pickProjectFolder()}
+              >
+                Vincular pasta
+              </Button>
+            )}
           </div>
           <div>
             <p className="mb-2 text-sm font-medium text-muted">Thumbnail</p>

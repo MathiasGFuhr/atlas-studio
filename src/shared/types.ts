@@ -1,5 +1,5 @@
 export type ScriptStatus = 'pronto' | 'em_revisao' | 'rascunho' | 'erro'
-export type ChannelVideoStatus = 'planejado' | 'gravado' | 'publicado'
+export type ChannelVideoStatus = 'colocando' | 'editando' | 'agendando' | 'publicado'
 /** Ambiente de produção ao qual um projeto pertence. */
 export type ProjectType = 'history' | 'music'
 /** Classificação opcional de canais por ambiente. */
@@ -157,17 +157,95 @@ export interface Channel {
   updatedAt: string
 }
 
+export type TitleAnalysisProfile = 'music' | 'history' | 'general'
+export type TitleAlternativeStrategy = 'original_refined' | 'hook_first' | 'compact'
+
+export interface TitleAnalysisMetrics {
+  hook: number
+  clarity: number
+  curiosity: number
+  specificity: number
+  emotion: number
+  naturalness: number
+  mobile: number
+  channelFit: number
+  originality: number
+  musicIdentity?: number | null
+  narrativePromise?: number | null
+}
+
+export interface TitleAlternative {
+  strategy: TitleAlternativeStrategy
+  title: string
+  reason: string
+}
+
+export interface TitleAnalysisLocalFacts {
+  charCount: number
+  wordCount: number
+  first45: string
+  first60: string
+  hasSeparator: boolean
+  repeatedWords: string[]
+}
+
+export interface TitleChannelContext {
+  name: string
+  type?: TitleAnalysisProfile
+  language?: string
+}
+
+export interface TitlePerformanceDatum {
+  title: string
+  views?: number
+  ctr?: number
+}
+
+export interface TitleAnalysisPayload {
+  projectType: TitleAnalysisProfile
+  language?: string
+  country?: string
+  channel?: TitleChannelContext
+  currentTitle: string
+  songTitle?: string
+  artistName?: string
+  eventName?: string
+  videoFormat?: string
+  videoContext?: string
+  thumbnailText?: string
+  recentChannelTitles?: string[]
+  performanceDataIfAvailable?: TitlePerformanceDatum[]
+  localFacts?: TitleAnalysisLocalFacts
+}
+
 export interface TitleStrengthAnalysis {
   score: number
   verdict: string
-  curiosity: number | null
-  clarity: number | null
-  emotion: number | null
-  length: number | null
-  specificity: number | null
+  profile: TitleAnalysisProfile
+  metrics: TitleAnalysisMetrics
   strengths: string[]
   weaknesses: string[]
-  suggestions: string[]
+  alternatives: TitleAlternative[]
+  localFacts: TitleAnalysisLocalFacts
+}
+
+export interface AnalyzeTitleRequest {
+  title: string
+  videoId?: string
+  channelId?: string
+  channelName?: string
+  description?: string
+  projectType?: TitleAnalysisProfile
+  language?: string
+  country?: string
+  songTitle?: string
+  artistName?: string
+  eventName?: string
+  videoFormat?: string
+  videoContext?: string
+  thumbnailText?: string
+  recentChannelTitles?: string[]
+  performanceDataIfAvailable?: TitlePerformanceDatum[]
 }
 
 export interface AntigravityStatus {
@@ -182,13 +260,6 @@ export interface AntigravityStatus {
 
 export interface AntigravityLoginStartResult {
   loginId: string
-}
-
-export interface AnalyzeTitleRequest {
-  title: string
-  videoId?: string
-  channelName?: string
-  description?: string
 }
 
 export interface AnalyzeTitleResult {
@@ -259,6 +330,10 @@ export interface ChannelVideo {
   scheduledDate: string
   status: ChannelVideoStatus
   scriptId: string | null
+  /** Pasta física do projeto de edição vinculada a este vídeo. */
+  projectFolderPath: string | null
+  /** Calculado na leitura — não persistir. */
+  folderExists?: boolean
   titleScore?: number | null
   titleAnalysis?: TitleStrengthAnalysis | null
   titleAnalyzedAt?: string | null
