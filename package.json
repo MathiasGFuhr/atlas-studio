@@ -1,7 +1,7 @@
 {
   "name": "atlas-studio",
   "productName": "Atlas Studio",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Atlas Studio — Sistema de roteiros com IA",
   "private": true,
   "main": "dist-electron/main.js",
