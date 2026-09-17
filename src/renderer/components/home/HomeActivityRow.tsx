@@ -29,9 +29,9 @@ export function HomeActivityRow({
         onClick={() => {
           if (item.href) onOpen(item.href)
         }}
-        className="flex w-full items-start gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-white/[0.02] disabled:cursor-default disabled:hover:bg-transparent"
+        className="flex w-full items-start gap-3 px-1 py-3.5 text-left transition-colors hover:bg-white/[0.015] disabled:cursor-default disabled:hover:bg-transparent"
       >
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border-soft bg-card-2 text-muted">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-muted">
           <Icon className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 flex-1">

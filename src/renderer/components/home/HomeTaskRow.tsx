@@ -24,7 +24,7 @@ export function HomeTaskRow({
   const priority = PRIORITY_BADGE[task.priority]
 
   return (
-    <li className="flex items-start gap-3 rounded-xl border border-transparent px-2 py-2.5 transition-colors hover:border-border-soft hover:bg-white/[0.02]">
+    <li className="flex items-start gap-3 px-1 py-3.5 transition-colors hover:bg-white/[0.015]">
       <button
         type="button"
         onClick={onToggle}

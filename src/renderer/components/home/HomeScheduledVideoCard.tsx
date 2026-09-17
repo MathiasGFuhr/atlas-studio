@@ -2,9 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { BookOpen, MoreHorizontal, Music2 } from 'lucide-react'
 import type { ChannelVideo } from '@shared/types'
 import { PROJECT_TYPE_LABEL } from '@shared/types'
-import { formatScheduledDateLabel } from '@shared/channelVideos'
+import { formatScheduledDateLabel, parseDateKey } from '@shared/channelVideos'
 import { StatusBadge } from '../StatusBadge'
 import { cn } from '../../lib/utils'
+
+function dateParts(dateKey: string): { day: string; month: string } | null {
+  const date = parseDateKey(dateKey)
+  if (!date) return null
+  return {
+    day: String(date.getDate()).padStart(2, '0'),
+    month: date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase(),
+  }
+}
 
 export function HomeScheduledVideoCard({
   video,
@@ -21,6 +30,7 @@ export function HomeScheduledVideoCard({
   const menuRef = useRef<HTMLDivElement>(null)
   const channelType = video.channelType === 'music' ? 'music' : video.channelType === 'history' ? 'history' : null
   const TypeIcon = channelType === 'music' ? Music2 : BookOpen
+  const date = dateParts(video.scheduledDate)
 
   useEffect(() => {
     if (!menuOpen) return
@@ -45,15 +55,15 @@ export function HomeScheduledVideoCard({
         }
       }}
       className={cn(
-        'flex min-w-0 cursor-pointer gap-3 rounded-2xl border border-border-soft bg-card p-3',
-        'shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition-colors hover:border-[#334049]',
+        'group flex min-w-0 cursor-pointer gap-4 rounded-2xl border border-border-soft bg-card p-3.5',
+        'transition-[border-color,background-color] duration-200 hover:border-[#334049] hover:bg-card-2/40',
       )}
     >
       <div
-        className="h-[72px] w-[128px] shrink-0 overflow-hidden rounded-xl border border-border-soft bg-card-2"
+        className="relative h-[84px] w-[148px] shrink-0 overflow-hidden rounded-xl bg-card-2"
         style={
           !video.thumbnailDataUrl && video.channelColor
-            ? { background: `${video.channelColor}22` }
+            ? { background: `linear-gradient(145deg, ${video.channelColor}28, #151c21)` }
             : undefined
         }
       >
@@ -64,20 +74,28 @@ export function HomeScheduledVideoCard({
             <TypeIcon className="h-5 w-5" />
           </div>
         )}
+        {date ? (
+          <div className="absolute left-2 top-2 rounded-md bg-black/55 px-1.5 py-1 text-center backdrop-blur-sm">
+            <p className="text-[11px] font-semibold leading-none tabular-nums text-text">{date.day}</p>
+            <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-muted">{date.month}</p>
+          </div>
+        ) : null}
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 py-0.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-2">
+            <p className="text-[11px] font-medium text-muted-2">
               {formatScheduledDateLabel(video.scheduledDate)}
             </p>
-            <h3 className="mt-0.5 truncate text-sm font-semibold text-text">{video.title}</h3>
+            <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-snug tracking-tight text-text">
+              {video.title}
+            </h3>
           </div>
           <div className="relative shrink-0" ref={menuRef}>
             <button
               type="button"
-              className="rounded-md p-1 text-muted hover:bg-white/5 hover:text-text"
+              className="rounded-md p-1 text-muted-2 opacity-0 transition-opacity hover:bg-white/5 hover:text-text group-hover:opacity-100 focus-visible:opacity-100"
               aria-label="Ações rápidas"
               onClick={(event) => {
                 event.stopPropagation()
@@ -89,7 +107,7 @@ export function HomeScheduledVideoCard({
             {menuOpen ? (
               <div
                 role="menu"
-                className="absolute right-0 z-20 mt-1 min-w-[160px] rounded-xl border border-border-soft bg-card-2 py-1 shadow-lg"
+                className="absolute right-0 z-20 mt-1 min-w-[168px] rounded-xl border border-border-soft bg-card-2 py-1 shadow-lg"
                 onClick={(event) => event.stopPropagation()}
               >
                 <button
@@ -129,15 +147,10 @@ export function HomeScheduledVideoCard({
             ) : null}
           </div>
         </div>
-        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-          <span className="truncate font-medium text-text">{video.channelName ?? 'Canal'}</span>
+        <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted">
+          <span className="truncate font-medium text-muted">{video.channelName ?? 'Canal'}</span>
           {channelType ? (
-            <>
-              <span aria-hidden className="text-muted-2">
-                ·
-              </span>
-              <span>{PROJECT_TYPE_LABEL[channelType]}</span>
-            </>
+            <span className="text-muted-2">{PROJECT_TYPE_LABEL[channelType]}</span>
           ) : null}
           <StatusBadge status={video.status} className="px-2 py-0.5 text-[10px]" />
         </div>

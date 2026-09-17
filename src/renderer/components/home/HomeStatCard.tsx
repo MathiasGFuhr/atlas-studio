@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { Card } from '../Card'
 import { cn } from '../../lib/utils'
 
 export function HomeStatCard({
@@ -8,44 +7,44 @@ export function HomeStatCard({
   value,
   hint,
   onClick,
+  className,
 }: {
   icon: ReactNode
   label: string
   value: string | number
   hint?: string
   onClick?: () => void
+  className?: string
 }) {
   const interactive = Boolean(onClick)
+  const classes = cn(
+    'flex min-h-[92px] min-w-0 items-center gap-3.5 px-5 py-4 text-left transition-colors',
+    interactive && 'cursor-pointer hover:bg-white/[0.02]',
+    className,
+  )
 
-  return (
-    <Card
-      padding="sm"
-      className={cn(
-        'flex min-h-[88px] items-center gap-3 transition-colors',
-        interactive && 'cursor-pointer hover:border-[#334049]',
-      )}
-      onClick={onClick}
-      role={interactive ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      onKeyDown={
-        interactive
-          ? (event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                onClick?.()
-              }
-            }
-          : undefined
-      }
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border-soft bg-card-2 text-muted">
+  const content = (
+    <>
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-muted">
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-2">{label}</p>
-        <p className="mt-0.5 truncate text-lg font-semibold tabular-nums text-text">{value}</p>
-        {hint ? <p className="truncate text-xs text-muted-2">{hint}</p> : null}
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-2">{label}</p>
+        <p className="mt-1 truncate text-[20px] font-semibold tabular-nums tracking-tight text-text">
+          {value}
+        </p>
+        {hint ? <p className="mt-0.5 truncate text-xs text-muted-2">{hint}</p> : null}
       </div>
-    </Card>
+    </>
+  )
+
+  if (!interactive) {
+    return <div className={classes}>{content}</div>
+  }
+
+  return (
+    <button type="button" className={classes} onClick={onClick}>
+      {content}
+    </button>
   )
 }
