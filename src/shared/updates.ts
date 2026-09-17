@@ -292,6 +292,26 @@ export function updateNotificationId(version: string): string {
 export const SIDEBAR_UPDATE_TOAST_PREFIX = 'atlas.update.toast:'
 export const SIDEBAR_UPDATE_MINIMIZED_KEY = 'atlas.update.sidebarMinimized'
 
+export function shouldAutoCheckOnStartup(
+  status: Pick<AppUpdateStatus, 'state' | 'packaged' | 'autoCheckEnabled'> | null | undefined,
+): boolean {
+  if (!status?.packaged || status.autoCheckEnabled === false) return false
+  return status.state === 'idle' || status.state === 'up-to-date'
+}
+
+export function sidebarUpdateStatusLabel(state: AppUpdateStatus['state']): string {
+  switch (state) {
+    case 'downloading':
+      return 'Atualização · Baixando'
+    case 'ready':
+      return 'Atualização · Pronta'
+    case 'error':
+      return 'Atualização · Erro'
+    default:
+      return 'Atualização · Disponível'
+  }
+}
+
 export function isSidebarUpdateRelevant(
   status: Pick<AppUpdateStatus, 'state' | 'availableVersion'> | null | undefined,
   options: { userDownloadError?: boolean } = {},

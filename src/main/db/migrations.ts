@@ -3,7 +3,7 @@ import type { AppDatabase } from './database'
 import { backupSqliteFile, isBackupSettingEnabled } from './backup'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 type SchemaStep = {
   version: number
@@ -29,6 +29,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'channel-video-pipeline-status',
     backup: false,
     up: applyChannelVideoPipelineStatus,
+  },
+  {
+    version: 3,
+    name: 'channel-video-project-folder',
+    backup: false,
+    up: applyChannelVideoProjectFolder,
   },
 ]
 
@@ -121,6 +127,14 @@ function applyChannelVideoPipelineStatus(database: AppDatabase): {
     UPDATE channel_videos SET status = 'colocando' WHERE status = 'planejado';
     UPDATE channel_videos SET status = 'editando' WHERE status = 'gravado';
   `)
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyChannelVideoProjectFolder(database: AppDatabase): {
+  historyCreated: number
+  musicCreated: number
+} {
+  ensureColumn(database, 'channel_videos', 'project_folder_path', 'TEXT')
   return { historyCreated: 0, musicCreated: 0 }
 }
 

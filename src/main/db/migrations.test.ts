@@ -148,7 +148,7 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 2 })
+    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 3 })
 
     // Nenhum registro antigo foi perdido.
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -228,7 +228,7 @@ describe('migração para projetos de História e Música', () => {
 
     const second = migrateSchema(db)
 
-    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 2 })
+    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 3 })
     expect(db.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual(afterFirst)
   })
 
@@ -317,14 +317,43 @@ describe('migração para projetos de História e Música', () => {
     const db = await createLegacyDatabase()
     seedLegacyContent(db)
     const first = migrateSchema(db)
-    expect(first.schemaVersion).toBe(2)
+    expect(first.schemaVersion).toBe(3)
     expect(first.backedUp).toBe(false)
     expect(migrateSchema(db).backedUp).toBe(false)
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
     expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([
       expect.objectContaining({ version: 1 }),
       expect.objectContaining({ version: 2 }),
+      expect.objectContaining({ version: 3 }),
     ])
+  })
+
+  it('adiciona pasta do projeto mesmo em banco já migrado até a versão 2', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    db.exec(`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      )
+    `)
+    const appliedAt = '2026-09-17T00:00:00.000Z'
+    db.prepare(
+      'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
+    ).run(1, 'incremental-base', appliedAt)
+    db.prepare(
+      'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
+    ).run(2, 'channel-video-pipeline-status', appliedAt)
+
+    const before = db.prepare('PRAGMA table_info(channel_videos)').all() as Array<{ name: string }>
+    expect(before.some((col) => col.name === 'project_folder_path')).toBe(false)
+
+    const result = migrateSchema(db)
+
+    expect(result.schemaVersion).toBe(3)
+    const after = db.prepare('PRAGMA table_info(channel_videos)').all() as Array<{ name: string }>
+    expect(after.some((col) => col.name === 'project_folder_path')).toBe(true)
   })
 
   it('converte status antigos de vídeo para o pipeline atual', async () => {

@@ -11,6 +11,7 @@ import type { AppUpdateStatus } from '@shared/updates'
 import {
   SIDEBAR_UPDATE_MINIMIZED_KEY,
   SIDEBAR_UPDATE_TOAST_PREFIX,
+  shouldAutoCheckOnStartup,
   shouldToastAvailableUpdate,
   sidebarUpdateToastMessage,
 } from '@shared/updates'
@@ -49,7 +50,7 @@ function markToastedVersion(version: string) {
 
 function readMinimizedVersion(): string | null {
   try {
-    return localStorage.getItem(SIDEBAR_UPDATE_MINIMIZED_KEY)
+    return sessionStorage.getItem(SIDEBAR_UPDATE_MINIMIZED_KEY)
   } catch {
     return null
   }
@@ -57,8 +58,8 @@ function readMinimizedVersion(): string | null {
 
 function writeMinimizedVersion(version: string | null) {
   try {
-    if (!version) localStorage.removeItem(SIDEBAR_UPDATE_MINIMIZED_KEY)
-    else localStorage.setItem(SIDEBAR_UPDATE_MINIMIZED_KEY, version)
+    if (!version) sessionStorage.removeItem(SIDEBAR_UPDATE_MINIMIZED_KEY)
+    else sessionStorage.setItem(SIDEBAR_UPDATE_MINIMIZED_KEY, version)
   } catch {
     /* ignore */
   }
@@ -77,6 +78,9 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
       setStatus(next)
       const version = next.availableVersion?.trim()
       if (version && readMinimizedVersion() === version) setSidebarMinimized(true)
+      if (shouldAutoCheckOnStartup(next)) {
+        void api.updates.check().then(setStatus).catch(() => undefined)
+      }
     })
     return api.updates.onChanged((next) => {
       setStatus(next)

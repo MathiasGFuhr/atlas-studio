@@ -16,11 +16,14 @@ const require = createRequire(import.meta.url)
 type AppUpdater = import('electron-updater').AppUpdater
 type NsisUpdater = import('electron-updater').NsisUpdater
 
+const AUTO_CHECK_DELAY_MS = 1500
+
 let updater: AppUpdater | null = null
 let status: AppUpdateStatus = emptyUpdateStatus('0.0.0', false)
 let getWindow: () => BrowserWindow | null = () => null
 let started = false
 let autoCheckTimer: ReturnType<typeof setTimeout> | null = null
+let checkInFlight: Promise<AppUpdateStatus> | null = null
 
 export function getAppUpdateStatus(): AppUpdateStatus {
   return { ...status, autoCheckEnabled: readAutoCheck() }
@@ -79,10 +82,18 @@ export function scheduleAutoCheck() {
   if (!app.isPackaged || !updater || !readAutoCheck()) return
   autoCheckTimer = setTimeout(() => {
     void checkForAppUpdates({ silent: true })
-  }, 8000)
+  }, AUTO_CHECK_DELAY_MS)
 }
 
 export async function checkForAppUpdates(opts: { silent?: boolean } = {}): Promise<AppUpdateStatus> {
+  if (checkInFlight) return checkInFlight
+  checkInFlight = performUpdateCheck(opts).finally(() => {
+    checkInFlight = null
+  })
+  return checkInFlight
+}
+
+async function performUpdateCheck(opts: { silent?: boolean } = {}): Promise<AppUpdateStatus> {
   if (!app.isPackaged) {
     status = { ...getAppUpdateStatus(), state: 'dev', errorMessage: null }
     emit()

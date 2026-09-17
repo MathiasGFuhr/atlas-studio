@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   isSidebarUpdateRelevant,
+  shouldAutoCheckOnStartup,
+  sidebarUpdateStatusLabel,
   normalizeReleaseNotes,
   realDownloadPercent,
   safeUpdateErrorText,
@@ -74,6 +76,21 @@ describe('atualizações', () => {
     expect(first?.id).toBe(updateNotificationId('1.6.0'))
     expect(again?.id).toBe(first?.id)
     expect(deriveUpdateNotification({ state: 'up-to-date', availableVersion: null })).toBeNull()
+  })
+
+  it('verifica atualização ao abrir só em instalação empacotada e ociosa', () => {
+    expect(shouldAutoCheckOnStartup({ state: 'idle', packaged: true, autoCheckEnabled: true })).toBe(true)
+    expect(shouldAutoCheckOnStartup({ state: 'up-to-date', packaged: true, autoCheckEnabled: true })).toBe(true)
+    expect(shouldAutoCheckOnStartup({ state: 'available', packaged: true, autoCheckEnabled: true })).toBe(false)
+    expect(shouldAutoCheckOnStartup({ state: 'idle', packaged: false, autoCheckEnabled: true })).toBe(false)
+    expect(shouldAutoCheckOnStartup({ state: 'idle', packaged: true, autoCheckEnabled: false })).toBe(false)
+  })
+
+  it('rótulo da sidebar acompanha o estado da atualização', () => {
+    expect(sidebarUpdateStatusLabel('available')).toBe('Atualização · Disponível')
+    expect(sidebarUpdateStatusLabel('downloading')).toBe('Atualização · Baixando')
+    expect(sidebarUpdateStatusLabel('ready')).toBe('Atualização · Pronta')
+    expect(sidebarUpdateStatusLabel('error')).toBe('Atualização · Erro')
   })
 
   it('só mostra o card da sidebar em estados relevantes', () => {
