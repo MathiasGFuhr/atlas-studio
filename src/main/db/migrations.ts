@@ -3,7 +3,7 @@ import type { AppDatabase } from './database'
 import { backupSqliteFile, isBackupSettingEnabled } from './backup'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 3
+export const CURRENT_SCHEMA_VERSION = 5
 
 type SchemaStep = {
   version: number
@@ -35,6 +35,18 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'channel-video-project-folder',
     backup: false,
     up: applyChannelVideoProjectFolder,
+  },
+  {
+    version: 4,
+    name: 'shorts-studio-jobs',
+    backup: false,
+    up: applyShortsJobs,
+  },
+  {
+    version: 5,
+    name: 'shorts-custom-duration',
+    backup: false,
+    up: applyShortsCustomDuration,
   },
 ]
 
@@ -135,6 +147,54 @@ function applyChannelVideoProjectFolder(database: AppDatabase): {
   musicCreated: number
 } {
   ensureColumn(database, 'channel_videos', 'project_folder_path', 'TEXT')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyShortsJobs(database: AppDatabase): {
+  historyCreated: number
+  musicCreated: number
+} {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS shorts_jobs (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      source_path TEXT NOT NULL,
+      source_name TEXT NOT NULL,
+      profile TEXT NOT NULL DEFAULT 'history',
+      clip_count INTEGER NOT NULL DEFAULT 5,
+      duration_preset TEXT NOT NULL DEFAULT '20-45',
+      aspect_mode TEXT NOT NULL DEFAULT 'center_9_16',
+      captions_enabled INTEGER NOT NULL DEFAULT 1,
+      probe_json TEXT,
+      clips_json TEXT NOT NULL DEFAULT '[]',
+      transcript_json TEXT NOT NULL DEFAULT '[]',
+      transcript_source TEXT NOT NULL DEFAULT 'none',
+      analysis_notes TEXT,
+      error_message TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+  database.exec('CREATE INDEX IF NOT EXISTS idx_shorts_jobs_updated ON shorts_jobs(updated_at DESC)')
+  database.exec('CREATE INDEX IF NOT EXISTS idx_shorts_jobs_project ON shorts_jobs(project_id)')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyShortsCustomDuration(database: AppDatabase): {
+  historyCreated: number
+  musicCreated: number
+} {
+  ensureColumn(database, 'shorts_jobs', 'requested_duration', 'REAL NOT NULL DEFAULT 30')
+  ensureColumn(database, 'shorts_jobs', 'duration_mode', "TEXT NOT NULL DEFAULT 'approximate'")
+  database.exec(`
+    UPDATE shorts_jobs SET requested_duration = 30
+    WHERE duration_preset IN ('15-30', '20-45') AND (requested_duration IS NULL OR requested_duration <= 0 OR requested_duration = 30);
+    UPDATE shorts_jobs SET requested_duration = 45
+    WHERE duration_preset = '30-60';
+    UPDATE shorts_jobs SET duration_mode = 'approximate'
+    WHERE duration_mode IS NULL OR duration_mode = '';
+  `)
   return { historyCreated: 0, musicCreated: 0 }
 }
 

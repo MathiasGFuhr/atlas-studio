@@ -31,6 +31,11 @@ import type {
   VideoListFilters,
 } from '../shared/types'
 import type { MusicCutMode, MusicSegment, MusicTrack } from '../shared/musicAnalysis'
+import type {
+  ShortsAnalyzeInput,
+  ShortsJob,
+  ShortsProgressEvent,
+} from '../shared/shorts'
 import type { CustomPrompt } from '../shared/quickPrompts/types'
 import type {
   ChatAgentStatusSnapshot,
@@ -188,6 +193,34 @@ const api = {
     preview: (id: string) => ipcRenderer.invoke(IPC.music.preview, id) as Promise<Uint8Array>,
     export: (payload: { id: string; start: number; end: number; filename?: string }) =>
       ipcRenderer.invoke(IPC.music.export, payload) as Promise<string | null>,
+  },
+  shorts: {
+    list: (filters?: { projectId?: string | null }) =>
+      ipcRenderer.invoke(IPC.shorts.list, filters) as Promise<ShortsJob[]>,
+    get: (id: string) => ipcRenderer.invoke(IPC.shorts.get, id) as Promise<ShortsJob | null>,
+    import: (projectId?: string | null) =>
+      ipcRenderer.invoke(IPC.shorts.import, projectId) as Promise<ShortsJob | null>,
+    analyze: (request: ShortsAnalyzeInput) =>
+      ipcRenderer.invoke(IPC.shorts.analyze, request) as Promise<ShortsJob>,
+    updateClip: (jobId: string, clipId: string, patch: { start?: number; end?: number }) =>
+      ipcRenderer.invoke(IPC.shorts.updateClip, jobId, clipId, patch) as Promise<ShortsJob | null>,
+    updateSettings: (
+      jobId: string,
+      patch: Partial<
+        Pick<ShortsJob, 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled'>
+      >,
+    ) => ipcRenderer.invoke(IPC.shorts.updateSettings, jobId, patch) as Promise<ShortsJob | null>,
+    export: (payload: { jobId: string; clipId: string }) =>
+      ipcRenderer.invoke(IPC.shorts.export, payload) as Promise<string | null>,
+    remove: (id: string) => ipcRenderer.invoke(IPC.shorts.remove, id) as Promise<boolean>,
+    mediaUrl: (jobId: string) => ipcRenderer.invoke(IPC.shorts.mediaUrl, jobId) as Promise<string>,
+    onProgress: (callback: (event: ShortsProgressEvent) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: ShortsProgressEvent) => callback(data)
+      ipcRenderer.on(IPC.shorts.progress, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.shorts.progress, listener)
+      }
+    },
   },
   skills: {
     list: () => ipcRenderer.invoke(IPC.skills.list) as Promise<DiscoveredSkill[]>,

@@ -24,6 +24,13 @@ import {
   hashTitleAnalysisContext,
   parseTitleAnalysisResponse,
 } from '../../../shared/antigravity/titleAnalysis'
+import {
+  SHORTS_ANALYSIS_FAIL_MESSAGE,
+  SHORTS_ANALYSIS_SCHEMA,
+  buildShortsAnalysisPrompt,
+  normalizeShortsAnalysis,
+} from '../../../shared/antigravity/shortsAnalysis'
+import type { ShortsDurationMode, ShortsLocalCandidate, ShortsProfile, TranscriptCue } from '../../../shared/shorts'
 import { enrichTitleAnalysisPayload } from './enrichTitleContext'
 import { IPC } from '../../../shared/types'
 import { logger } from '../logging/logger'
@@ -356,6 +363,34 @@ export class AntigravityService {
     })
   }
 
+  async analyzeShorts(request: {
+    profile: ShortsProfile
+    duration: number
+    clipCount: number
+    requestedDuration: number
+    durationMode: ShortsDurationMode
+    fileName: string
+    transcript: TranscriptCue[]
+    scenes: Array<{ time: number }>
+    localCandidates: ShortsLocalCandidate[]
+    hasTranscript: boolean
+  }) {
+    const structured = await this.runStructuredPrompt({
+      schemaFile: 'shorts-schema.json',
+      schema: SHORTS_ANALYSIS_SCHEMA,
+      prompt: buildShortsAnalysisPrompt(request),
+      invalidMessage: SHORTS_ANALYSIS_FAIL_MESSAGE,
+      timeoutMs: 240_000,
+      printTimeout: '4m',
+    })
+    return normalizeShortsAnalysis(structured, {
+      duration: request.duration,
+      clipCount: request.clipCount,
+      requestedDuration: request.requestedDuration,
+      durationMode: request.durationMode,
+    })
+  }
+
   private buildQuickPromptAudit(request: AnalyzeQuickPromptRequest): string {
     const kindLabel = request.kind === 'image' ? 'Criar imagem' : 'Animar / Lipsync'
     const intent =
@@ -409,6 +444,8 @@ export class AntigravityService {
     schema: object
     prompt: string
     invalidMessage: string
+    timeoutMs?: number
+    printTimeout?: string
   }): Promise<Record<string, unknown>> {
     const binary = this.status.runtimePath || (await this.locateBinary())
     if (!binary) {
@@ -429,10 +466,10 @@ export class AntigravityService {
       '--effort',
       'low',
       '--print-timeout',
-      '3m',
+      opts.printTimeout ?? '3m',
     ]
 
-    const result = await this.runAgy(binary, args, 200_000)
+    const result = await this.runAgy(binary, args, opts.timeoutMs ?? 200_000)
     const combined = `${result.stdout}\n${result.stderr}`
     if (/authentication required/i.test(combined)) {
       this.setStatus({

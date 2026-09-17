@@ -15,7 +15,7 @@ export function Modal({
   children: ReactNode
   onClose: () => void
   footer?: ReactNode
-  size?: 'md' | 'lg'
+  size?: 'md' | 'lg' | 'xl'
 }) {
   if (!open) return null
   return (
@@ -25,7 +25,9 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={
-          size === 'lg'
+          size === 'xl'
+            ? 'w-full max-w-4xl rounded-2xl border border-border bg-card shadow-2xl'
+            : size === 'lg'
             ? 'w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl'
             : 'w-full max-w-lg rounded-2xl border border-border bg-card shadow-2xl'
         }

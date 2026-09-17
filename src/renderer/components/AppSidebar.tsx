@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { BookOpen, CheckSquare, Home, MessageSquareText, Music2, PanelLeftClose, PanelLeftOpen, Settings, Tv } from 'lucide-react'
+import { BookOpen, CheckSquare, Clapperboard, Home, MessageSquareText, Music2, PanelLeftClose, PanelLeftOpen, Settings, Tv } from 'lucide-react'
 import type { CodexStatus } from '@shared/types'
 import { isContentAreaEnabled, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { CodexStatusCard } from './CodexStatus'
@@ -35,6 +35,7 @@ const globalItems = [
     area: 'music' as const,
   },
   { to: '/canais', label: 'Canais', icon: Tv, color: undefined, area: null },
+  { to: '/shorts', label: 'Shorts Studio', icon: Clapperboard, color: undefined, area: null },
   { to: '/tarefas', label: 'Tarefas', icon: CheckSquare, color: undefined, area: null },
   { to: '/configuracoes', label: 'Configurações', icon: Settings, color: undefined, area: null },
 ]

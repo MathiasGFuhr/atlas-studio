@@ -20,15 +20,30 @@ export function resolveFfmpegPath(): string {
   return process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
 }
 
-export function runFfmpeg(args: string[], timeoutMs = 120_000): Promise<void> {
+export type FfmpegRunOptions = {
+  timeoutMs?: number
+  timeoutMessage?: string
+  failMessage?: string
+  allowNonZero?: boolean
+}
+
+export function runFfmpegResult(
+  args: string[],
+  options: FfmpegRunOptions = {},
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
   const binary = resolveFfmpegPath()
+  const timeoutMs = options.timeoutMs ?? 120_000
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { windowsHide: true })
+    let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => {
       child.kill()
-      reject(new Error('O FFmpeg demorou demais para cortar o áudio.'))
+      reject(new Error(options.timeoutMessage || 'O FFmpeg demorou demais para cortar o áudio.'))
     }, timeoutMs)
+    child.stdout?.on('data', (buf: Buffer) => {
+      stdout += buf.toString('utf8')
+    })
     child.stderr?.on('data', (buf: Buffer) => {
       stderr += buf.toString('utf8')
     })
@@ -39,11 +54,15 @@ export function runFfmpeg(args: string[], timeoutMs = 120_000): Promise<void> {
     })
     child.on('close', (code) => {
       clearTimeout(timer)
-      if (code === 0) {
-        resolve()
+      if (code === 0 || options.allowNonZero) {
+        resolve({ code, stdout, stderr })
         return
       }
-      reject(new Error(stderr.trim().slice(-400) || 'Falha ao processar o áudio.'))
+      reject(new Error(stderr.trim().slice(-400) || options.failMessage || 'Falha ao processar o áudio.'))
     })
   })
+}
+
+export function runFfmpeg(args: string[], timeoutMs = 120_000): Promise<void> {
+  return runFfmpegResult(args, { timeoutMs }).then(() => undefined)
 }

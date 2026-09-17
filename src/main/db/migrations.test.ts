@@ -148,7 +148,7 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 3 })
+    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 5 })
 
     // Nenhum registro antigo foi perdido.
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -228,7 +228,7 @@ describe('migração para projetos de História e Música', () => {
 
     const second = migrateSchema(db)
 
-    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 3 })
+    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 5 })
     expect(db.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual(afterFirst)
   })
 
@@ -317,7 +317,7 @@ describe('migração para projetos de História e Música', () => {
     const db = await createLegacyDatabase()
     seedLegacyContent(db)
     const first = migrateSchema(db)
-    expect(first.schemaVersion).toBe(3)
+    expect(first.schemaVersion).toBe(5)
     expect(first.backedUp).toBe(false)
     expect(migrateSchema(db).backedUp).toBe(false)
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -325,6 +325,8 @@ describe('migração para projetos de História e Música', () => {
       expect.objectContaining({ version: 1 }),
       expect.objectContaining({ version: 2 }),
       expect.objectContaining({ version: 3 }),
+      expect.objectContaining({ version: 4 }),
+      expect.objectContaining({ version: 5 }),
     ])
   })
 
@@ -351,9 +353,16 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result.schemaVersion).toBe(3)
+    expect(result.schemaVersion).toBe(5)
     const after = db.prepare('PRAGMA table_info(channel_videos)').all() as Array<{ name: string }>
     expect(after.some((col) => col.name === 'project_folder_path')).toBe(true)
+    const shorts = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='shorts_jobs'").get() as
+      | { name: string }
+      | undefined
+    expect(shorts?.name).toBe('shorts_jobs')
+    const shortsCols = db.prepare('PRAGMA table_info(shorts_jobs)').all() as Array<{ name: string }>
+    expect(shortsCols.some((col) => col.name === 'requested_duration')).toBe(true)
+    expect(shortsCols.some((col) => col.name === 'duration_mode')).toBe(true)
   })
 
   it('converte status antigos de vídeo para o pipeline atual', async () => {

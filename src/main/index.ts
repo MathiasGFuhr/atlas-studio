@@ -15,6 +15,10 @@ import { generationRunRepository } from './repositories/generationRunRepository'
 import { settingsRepository } from './repositories/settingsRepository'
 import { syncSkillLibrary } from './services/skills/SkillLibrarySync'
 import {
+  registerAtlasMediaProtocol,
+  registerAtlasMediaScheme,
+} from './services/media/atlasMediaProtocol'
+import {
   APP_BACKGROUND,
   MAIN_WINDOW_HEIGHT,
   MAIN_WINDOW_WIDTH,
@@ -27,6 +31,8 @@ let splashController: SplashController | null = null
 let codexService: CodexService | null = null
 let runtimeManager: CodexRuntimeManager | null = null
 let antigravityService: AntigravityService | null = null
+
+registerAtlasMediaScheme()
 
 // Nome exibido + pasta userData correta no Windows (não o slug npm).
 if (app.isPackaged) {
@@ -137,6 +143,7 @@ app.whenReady().then(async () => {
 
   const workspaceRoot = getWorkspaceRoot()
   await initDatabase(workspaceRoot)
+  registerAtlasMediaProtocol()
   migratePackagedPaths(workspaceRoot)
   const synced = syncSkillLibrary()
   console.log(

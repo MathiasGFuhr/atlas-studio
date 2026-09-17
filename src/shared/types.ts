@@ -716,6 +716,18 @@ export const IPC = {
     preview: 'music:preview',
     export: 'music:export',
   },
+  shorts: {
+    list: 'shorts:list',
+    get: 'shorts:get',
+    import: 'shorts:import',
+    analyze: 'shorts:analyze',
+    updateClip: 'shorts:updateClip',
+    updateSettings: 'shorts:updateSettings',
+    export: 'shorts:export',
+    remove: 'shorts:remove',
+    mediaUrl: 'shorts:mediaUrl',
+    progress: 'shorts:progress',
+  },
   skills: {
     list: 'skills:list',
     rescan: 'skills:rescan',

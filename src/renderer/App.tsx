@@ -22,6 +22,7 @@ import { ScriptDetailPage } from './pages/ScriptDetailPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { MusicPage } from './pages/MusicPage'
 import { MusicEditorPage } from './pages/MusicEditorPage'
+import { ShortsStudioPage } from './pages/ShortsStudioPage'
 import { TasksPage } from './pages/TasksPage'
 import { ChatDock } from './components/chat/ChatDock'
 import { getAtlasApi } from './lib/api'
@@ -189,6 +190,7 @@ export default function App() {
                 <Route path="/canais/agenda" element={<ChannelAgendaPage />} />
                 <Route path="/canais/:id/videos/:videoId" element={<ChannelCalendarPage />} />
                 <Route path="/canais/:id" element={<ChannelCalendarPage />} />
+                <Route path="/shorts" element={<ShortsStudioPage />} />
                 <Route path="/tarefas" element={<TasksPage />} />
                 <Route path="/chat" element={<OpenChatRedirect />} />
                 <Route path="/prompts" element={<Navigate to={MUSIC_PROMPTS_PATH} replace />} />

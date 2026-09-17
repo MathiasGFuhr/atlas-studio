@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, FileText, MessageSquare, Music2, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
+import { ArrowLeft, Clapperboard, FileText, MessageSquare, Music2, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
 import type { Channel, Project, ProjectType, ScriptRecord } from '@shared/types'
 import type { MusicTrack } from '@shared/musicAnalysis'
 import { formatTimecode } from '@shared/musicAnalysis'
@@ -257,6 +257,16 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
         </div>
 
         <aside className="space-y-4">
+          <Button
+            variant="secondary"
+            fullWidth
+            className="h-9 text-xs"
+            icon={<Clapperboard className="h-3.5 w-3.5" />}
+            onClick={() => navigate(`/shorts?projectId=${project.id}`)}
+          >
+            Abrir Shorts Studio
+          </Button>
+
           <Button
             variant="secondary"
             fullWidth
