@@ -15,6 +15,8 @@ import { useToast } from '../components/Toast'
 import type { CodexAuth } from '../hooks/useCodexAuth'
 import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 import { notifySettingsChanged } from '../lib/settingsEvents'
+import { AgentIntegrationModels } from '../components/settings/AgentIntegrationModels'
+import { useAgentModels } from '../hooks/useAgentModels'
 
 export function SettingsPage({
   onSettingsSaved,
@@ -30,7 +32,6 @@ export function SettingsPage({
   const { capabilities } = useWorkspaceCapabilities()
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [niches, setNiches] = useState<Array<{ id: string; name: string }>>([])
-  const [codexModels, setCodexModels] = useState<Array<{ id: string; label: string }>>([])
   const [confirmLogout, setConfirmLogout] = useState(false)
   const [testing, setTesting] = useState(false)
   const [antigravity, setAntigravity] = useState<AntigravityStatus | null>(null)
@@ -39,25 +40,17 @@ export function SettingsPage({
   const [confirmAgyLogout, setConfirmAgyLogout] = useState(false)
   const [searchParams] = useSearchParams()
   const updatesHighlight = searchParams.get('secao') === 'atualizacoes'
+  const agentModels = useAgentModels()
 
   useEffect(() => {
     void (async () => {
-      const [s, n, modelsPayload, agy] = await Promise.all([
+      const [s, n, agy] = await Promise.all([
         api.settings.get(),
         api.niches.list(),
-        api.codex.listModels().catch(() => ({ models: [], configured: null, effective: '' })),
         api.antigravity.status().catch(() => null),
       ])
       setSettings(s)
       setNiches(n.map((item) => ({ id: item.id, name: item.name })))
-      const opts = modelsPayload.models.map((m) => ({ id: m.id, label: m.label }))
-      if (modelsPayload.effective && !opts.some((o) => o.id === modelsPayload.effective)) {
-        opts.unshift({ id: modelsPayload.effective, label: modelsPayload.effective })
-      }
-      setCodexModels(opts)
-      if (modelsPayload.effective && s.codexModel !== modelsPayload.effective) {
-        setSettings({ ...s, codexModel: modelsPayload.effective })
-      }
       setAntigravity(agy)
     })()
   }, [api])
@@ -95,6 +88,7 @@ export function SettingsPage({
         push('Codex encontrado, mas ainda não vinculado.', 'default')
       }
       await codexAuth.refresh()
+      await agentModels.refresh('codex')
     } catch {
       push('Não foi possível testar a conexão.', 'error')
     } finally {
@@ -120,6 +114,7 @@ export function SettingsPage({
       push('Não foi possível testar o Antigravity.', 'error')
     } finally {
       setTestingAgy(false)
+      void agentModels.refresh('antigravity')
     }
   }
 
@@ -389,24 +384,37 @@ export function SettingsPage({
           {codexAuth?.isConnected && codexAuth.account?.email ? (
             <KV label="E-mail" value={codexAuth.account.email} />
           ) : null}
-          <Row
-            label="Modelo"
-            control={
-              <Select
-                value={settings.codexModel}
-                onChange={(e) => setSettings({ ...settings, codexModel: e.target.value })}
-                options={
-                  codexModels.length > 0
-                    ? codexModels.map((m) => ({ value: m.id, label: m.label }))
-                    : [{ value: settings.codexModel || 'gpt-5.6-sol', label: settings.codexModel || 'gpt-5.6-sol' }]
-                }
-              />
-            }
-          />
-          <p className="mt-1 text-xs text-muted">
-            Modelo real do Codex CLI (`~/.codex/config.toml`). Ao salvar, o Atlas sincroniza com o
-            Codex.
-          </p>
+          <div className="mt-3">
+            <AgentIntegrationModels
+              provider="codex"
+              snapshot={agentModels.bundle.codex}
+              loading={agentModels.loading.codex}
+              refreshing={agentModels.refreshing === 'codex' || agentModels.refreshing === 'all'}
+              onRefresh={() => void agentModels.refresh('codex')}
+              onModelChange={(model) => {
+                void agentModels.setDefaultModel('codex', model).then((snapshot) => {
+                  setSettings((current) =>
+                    current
+                      ? {
+                          ...current,
+                          defaultCodexModel: snapshot.currentModel || model,
+                          codexModel: snapshot.currentModel || model,
+                        }
+                      : current,
+                  )
+                })
+              }}
+              onEffortChange={(effort) => {
+                void agentModels.setReasoningEffort('codex', effort).then((snapshot) => {
+                  setSettings((current) =>
+                    current
+                      ? { ...current, defaultCodexEffort: snapshot.currentReasoningEffort || effort }
+                      : current,
+                  )
+                })
+              }}
+            />
+          </div>
           <Row
             label="Auto-approval"
             control={
@@ -462,7 +470,40 @@ export function SettingsPage({
             accent={Boolean(antigravity?.connected)}
           />
           <KV label="Versão" value={antigravity?.version || '—'} />
+          <KV label="Conta" value={antigravity?.connected ? 'Google vinculada' : '—'} />
           <KV label="CLI" value={antigravity?.runtimePath || settings.antigravityBinaryPath || '—'} />
+          <div className="mt-3">
+            <AgentIntegrationModels
+              provider="antigravity"
+              snapshot={agentModels.bundle.antigravity}
+              loading={agentModels.loading.antigravity}
+              refreshing={
+                agentModels.refreshing === 'antigravity' || agentModels.refreshing === 'all'
+              }
+              onRefresh={() => void agentModels.refresh('antigravity')}
+              onModelChange={(model) => {
+                void agentModels.setDefaultModel('antigravity', model).then((snapshot) => {
+                  setSettings((current) =>
+                    current
+                      ? { ...current, defaultAntigravityModel: snapshot.currentModel || model }
+                      : current,
+                  )
+                })
+              }}
+              onEffortChange={(effort) => {
+                void agentModels.setReasoningEffort('antigravity', effort).then((snapshot) => {
+                  setSettings((current) =>
+                    current
+                      ? {
+                          ...current,
+                          defaultAntigravityEffort: snapshot.currentReasoningEffort || effort,
+                        }
+                      : current,
+                  )
+                })
+              }}
+            />
+          </div>
           <p className="text-xs leading-relaxed text-muted">
             Entre com sua conta Google no Antigravity para analisar a força dos títulos no
             calendário do canal.

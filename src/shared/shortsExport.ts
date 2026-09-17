@@ -1,7 +1,11 @@
 import {
   SHORTS_OUTPUT_HEIGHT,
   SHORTS_OUTPUT_WIDTH,
+  clipDuration,
   type ShortsAspectMode,
+  type ShortsClip,
+  type ShortsEditorialRecord,
+  type ShortsJob,
   type TranscriptCue,
 } from './shorts'
 
@@ -54,6 +58,81 @@ export function buildVerticalCropPlan(
     cropHeight: cropH,
     cropX,
     cropY,
+  }
+}
+
+export interface ShortsPreviewFrame {
+  /** Largura / altura da janela visível (9/16 no crop vertical). */
+  aspectRatio: number
+  videoWidthPct: number
+  videoHeightPct: number
+  videoLeftPct: number
+  videoTopPct: number
+  cropped: boolean
+}
+
+/**
+ * Layout CSS que reproduz o crop FFmpeg sem gerar um arquivo 1080×1920.
+ * O elemento de vídeo é dimensionado para que só a janela recortada preencha o frame.
+ */
+export function buildShortsPreviewFrame(
+  width: number,
+  height: number,
+  mode: ShortsAspectMode,
+): ShortsPreviewFrame {
+  const srcW = Math.max(1, width)
+  const srcH = Math.max(1, height)
+  const plan = buildVerticalCropPlan(srcW, srcH, mode)
+  if (!plan) {
+    return {
+      aspectRatio: srcW / srcH,
+      videoWidthPct: 100,
+      videoHeightPct: 100,
+      videoLeftPct: 0,
+      videoTopPct: 0,
+      cropped: false,
+    }
+  }
+  return {
+    aspectRatio: 9 / 16,
+    videoWidthPct: (srcW / plan.cropWidth) * 100,
+    videoHeightPct: (srcH / plan.cropHeight) * 100,
+    videoLeftPct: -(plan.cropX / plan.cropWidth) * 100,
+    videoTopPct: -(plan.cropY / plan.cropHeight) * 100,
+    cropped: true,
+  }
+}
+
+export function buildShortsEditorialRecord(
+  job: Pick<ShortsJob, 'sourcePath' | 'sourceName' | 'aspectMode' | 'probe'>,
+  clip: ShortsClip,
+): ShortsEditorialRecord {
+  const plan = job.probe
+    ? buildVerticalCropPlan(job.probe.width, job.probe.height, job.aspectMode)
+    : null
+  return {
+    sourceVideo: job.sourcePath,
+    sourceName: job.sourceName,
+    start: clip.start,
+    end: clip.end,
+    duration: clipDuration(clip),
+    score: clip.score,
+    reason: clip.reason,
+    hook: clip.hook,
+    title: clip.title,
+    description: clip.description,
+    hashtags: clip.hashtags,
+    format: job.aspectMode,
+    crop: plan
+      ? {
+          cropWidth: plan.cropWidth,
+          cropHeight: plan.cropHeight,
+          cropX: plan.cropX,
+          cropY: plan.cropY,
+          focusStrategy: plan.focusStrategy,
+        }
+      : null,
+    exportPath: clip.exportedPath,
   }
 }
 

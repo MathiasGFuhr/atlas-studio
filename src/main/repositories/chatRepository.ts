@@ -18,8 +18,15 @@ type ConversationRow = {
   project_id: string | null
   use_project_context: number
   last_agent: string | null
+  model_override?: string | null
+  effort_override?: string | null
   created_at: string
   updated_at: string
+}
+
+function emptyToNull(value?: string | null): string | null {
+  const next = value?.trim() || ''
+  return next || null
 }
 
 type MessageRow = {
@@ -68,6 +75,8 @@ function mapConversation(row: ConversationRow): ChatConversation {
     projectName: project?.name ?? null,
     useProjectContext: Number(row.use_project_context) === 1,
     lastAgent: asAgent(row.last_agent),
+    modelOverride: emptyToNull(row.model_override ?? null),
+    effortOverride: emptyToNull(row.effort_override ?? null),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -130,13 +139,17 @@ export const chatRepository = {
     projectId?: string | null
     useProjectContext?: boolean
     lastAgent?: ChatAgentId | null
+    modelOverride?: string | null
+    effortOverride?: string | null
   }): ChatConversation {
     const id = randomUUID()
     const timestamp = new Date().toISOString()
     getDb()
       .prepare(
-        `INSERT INTO chat_conversations (id, title, project_id, use_project_context, last_agent, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO chat_conversations (
+           id, title, project_id, use_project_context, last_agent, model_override, effort_override, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -144,6 +157,8 @@ export const chatRepository = {
         input?.projectId?.trim() || null,
         input?.useProjectContext ? 1 : 0,
         input?.lastAgent ?? null,
+        emptyToNull(input?.modelOverride ?? null),
+        emptyToNull(input?.effortOverride ?? null),
         timestamp,
         timestamp,
       )
@@ -157,6 +172,8 @@ export const chatRepository = {
       projectId: string | null
       useProjectContext: boolean
       lastAgent: ChatAgentId | null
+      modelOverride: string | null
+      effortOverride: string | null
     }>,
   ): ChatConversation | null {
     const current = this.getConversation(id)
@@ -164,7 +181,8 @@ export const chatRepository = {
     getDb()
       .prepare(
         `UPDATE chat_conversations
-         SET title = ?, project_id = ?, use_project_context = ?, last_agent = ?, updated_at = ?
+         SET title = ?, project_id = ?, use_project_context = ?, last_agent = ?,
+             model_override = ?, effort_override = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -178,6 +196,12 @@ export const chatRepository = {
             ? 1
             : 0,
         patch.lastAgent !== undefined ? patch.lastAgent : current.lastAgent,
+        patch.modelOverride !== undefined
+          ? emptyToNull(patch.modelOverride)
+          : current.modelOverride,
+        patch.effortOverride !== undefined
+          ? emptyToNull(patch.effortOverride)
+          : current.effortOverride,
         new Date().toISOString(),
         id,
       )

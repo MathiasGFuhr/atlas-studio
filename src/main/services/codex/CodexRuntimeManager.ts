@@ -167,6 +167,34 @@ export class CodexRuntimeManager extends EventEmitter {
     return this.authState === 'connected'
   }
 
+  getVersion(): string | null {
+    return this.codexVersion
+  }
+
+  getAuthFingerprint(): string {
+    return [this.authState, this.account?.email || '', this.account?.loginType || ''].join(':')
+  }
+
+  async runCliCommand(
+    args: string[],
+    timeoutMs = 15_000,
+  ): Promise<{ code: number | null; stdout: string; stderr: string }> {
+    return this.runCli(args, timeoutMs)
+  }
+
+  async tryAppServerRpc(
+    method: string,
+    params: Record<string, unknown> = {},
+    timeoutMs = 4000,
+  ): Promise<unknown | null> {
+    if (!this.isAppServerRunning()) return null
+    try {
+      return await this.sendRpcShort(method, params, timeoutMs)
+    } catch {
+      return null
+    }
+  }
+
   getBinaryPath(): string | null {
     return this.binaryPath
   }

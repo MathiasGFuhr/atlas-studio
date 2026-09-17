@@ -5,7 +5,9 @@ import { CHAT_DOCK_DEFAULT_HEIGHT, CHAT_DOCK_DEFAULT_WIDTH } from '../../shared/
 import { normalizeNotificationReadKeys } from '../../shared/notifications'
 import {
   isRealCodexModelId,
+  readConfiguredEffort,
   resolveEffectiveCodexModel,
+  writeConfiguredEffort,
   writeConfiguredModel,
 } from '../services/codex/codexModels'
 import { readImageDataUrl } from '../services/storage/profilePhoto'
@@ -40,6 +42,10 @@ const DEFAULTS: AppSettings = {
   defaultDuration: '15',
   finalAuditEnabled: true,
   codexModel: '',
+  defaultCodexModel: '',
+  defaultCodexEffort: '',
+  defaultAntigravityModel: '',
+  defaultAntigravityEffort: '',
   autoApproval: false,
   backupEnabled: true,
   autoCheckUpdates: true,
@@ -82,18 +88,17 @@ export const settingsRepository = {
       settings.skillsPath = settings.skillLibraryRoot
     }
 
-    // Modelo real do Codex (config.toml), não placeholder GPT-4o.
-    const resolved = resolveEffectiveCodexModel(String(settings.codexModel || ''))
-    if (settings.codexModel !== resolved) {
-      settings.codexModel = resolved
-      try {
-        getDb()
-          .prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
-          .run('codexModel', JSON.stringify(resolved))
-      } catch {
-        /* db pode ainda não estar pronto em testes */
-      }
+    const fromLegacy = String(settings.codexModel || '')
+    const fromDefault = String(settings.defaultCodexModel || '')
+    const resolved = resolveEffectiveCodexModel(fromDefault || fromLegacy)
+    settings.defaultCodexModel = resolved
+    settings.codexModel = resolved
+
+    if (!String(settings.defaultCodexEffort || '').trim()) {
+      settings.defaultCodexEffort = readConfiguredEffort() || ''
     }
+    settings.defaultAntigravityModel = String(settings.defaultAntigravityModel || '')
+    settings.defaultAntigravityEffort = String(settings.defaultAntigravityEffort || '')
 
     settings.accountPhotoDataUrl = readImageDataUrl(String(settings.accountPhotoPath || ''))
     settings.notificationReadKeys = normalizeNotificationReadKeys(settings.notificationReadKeys)
@@ -111,14 +116,27 @@ export const settingsRepository = {
       next.skillLibraryRoot = patch.skillsPath
     }
 
-    if (patch.codexModel !== undefined) {
-      const model = resolveEffectiveCodexModel(patch.codexModel)
+    if (patch.defaultCodexModel !== undefined || patch.codexModel !== undefined) {
+      const model = resolveEffectiveCodexModel(patch.defaultCodexModel ?? patch.codexModel)
+      next.defaultCodexModel = model
       next.codexModel = model
       if (isRealCodexModelId(model)) {
         try {
           writeConfiguredModel(model)
         } catch {
           /* config.toml pode estar bloqueado — setting Atlas ainda vale via --model */
+        }
+      }
+    }
+
+    if (patch.defaultCodexEffort !== undefined) {
+      const effort = String(patch.defaultCodexEffort || '').trim()
+      next.defaultCodexEffort = effort
+      if (effort) {
+        try {
+          writeConfiguredEffort(effort)
+        } catch {
+          /* config.toml pode estar bloqueado — setting Atlas ainda vale via -c */
         }
       }
     }

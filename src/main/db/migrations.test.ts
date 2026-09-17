@@ -148,7 +148,7 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 5 })
+    expect(result).toMatchObject({ historyCreated: 2, musicCreated: 1, schemaVersion: 6 })
 
     // Nenhum registro antigo foi perdido.
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -228,7 +228,7 @@ describe('migração para projetos de História e Música', () => {
 
     const second = migrateSchema(db)
 
-    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 5 })
+    expect(second).toMatchObject({ historyCreated: 0, musicCreated: 0, schemaVersion: 6 })
     expect(db.prepare('SELECT COUNT(*) AS c FROM projects').get()).toEqual(afterFirst)
   })
 
@@ -317,7 +317,7 @@ describe('migração para projetos de História e Música', () => {
     const db = await createLegacyDatabase()
     seedLegacyContent(db)
     const first = migrateSchema(db)
-    expect(first.schemaVersion).toBe(5)
+    expect(first.schemaVersion).toBe(6)
     expect(first.backedUp).toBe(false)
     expect(migrateSchema(db).backedUp).toBe(false)
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
@@ -327,6 +327,7 @@ describe('migração para projetos de História e Música', () => {
       expect.objectContaining({ version: 3 }),
       expect.objectContaining({ version: 4 }),
       expect.objectContaining({ version: 5 }),
+      expect.objectContaining({ version: 6 }),
     ])
   })
 
@@ -353,7 +354,7 @@ describe('migração para projetos de História e Música', () => {
 
     const result = migrateSchema(db)
 
-    expect(result.schemaVersion).toBe(5)
+    expect(result.schemaVersion).toBe(6)
     const after = db.prepare('PRAGMA table_info(channel_videos)').all() as Array<{ name: string }>
     expect(after.some((col) => col.name === 'project_folder_path')).toBe(true)
     const shorts = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='shorts_jobs'").get() as
@@ -363,6 +364,9 @@ describe('migração para projetos de História e Música', () => {
     const shortsCols = db.prepare('PRAGMA table_info(shorts_jobs)').all() as Array<{ name: string }>
     expect(shortsCols.some((col) => col.name === 'requested_duration')).toBe(true)
     expect(shortsCols.some((col) => col.name === 'duration_mode')).toBe(true)
+    const chatCols = db.prepare('PRAGMA table_info(chat_conversations)').all() as Array<{ name: string }>
+    expect(chatCols.some((col) => col.name === 'model_override')).toBe(true)
+    expect(chatCols.some((col) => col.name === 'effort_override')).toBe(true)
   })
 
   it('converte status antigos de vídeo para o pipeline atual', async () => {

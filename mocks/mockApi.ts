@@ -46,6 +46,7 @@ import {
   preferenceFromSettings,
   resolveWorkspaceCapabilities,
 } from '../src/shared/workspaceCapabilities'
+import type { AgentModelSnapshot, AgentModelsBundle, AgentProviderId } from '../src/shared/agents/types'
 
 /**
  * Mock API para preview no navegador (sem Electron).
@@ -102,7 +103,11 @@ const settings: AppSettings = {
   defaultOutputStyle: 'profissional',
   defaultDuration: '15',
   finalAuditEnabled: true,
-  codexModel: 'GPT-4o',
+  codexModel: '',
+  defaultCodexModel: '',
+  defaultCodexEffort: '',
+  defaultAntigravityModel: '',
+  defaultAntigravityEffort: '',
   autoApproval: false,
   backupEnabled: true,
   autoCheckUpdates: true,
@@ -115,6 +120,30 @@ const settings: AppSettings = {
   contentAreasMusicEnabled: true,
   chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
   chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
+}
+
+function emptyAgentSnapshot(provider: AgentProviderId): AgentModelSnapshot {
+  return {
+    provider,
+    version: null,
+    models: [],
+    currentModel: null,
+    currentReasoningEffort: null,
+    reasoningEfforts: [],
+    supportsReasoningEffort: false,
+    configuredModelMissing: false,
+    officialFallback: null,
+    officialFallbackMessage: null,
+    error: null,
+    source: 'none',
+    discoveredAt: new Date().toISOString(),
+    fromCache: false,
+  }
+}
+
+const emptyAgentBundle: AgentModelsBundle = {
+  codex: emptyAgentSnapshot('codex'),
+  antigravity: emptyAgentSnapshot('antigravity'),
 }
 
 let progressListener: ((event: GenerationProgressEvent) => void) | null = null
@@ -573,6 +602,9 @@ export const mockApi = {
       throw new Error('Análise de Shorts indisponível no modo mock. Use o Electron.')
     },
     updateClip: async () => null,
+    regenerateCopy: async () => {
+      throw new Error('Regenerar título/descrição indisponível no modo mock. Use o Electron.')
+    },
     updateSettings: async () => null,
     export: async () => null,
     remove: async () => false,
@@ -662,9 +694,19 @@ export const mockApi = {
     loginCancel: async () => undefined,
     logout: async () => undefined,
     healthCheck: async () => mockApi.codex.status(),
+    listModels: async () => ({ models: [], configured: null, effective: '' }),
     onAuthStateChanged: () => () => undefined,
     dismissOnboarding: async () => undefined,
     isOnboardingDismissed: async () => true,
+  },
+  agents: {
+    getCapabilities: async (): Promise<AgentModelsBundle> => emptyAgentBundle,
+    refreshModels: async (): Promise<AgentModelsBundle> => emptyAgentBundle,
+    setDefaultModel: async (provider: AgentProviderId): Promise<AgentModelSnapshot> =>
+      emptyAgentSnapshot(provider),
+    setReasoningEffort: async (provider: AgentProviderId): Promise<AgentModelSnapshot> =>
+      emptyAgentSnapshot(provider),
+    onCapabilitiesChanged: () => () => undefined,
   },
   generation: {
     start: async (_request: GenerateScriptRequest): Promise<GenerationResult> => {
@@ -691,6 +733,8 @@ export const mockApi = {
       projectId: null,
       useProjectContext: false,
       lastAgent: null,
+      modelOverride: null,
+      effortOverride: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }),
@@ -728,7 +772,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.6.0',
+      currentVersion: '1.7.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

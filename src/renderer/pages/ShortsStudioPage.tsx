@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Clapperboard, Film, Loader2, Pause, Play, Scissors } from 'lucide-react'
+import { Clapperboard, Film, Loader2, Scissors } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { Project } from '@shared/types'
 import type {
   ShortsAspectMode,
   ShortsClip,
   ShortsClipCount,
+  ShortsClipPatch,
+  ShortsCopyFields,
   ShortsDurationMode,
   ShortsJob,
   ShortsProfile,
@@ -16,13 +18,12 @@ import {
   SHORTS_ASPECT_MODES,
   SHORTS_CLIP_COUNTS,
   SHORTS_PROGRESS_LABEL,
-  clipDuration,
+  formatShortsCopy,
   formatShortsTimecode,
 } from '@shared/shorts'
 import {
   SHORTS_DURATION_SHORTCUTS,
   capRequestedDuration,
-  formatClipLength,
   formatDurationInput,
   isDurationShortcut,
   parseDurationInput,
@@ -31,7 +32,8 @@ import { PageHeader } from '../components/PageHeader'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Input } from '../components/Input'
-import { Modal } from '../components/Modal'
+import { ShortsAdjustModal } from '../components/shorts/ShortsAdjustModal'
+import { ShortsResultCard } from '../components/shorts/ShortsResultCard'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { cn } from '../lib/utils'
@@ -82,6 +84,8 @@ export function ShortsStudioPage() {
   const [progress, setProgress] = useState<ShortsProgressEvent | null>(null)
   const [previewClip, setPreviewClip] = useState<ShortsClip | null>(null)
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [playingClipId, setPlayingClipId] = useState<string | null>(null)
+  const [copyBusyId, setCopyBusyId] = useState<string | null>(null)
 
   const analyzing = job?.status === 'analyzing' || (busy && progress?.stage !== 'exporting')
 
@@ -224,16 +228,21 @@ export function ShortsStudioPage() {
     }
   }
 
-  async function openPreview(clip: ShortsClip) {
-    if (!job) return
-    try {
-      const url = await api.shorts.mediaUrl(job.id)
-      setMediaUrl(url)
-      setPreviewClip(clip)
-    } catch (error) {
-      push(error instanceof Error ? error.message : 'Não foi possível abrir a prévia', 'error')
+  useEffect(() => {
+    if (!job) {
+      setMediaUrl(null)
+      return
     }
-  }
+    void api.shorts
+      .mediaUrl(job.id)
+      .then(setMediaUrl)
+      .catch(() => setMediaUrl(null))
+  }, [api, job?.id, job?.sourcePath])
+
+  useEffect(() => {
+    setPlayingClipId(null)
+    setPreviewClip(null)
+  }, [job?.id])
 
   async function exportClip(clip: ShortsClip) {
     if (!job) return
@@ -249,6 +258,53 @@ export function ShortsStudioPage() {
       push(error instanceof Error ? error.message : 'Falha ao exportar o Short', 'error')
     } finally {
       setBusy(false)
+      setProgress(null)
+    }
+  }
+
+  async function persistClip(clip: ShortsClip, patch: ShortsClipPatch) {
+    if (!job) return
+    const next = await api.shorts.updateClip(job.id, clip.id, patch)
+    if (!next) return
+    setJob(next)
+    const updated = next.clips.find((item) => item.id === clip.id) ?? null
+    setPreviewClip((current) => (current?.id === clip.id ? updated : current))
+  }
+
+  async function copyClip(clip: ShortsClip, part: 'title' | 'description' | 'all') {
+    const text = formatShortsCopy(clip, part)
+    if (!text) {
+      push('Nada para copiar ainda.', 'error')
+      return
+    }
+    await api.system.copyText(text)
+    push(
+      part === 'title' ? 'Título copiado.' : part === 'description' ? 'Descrição copiada.' : 'Título e descrição copiados.',
+      'success',
+    )
+  }
+
+  async function regenerateClip(clip: ShortsClip, fields: ShortsCopyFields) {
+    if (!job) return
+    setCopyBusyId(clip.id)
+    setProgress({ jobId: job.id, stage: 'writing_copy', message: SHORTS_PROGRESS_LABEL.writing_copy })
+    try {
+      const next = await api.shorts.regenerateCopy({ jobId: job.id, clipId: clip.id, fields })
+      setJob(next)
+      const updated = next.clips.find((item) => item.id === clip.id) ?? null
+      setPreviewClip((current) => (current?.id === clip.id ? updated : current))
+      push(
+        fields === 'title'
+          ? 'Novo título gerado.'
+          : fields === 'description'
+            ? 'Nova descrição gerada.'
+            : 'Título e descrição gerados.',
+        'success',
+      )
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao regenerar título/descrição', 'error')
+    } finally {
+      setCopyBusyId(null)
       setProgress(null)
     }
   }
@@ -422,7 +478,7 @@ export function ShortsStudioPage() {
             <div className="md:col-span-2">
               <Button
                 fullWidth
-                disabled={busy || !job}
+                disabled={busy || Boolean(copyBusyId) || !job}
                 icon={analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />}
                 onClick={() => void analyze()}
               >
@@ -454,43 +510,28 @@ export function ShortsStudioPage() {
           ) : null}
 
           {job?.clips.length ? (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 xl:grid-cols-2">
               {job.clips.map((clip) => (
-                <Card key={clip.id} className="flex flex-col gap-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-2">Short #{clip.index}</p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums text-text">
-                        {formatShortsTimecode(clip.start)} → {formatShortsTimecode(clip.end)}
-                      </p>
-                      <p className="text-sm text-muted">{formatClipLength(clipDuration(clip))}</p>
-                    </div>
-                    <div className="rounded-xl bg-accent-dark px-3 py-2 text-center">
-                      <p className="text-[10px] uppercase text-muted-2">Score</p>
-                      <p className="text-lg font-semibold text-accent">{clip.score}</p>
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted">
-                    <span className="text-muted-2">Motivo: </span>
-                    {clip.reason}
-                  </p>
-                  {clip.hook ? <p className="text-sm text-text">{clip.hook}</p> : null}
-                  <div className="mt-auto flex flex-wrap gap-2">
-                    <Button variant="secondary" className="h-9 px-3 text-xs" onClick={() => void openPreview(clip)}>
-                      Assistir
-                    </Button>
-                    <Button variant="secondary" className="h-9 px-3 text-xs" onClick={() => void openPreview(clip)}>
-                      Ajustar
-                    </Button>
-                    <Button
-                      className="h-9 px-3 text-xs"
-                      disabled={busy}
-                      onClick={() => void exportClip(clip)}
-                    >
-                      Gerar Short
-                    </Button>
-                  </div>
-                </Card>
+                <ShortsResultCard
+                  key={clip.id}
+                  clip={clip}
+                  mediaUrl={mediaUrl}
+                  aspectMode={aspectMode}
+                  sourceWidth={probe?.width ?? 1920}
+                  sourceHeight={probe?.height ?? 1080}
+                  playing={playingClipId === clip.id && previewClip?.id !== clip.id}
+                  busy={busy || Boolean(copyBusyId)}
+                  regenerating={copyBusyId === clip.id}
+                  onPlayingChange={(playing) => setPlayingClipId(playing ? clip.id : null)}
+                  onAdjust={() => {
+                    setPlayingClipId(null)
+                    setPreviewClip(clip)
+                  }}
+                  onExport={() => void exportClip(clip)}
+                  onPersist={(patch) => void persistClip(clip, patch)}
+                  onCopy={(part) => void copyClip(clip, part)}
+                  onRegenerate={(fields) => void regenerateClip(clip, fields)}
+                />
               ))}
             </div>
           ) : (
@@ -533,19 +574,32 @@ export function ShortsStudioPage() {
         </aside>
       </div>
 
-      <ShortsPreviewModal
+      <ShortsAdjustModal
         open={Boolean(previewClip && job)}
         job={job}
         clip={previewClip}
         mediaUrl={mediaUrl}
-        onClose={() => setPreviewClip(null)}
+        aspectMode={aspectMode}
+        playing={Boolean(previewClip && playingClipId === previewClip.id)}
+        busy={busy}
+        regenerating={Boolean(previewClip && copyBusyId === previewClip.id)}
+        onClose={() => {
+          setPreviewClip(null)
+          setPlayingClipId(null)
+        }}
+        onPlayingChange={(playing) => {
+          if (!previewClip) return
+          setPlayingClipId(playing ? previewClip.id : null)
+        }}
         onChange={async (patch) => {
-          if (!job || !previewClip) return
-          const next = await api.shorts.updateClip(job.id, previewClip.id, patch)
-          if (!next) return
-          setJob(next)
-          const updated = next.clips.find((item) => item.id === previewClip.id) ?? null
-          setPreviewClip(updated)
+          if (!previewClip) return
+          await persistClip(previewClip, patch)
+        }}
+        onCopy={(part) => {
+          if (previewClip) void copyClip(previewClip, part)
+        }}
+        onRegenerate={(fields) => {
+          if (previewClip) void regenerateClip(previewClip, fields)
         }}
         onExport={() => {
           if (previewClip) void exportClip(previewClip)
@@ -564,147 +618,3 @@ function Meta({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ShortsPreviewModal({
-  open,
-  job,
-  clip,
-  mediaUrl,
-  onClose,
-  onChange,
-  onExport,
-}: {
-  open: boolean
-  job: ShortsJob | null
-  clip: ShortsClip | null
-  mediaUrl: string | null
-  onClose: () => void
-  onChange: (patch: { start: number; end: number }) => Promise<void>
-  onExport: () => void
-}) {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [playing, setPlaying] = useState(false)
-  const duration = job?.probe?.duration ?? clip?.end ?? 0
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video || !clip) return
-    video.currentTime = clip.start
-  }, [clip?.id, clip?.start, mediaUrl])
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video || !clip) return
-    function onTime() {
-      if (!clip || !videoRef.current) return
-      if (videoRef.current.currentTime >= clip.end - 0.04) {
-        videoRef.current.pause()
-        videoRef.current.currentTime = clip.end
-        setPlaying(false)
-      }
-    }
-    video.addEventListener('timeupdate', onTime)
-    return () => video.removeEventListener('timeupdate', onTime)
-  }, [clip])
-
-  const start = clip?.start ?? 0
-  const end = clip?.end ?? 0
-
-  return (
-    <Modal
-      open={open}
-      title={clip ? `Short #${clip.index}` : 'Prévia'}
-      onClose={onClose}
-      size="xl"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Fechar
-          </Button>
-          <Button onClick={onExport}>Gerar Short</Button>
-        </>
-      }
-    >
-      {clip && mediaUrl ? (
-        <div className="space-y-4">
-          <div className="overflow-hidden rounded-xl bg-black">
-            <video
-              ref={videoRef}
-              src={mediaUrl}
-              className="mx-auto max-h-[420px] w-full bg-black"
-              controls={false}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              className="h-9 px-3"
-              icon={playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              onClick={() => {
-                const video = videoRef.current
-                if (!video) return
-                if (playing) {
-                  video.pause()
-                  setPlaying(false)
-                  return
-                }
-                if (video.currentTime < start || video.currentTime >= end) video.currentTime = start
-                void video.play()
-                setPlaying(true)
-              }}
-            >
-              {playing ? 'Pausar' : 'Assistir trecho'}
-            </Button>
-            <span className="text-sm tabular-nums text-muted">
-              {formatShortsTimecode(start)} → {formatShortsTimecode(end)}
-            </span>
-            <span className="text-sm font-medium tabular-nums text-text">
-              Duração: {formatClipLength(end - start)}
-            </span>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              label="Início (s)"
-              type="number"
-              min={0}
-              max={end}
-              step={0.1}
-              value={start}
-              onChange={(event) => void onChange({ start: Number(event.target.value), end })}
-            />
-            <Input
-              label="Fim (s)"
-              type="number"
-              min={start}
-              max={duration}
-              step={0.1}
-              value={end}
-              onChange={(event) => void onChange({ start, end: Number(event.target.value) })}
-            />
-          </div>
-          <div className="space-y-2">
-            <input
-              type="range"
-              min={0}
-              max={duration || 1}
-              step={0.1}
-              value={start}
-              onChange={(event) => void onChange({ start: Number(event.target.value), end })}
-              className="w-full accent-accent"
-              aria-label="Início"
-            />
-            <input
-              type="range"
-              min={0}
-              max={duration || 1}
-              step={0.1}
-              value={end}
-              onChange={(event) => void onChange({ start, end: Number(event.target.value) })}
-              className="w-full accent-accent"
-              aria-label="Fim"
-            />
-          </div>
-        </div>
-      ) : null}
-    </Modal>
-  )
-}

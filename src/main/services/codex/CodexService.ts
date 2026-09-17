@@ -47,6 +47,7 @@ import {
 } from '../audit/UniquenessAuditService'
 import { logger } from '../logging/logger'
 import { resolveEffectiveCodexModel } from './codexModels'
+import { resolveRunConfig } from '../../../shared/agents/resolveRunConfig'
 
 const MAX_AUDIT_RETRIES = 2
 
@@ -123,18 +124,20 @@ export class CodexService implements ICodexService {
     prompt: string,
     signal?: AbortSignal,
     extraReadableDirs?: string[],
+    override?: { model?: string | null; effort?: string | null },
   ): Promise<string> {
     await this.connect()
     if (this.transport.mode === 'unavailable' || !this.transport.binaryPath) {
       throw new Error('Codex não está disponível neste computador.')
     }
-    const settings = settingsRepository.get()
+    const run = this.resolveCodexRun(override)
     return runCodexPrompt({
       binaryPath: this.transport.binaryPath,
       mode: this.transport.mode,
       prompt,
       cwd: this.workspaceRoot,
-      model: resolveEffectiveCodexModel(settings.codexModel),
+      model: run.model || undefined,
+      reasoningEffort: run.effort || undefined,
       extraReadableDirs,
       signal,
     })
@@ -375,7 +378,8 @@ export class CodexService implements ICodexService {
           mode: this.transport.mode,
           prompt,
           cwd: projectRoot,
-          model: resolveEffectiveCodexModel(settings.codexModel),
+          model: this.resolveCodexRun().model || undefined,
+          reasoningEffort: this.resolveCodexRun().effort || undefined,
           threadId,
           extraReadableDirs: [skillPath, niche.scriptsPath].filter(Boolean) as string[],
           signal,
@@ -590,7 +594,6 @@ export class CodexService implements ICodexService {
     const { niche, skillPath } = resolveSkillForNiche(script.nicheId)
     ensureSkillMarkdown(skillPath)
 
-    const settings = settingsRepository.get()
     const runId = randomUUID()
     const threadId = randomUUID()
     const startedMs = Date.now()
@@ -674,7 +677,8 @@ export class CodexService implements ICodexService {
         mode: this.transport.mode,
         prompt,
         cwd: projectRoot,
-        model: resolveEffectiveCodexModel(settings.codexModel),
+        model: this.resolveCodexRun().model || undefined,
+        reasoningEffort: this.resolveCodexRun().effort || undefined,
         threadId,
         extraReadableDirs: [skillPath, niche.scriptsPath].filter(Boolean) as string[],
         signal,
@@ -794,6 +798,16 @@ export class CodexService implements ICodexService {
     } finally {
       this.endOperation(runId)
     }
+  }
+
+  private resolveCodexRun(override?: { model?: string | null; effort?: string | null }) {
+    const settings = settingsRepository.get()
+    return resolveRunConfig({
+      overrideModel: override?.model,
+      overrideEffort: override?.effort,
+      defaultModel: settings.defaultCodexModel || settings.codexModel,
+      defaultEffort: settings.defaultCodexEffort,
+    })
   }
 
   private emitProgress(event: GenerationProgressEvent) {

@@ -22,7 +22,12 @@ export interface ICodexService {
   createThread(): Promise<string>
   generateScript(request: GenerateScriptRequest): Promise<GenerationResult>
   adjustScript(request: AdjustScriptRequest): Promise<GenerationResult>
-  runChatPrompt(prompt: string, signal?: AbortSignal, extraReadableDirs?: string[]): Promise<string>
+  runChatPrompt(
+    prompt: string,
+    signal?: AbortSignal,
+    extraReadableDirs?: string[],
+    run?: { model?: string | null; effort?: string | null },
+  ): Promise<string>
   cancel(): Promise<void>
   getStatus(): CodexStatus
 }

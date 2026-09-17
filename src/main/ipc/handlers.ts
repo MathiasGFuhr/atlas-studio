@@ -49,17 +49,19 @@ import { quickPromptRepository } from '../repositories/quickPromptRepository'
 import type { CustomPrompt } from '../../shared/quickPrompts/types'
 import { musicRepository } from '../repositories/musicRepository'
 import { shortsRepository } from '../repositories/shortsRepository'
-import { analyzeShortsJob } from '../services/shorts/ShortsPipeline'
+import { analyzeShortsJob, regenerateShortsClipCopy } from '../services/shorts/ShortsPipeline'
 import { exportVideoClip, probeVideo } from '../services/media/ffmpegVideo'
 import { toAtlasMediaUrl } from '../services/media/atlasMediaProtocol'
 import { buildSrt, buildVerticalCropPlan, cuesForClip } from '../../shared/shortsExport'
-import { SHORTS_VIDEO_EXTENSIONS, type ShortsAnalyzeInput, type ShortsClip, type ShortsJob } from '../../shared/shorts'
+import { SHORTS_VIDEO_EXTENSIONS, type ShortsAnalyzeInput, type ShortsClip, type ShortsClipPatch, type ShortsCopyFields, type ShortsJob } from '../../shared/shorts'
 import { capRequestedDuration, constrainClipWindow } from '../../shared/shortsDuration'
 import { taskRepository } from '../repositories/taskRepository'
 import type { AntigravityService } from '../services/antigravity/AntigravityService'
 import type { MusicSegment, MusicCutMode } from '../../shared/musicAnalysis'
 import type { ChatSendMessageRequest } from '../../shared/chat/types'
+import type { AgentProviderId } from '../../shared/agents/types'
 import { ChatService } from '../services/chat/ChatService'
+import type { AgentModelCatalog } from '../services/agents/AgentModelCatalog'
 import { getWorkspaceCapabilities } from '../services/workspace/getWorkspaceCapabilities'
 import {
   checkForAppUpdates,
@@ -77,9 +79,32 @@ export function registerIpcHandlers(deps: {
   runtimeManager: CodexRuntimeManager
   antigravityService: AntigravityService
   chatService: ChatService
+  agentModelCatalog: AgentModelCatalog
   getMainWindow: () => BrowserWindow | null
 }) {
-  const { codexService, runtimeManager, antigravityService, chatService, getMainWindow } = deps
+  const {
+    codexService,
+    runtimeManager,
+    antigravityService,
+    chatService,
+    agentModelCatalog,
+    getMainWindow,
+  } = deps
+
+  const emitCapabilities = (bundle: Awaited<ReturnType<AgentModelCatalog['getAll']>>) => {
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) {
+      win.webContents.send(IPC.agents.capabilitiesChanged, bundle)
+    }
+  }
+
+  agentModelCatalog.onChange(emitCapabilities)
+
+  const refreshModels = (provider?: AgentProviderId) => {
+    void (provider ? agentModelCatalog.refresh(provider) : agentModelCatalog.refreshAll()).catch(
+      () => undefined,
+    )
+  }
 
   ipcMain.handle(
     IPC.projects.list,
@@ -281,13 +306,25 @@ export function registerIpcHandlers(deps: {
   )
 
   ipcMain.handle(IPC.antigravity.status, () => antigravityService.getStatus())
-  ipcMain.handle(IPC.antigravity.healthCheck, () => antigravityService.healthCheck())
+  ipcMain.handle(IPC.antigravity.healthCheck, async () => {
+    const status = await antigravityService.healthCheck()
+    refreshModels('antigravity')
+    return status
+  })
   ipcMain.handle(IPC.antigravity.loginStart, () => antigravityService.loginStart())
   ipcMain.handle(IPC.antigravity.loginCancel, () => {
     antigravityService.loginCancel()
   })
-  ipcMain.handle(IPC.antigravity.loginConfirm, () => antigravityService.loginConfirm())
-  ipcMain.handle(IPC.antigravity.logout, () => antigravityService.logout())
+  ipcMain.handle(IPC.antigravity.loginConfirm, async () => {
+    const status = await antigravityService.loginConfirm()
+    refreshModels('antigravity')
+    return status
+  })
+  ipcMain.handle(IPC.antigravity.logout, async () => {
+    const status = await antigravityService.logout()
+    refreshModels('antigravity')
+    return status
+  })
   ipcMain.handle(
     IPC.antigravity.analyzeQuickPrompt,
     async (_e, request: AnalyzeQuickPromptRequest) => {
@@ -402,12 +439,17 @@ export function registerIpcHandlers(deps: {
   )
   ipcMain.handle(
     IPC.shorts.updateClip,
-    (_e, jobId: string, clipId: string, patch: { start?: number; end?: number }) => {
+    (_e, jobId: string, clipId: string, patch: ShortsClipPatch) => {
       const job = shortsRepository.get(jobId)
       if (!job) return null
       const duration = job.probe?.duration ?? Number.POSITIVE_INFINITY
       const clips = job.clips.map((clip) => {
         if (clip.id !== clipId) return clip
+        const next = { ...clip }
+        if (patch.title != null) next.title = patch.title
+        if (patch.description != null) next.description = patch.description
+        if (patch.hashtags != null) next.hashtags = patch.hashtags
+        if (patch.start == null && patch.end == null) return next
         const videoDuration = Number.isFinite(duration) ? duration : Math.max(clip.end, patch.end ?? 0)
         if (job.durationMode === 'exact') {
           const moved = patch.start != null && patch.start !== clip.start ? 'start' : 'end'
@@ -419,14 +461,25 @@ export function registerIpcHandlers(deps: {
             mode: 'exact',
             moved,
           })
-          return { ...clip, start: window.start, end: window.end }
+          return { ...next, start: window.start, end: window.end }
         }
         const start = Math.max(0, Math.min(videoDuration, patch.start ?? clip.start))
         const end = Math.max(start + 0.4, Math.min(videoDuration, patch.end ?? clip.end))
-        return { ...clip, start, end }
+        return { ...next, start, end }
       })
       return shortsRepository.update(jobId, { clips })
     },
+  )
+  ipcMain.handle(
+    IPC.shorts.regenerateCopy,
+    (_e, payload: { jobId: string; clipId: string; fields?: ShortsCopyFields }) =>
+      regenerateShortsClipCopy({
+        jobId: payload.jobId,
+        clipId: payload.clipId,
+        fields: payload.fields === 'title' || payload.fields === 'description' ? payload.fields : 'all',
+        antigravity: antigravityService,
+        getWindow: getMainWindow,
+      }),
   )
   ipcMain.handle(
     IPC.shorts.updateSettings,
@@ -583,9 +636,17 @@ export function registerIpcHandlers(deps: {
   })
 
   ipcMain.handle(IPC.codex.status, () => runtimeManager.getStatus())
-  ipcMain.handle(IPC.codex.connect, () => codexService.connect())
+  ipcMain.handle(IPC.codex.connect, async () => {
+    const status = await codexService.connect()
+    refreshModels('codex')
+    return status
+  })
   ipcMain.handle(IPC.codex.disconnect, () => codexService.disconnect())
-  ipcMain.handle(IPC.codex.healthCheck, () => runtimeManager.healthCheck())
+  ipcMain.handle(IPC.codex.healthCheck, async () => {
+    const status = await runtimeManager.healthCheck()
+    refreshModels('codex')
+    return status
+  })
   ipcMain.handle(IPC.codex.listModels, () => {
     const settings = settingsRepository.get()
     return {
@@ -602,12 +663,27 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.codex.loginCancel, () => {
     runtimeManager.loginCancel()
   })
-  ipcMain.handle(IPC.codex.logout, () => runtimeManager.logout())
+  ipcMain.handle(IPC.codex.logout, async () => {
+    const status = await runtimeManager.logout()
+    refreshModels('codex')
+    return status
+  })
   ipcMain.handle(IPC.codex.onboardingDismissed, () => {
     runtimeManager.dismissOnboarding()
   })
   ipcMain.handle(IPC.codex.isOnboardingDismissed, () =>
     runtimeManager.isOnboardingDismissed(),
+  )
+
+  ipcMain.handle(IPC.agents.getCapabilities, () => agentModelCatalog.getAll())
+  ipcMain.handle(IPC.agents.refreshModels, (_e, provider?: AgentProviderId) =>
+    provider ? agentModelCatalog.refresh(provider) : agentModelCatalog.refreshAll(),
+  )
+  ipcMain.handle(IPC.agents.setDefaultModel, (_e, provider: AgentProviderId, model: string) =>
+    agentModelCatalog.setDefaultModel(provider, model),
+  )
+  ipcMain.handle(IPC.agents.setReasoningEffort, (_e, provider: AgentProviderId, effort: string) =>
+    agentModelCatalog.setReasoningEffort(provider, effort),
   )
 
   ipcMain.handle(IPC.generation.start, (_e, request: GenerateScriptRequest) =>
@@ -625,7 +701,14 @@ export function registerIpcHandlers(deps: {
     IPC.chat.createConversation,
     (
       _e,
-      input?: { title?: string; projectId?: string | null; useProjectContext?: boolean },
+      input?: {
+        title?: string
+        projectId?: string | null
+        useProjectContext?: boolean
+        lastAgent?: 'codex' | 'antigravity' | null
+        modelOverride?: string | null
+        effortOverride?: string | null
+      },
     ) => chatService.createConversation(input),
   )
   ipcMain.handle(IPC.chat.renameConversation, (_e, id: string, title: string) =>
@@ -636,7 +719,13 @@ export function registerIpcHandlers(deps: {
     (
       _e,
       id: string,
-      patch: { projectId?: string | null; useProjectContext?: boolean },
+      patch: {
+        projectId?: string | null
+        useProjectContext?: boolean
+        lastAgent?: 'codex' | 'antigravity' | null
+        modelOverride?: string | null
+        effortOverride?: string | null
+      },
     ) => chatService.setConversationContext(id, patch),
   )
   ipcMain.handle(IPC.chat.removeConversation, (_e, id: string) =>

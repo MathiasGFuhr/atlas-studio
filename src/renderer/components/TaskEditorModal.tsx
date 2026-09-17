@@ -79,7 +79,7 @@ export function TaskEditorModal({
           label="Título"
           value={form.title}
           onChange={(e) => onChange({ title: e.target.value })}
-          placeholder="Ex.: Cadastrar canal Abraham Cole"
+          placeholder="Ex.: Cadastrar novo canal"
           autoFocus
         />
         <Textarea

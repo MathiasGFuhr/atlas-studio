@@ -417,7 +417,12 @@ export interface AppSettings {
   defaultOutputStyle: OutputStyle
   defaultDuration: DurationOption
   finalAuditEnabled: boolean
+  /** @deprecated Preferir defaultCodexModel — mantido por compatibilidade. */
   codexModel: string
+  defaultCodexModel: string
+  defaultCodexEffort: string
+  defaultAntigravityModel: string
+  defaultAntigravityEffort: string
   autoApproval: boolean
   backupEnabled: boolean
   /** Em produção, verifica atualizações alguns segundos após abrir. */
@@ -722,6 +727,7 @@ export const IPC = {
     import: 'shorts:import',
     analyze: 'shorts:analyze',
     updateClip: 'shorts:updateClip',
+    regenerateCopy: 'shorts:regenerateCopy',
     updateSettings: 'shorts:updateSettings',
     export: 'shorts:export',
     remove: 'shorts:remove',
@@ -765,6 +771,13 @@ export const IPC = {
     listModels: 'codex:listModels',
     onboardingDismissed: 'codex:onboardingDismissed',
     isOnboardingDismissed: 'codex:isOnboardingDismissed',
+  },
+  agents: {
+    getCapabilities: 'agents:getCapabilities',
+    refreshModels: 'agents:refreshModels',
+    setDefaultModel: 'agents:setDefaultModel',
+    setReasoningEffort: 'agents:setReasoningEffort',
+    capabilitiesChanged: 'agents:capabilitiesChanged',
   },
   generation: {
     start: 'generation:start',

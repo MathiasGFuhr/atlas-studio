@@ -52,6 +52,8 @@ export interface ChatConversation {
   projectName?: string | null
   useProjectContext: boolean
   lastAgent: ChatAgentId | null
+  modelOverride: string | null
+  effortOverride: string | null
   createdAt: string
   updatedAt: string
 }
@@ -109,6 +111,8 @@ export interface ChatSendMessageRequest {
   text: string
   attachments?: ChatAttachment[]
   context?: ChatClientContext
+  modelOverride?: string | null
+  effortOverride?: string | null
 }
 
 export interface ChatSendMessageResult {

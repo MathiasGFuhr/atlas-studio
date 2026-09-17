@@ -6,6 +6,22 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+function stripE2eArtifactsPlugin(): Plugin {
+  return {
+    name: 'strip-atlas-e2e-artifacts',
+    apply: 'build',
+    closeBundle() {
+      const dir = path.resolve('dist-electron')
+      if (!fs.existsSync(dir)) return
+      const keep = new Set(['main.js', 'preload.js', 'preload.cjs', 'splash'])
+      for (const name of fs.readdirSync(dir)) {
+        if (keep.has(name)) continue
+        fs.rmSync(path.join(dir, name), { force: true, recursive: true })
+      }
+    },
+  }
+}
+
 function copySplashPlugin(): Plugin {
   return {
     name: 'copy-atlas-splash',
@@ -29,7 +45,7 @@ export default defineConfig({
       main: {
         entry: 'src/main/index.ts',
         vite: {
-          plugins: [copySplashPlugin()],
+          plugins: [stripE2eArtifactsPlugin(), copySplashPlugin()],
           build: {
             outDir: 'dist-electron',
             rollupOptions: {

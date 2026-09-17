@@ -3,12 +3,23 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '../../../shared/types'
-import type { ShortsAnalyzeInput, ShortsClip, ShortsJob, ShortsProgressEvent } from '../../../shared/shorts'
+import type {
+  ShortsAnalyzeInput,
+  ShortsClip,
+  ShortsCopyFields,
+  ShortsJob,
+  ShortsProgressEvent,
+} from '../../../shared/shorts'
 import { capRequestedDuration, constrainClipWindow } from '../../../shared/shortsDuration'
 import { analyzeMusic } from '../../../shared/musicAnalysis'
 import { decodeWavPcm } from '../../../shared/decodeWav'
 import { buildLocalShortsCandidates, snapClipToCues } from '../../../shared/shortsMoments'
 import { normalizeShortsAnalysis, SHORTS_ANALYSIS_FAIL_MESSAGE } from '../../../shared/antigravity/shortsAnalysis'
+import {
+  fallbackShortsCopy,
+  type ShortsCopyClipInput,
+} from '../../../shared/antigravity/shortsCopy'
+import { cuesForClip } from '../../../shared/shortsExport'
 import { shortsRepository } from '../../repositories/shortsRepository'
 import { getUserDataPath } from '../../paths'
 import type { AntigravityService } from '../antigravity/AntigravityService'
@@ -19,6 +30,7 @@ import {
   probeVideo,
 } from '../media/ffmpegVideo'
 import { cuesFromSilence, transcribeLocalAudio } from './transcribeLocal'
+import { resolveShortsEditorialContext } from './editorialContext'
 
 function jobDir(id: string) {
   return path.join(getUserDataPath(), 'shorts', id)
@@ -32,7 +44,16 @@ function emitProgress(getWindow: () => BrowserWindow | null, event: ShortsProgre
 }
 
 function toClips(
-  raw: Array<{ start: number; end: number; score: number; reason: string; hook?: string }>,
+  raw: Array<{
+    start: number
+    end: number
+    score: number
+    reason: string
+    hook?: string
+    title?: string
+    description?: string
+    hashtags?: string[]
+  }>,
   duration: number,
 ): ShortsClip[] {
   return raw.map((item, index) => ({
@@ -43,10 +64,98 @@ function toClips(
     score: item.score,
     reason: item.reason,
     hook: item.hook ?? '',
+    title: item.title ?? '',
+    description: item.description ?? '',
+    hashtags: item.hashtags ?? [],
     accepted: false,
     exportedPath: null,
     focusStrategy: 'center',
   }))
+}
+
+function toCopyInputs(
+  clips: ShortsClip[],
+  transcript: ShortsJob['transcript'],
+  focus?: ShortsClip,
+): ShortsCopyClipInput[] {
+  const targets = focus ? [focus] : clips
+  return targets.map((clip) => ({
+    index: clip.index,
+    start: clip.start,
+    end: clip.end,
+    score: clip.score,
+    reason: clip.reason,
+    hook: clip.hook,
+    transcript: transcript.filter(
+      (cue) => cue.end > clip.start && cue.start < clip.end && cue.text.trim(),
+    ),
+    currentTitle: clip.title,
+    currentDescription: clip.description,
+    usedTitles: clips
+      .filter((item) => item.id !== clip.id)
+      .map((item) => item.title.trim())
+      .filter(Boolean),
+  }))
+}
+
+async function attachShortsCopies(input: {
+  job: ShortsJob
+  clips: ShortsClip[]
+  fields: ShortsCopyFields
+  focus?: ShortsClip
+  antigravity: AntigravityService
+  send: (stage: ShortsProgressEvent['stage'], message: string) => void
+}): Promise<ShortsClip[]> {
+  const editorial = resolveShortsEditorialContext(input.job)
+  input.send('writing_copy', 'Gerando títulos e descrições...')
+  try {
+    const copies = await input.antigravity.generateShortsCopies({
+      profile: input.job.profile,
+      editorial,
+      fileName: input.job.sourceName,
+      videoDuration: input.job.probe?.duration ?? Math.max(...input.clips.map((clip) => clip.end), 0),
+      fields: input.fields,
+      clips: toCopyInputs(input.clips, input.job.transcript, input.focus),
+    })
+    const byIndex = new Map(copies.map((item) => [item.index, item]))
+    return input.clips.map((clip) => {
+      const copy = byIndex.get(clip.index)
+      if (!copy || (input.focus && clip.id !== input.focus.id)) return clip
+      const next = { ...clip }
+      if (input.fields !== 'description') next.title = copy.title.trim() || next.title
+      if (input.fields !== 'title') {
+        next.description = copy.description.trim() || next.description
+        if (copy.hashtags.length) next.hashtags = copy.hashtags
+      }
+      if (!next.title.trim() || !next.description.trim()) {
+        const fallback = fallbackShortsCopy({
+          index: clip.index,
+          hook: clip.hook,
+          reason: clip.reason,
+          transcript: cuesForClip(input.job.transcript, clip.start, clip.end),
+        })
+        if (!next.title.trim()) next.title = fallback.title
+        if (!next.description.trim()) next.description = fallback.description
+      }
+      return next
+    })
+  } catch {
+    return input.clips.map((clip) => {
+      if (input.focus && clip.id !== input.focus.id) return clip
+      if (clip.title.trim() && clip.description.trim() && input.fields === 'all') return clip
+      const fallback = fallbackShortsCopy({
+        index: clip.index,
+        hook: clip.hook,
+        reason: clip.reason,
+        transcript: cuesForClip(input.job.transcript, clip.start, clip.end),
+      })
+      return {
+        ...clip,
+        title: input.fields === 'description' ? clip.title : clip.title.trim() || fallback.title,
+        description: input.fields === 'title' ? clip.description : clip.description.trim() || fallback.description,
+      }
+    })
+  }
 }
 
 export async function analyzeShortsJob(input: {
@@ -180,16 +289,37 @@ export async function analyzeShortsJob(input: {
       notes = notes ? `${notes}\n${extra}` : extra
     }
 
+    const latest = shortsRepository.get(job.id) ?? job
+    const withCopy =
+      clips.length > 0
+        ? await attachShortsCopies({
+            job: {
+              ...latest,
+              profile: input.request.profile,
+              probe,
+              clips,
+              requestedDuration,
+              durationMode,
+              transcript,
+              transcriptSource,
+            },
+            clips,
+            fields: 'all',
+            antigravity: input.antigravity,
+            send,
+          })
+        : clips
+
     return shortsRepository.update(job.id, {
       probe,
-      clips,
+      clips: withCopy,
       requestedDuration,
       durationMode,
       transcript,
       transcriptSource,
       analysisNotes: notes,
       errorMessage: null,
-      status: clips.length > 0 ? 'ready' : 'error',
+      status: withCopy.length > 0 ? 'ready' : 'error',
     })!
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao analisar o vídeo.'
@@ -199,4 +329,30 @@ export async function analyzeShortsJob(input: {
     })
     return current ?? job
   }
+}
+
+export async function regenerateShortsClipCopy(input: {
+  jobId: string
+  clipId: string
+  fields: ShortsCopyFields
+  antigravity: AntigravityService
+  getWindow: () => BrowserWindow | null
+}): Promise<ShortsJob> {
+  const job = shortsRepository.get(input.jobId)
+  if (!job) throw new Error('Projeto de Shorts não encontrado.')
+  const clip = job.clips.find((item) => item.id === input.clipId)
+  if (!clip) throw new Error('Corte não encontrado.')
+
+  const send = (stage: ShortsProgressEvent['stage'], message: string) =>
+    emitProgress(input.getWindow, { jobId: job.id, stage, message })
+
+  const clips = await attachShortsCopies({
+    job,
+    clips: job.clips,
+    fields: input.fields,
+    focus: clip,
+    antigravity: input.antigravity,
+    send,
+  })
+  return shortsRepository.update(job.id, { clips })!
 }

@@ -76,6 +76,7 @@ export async function runCodexPrompt(options: {
   prompt: string
   cwd: string
   model?: string
+  reasoningEffort?: string
   threadId?: string
   extraReadableDirs?: string[]
   onChunk?: (text: string) => void
@@ -104,6 +105,7 @@ async function runCliExec(options: {
   prompt: string
   cwd: string
   model?: string
+  reasoningEffort?: string
   threadId?: string
   extraReadableDirs?: string[]
   onChunk?: (text: string) => void
@@ -126,6 +128,11 @@ async function runCliExec(options: {
 
   if (isLikelyCodexModel(options.model)) {
     args.push('--model', options.model!.trim())
+  }
+
+  const effort = options.reasoningEffort?.trim()
+  if (effort) {
+    args.push('-c', `model_reasoning_effort="${effort}"`)
   }
 
   for (const dir of options.extraReadableDirs ?? []) {
@@ -255,6 +262,7 @@ async function runAppServerTurn(options: {
   prompt: string
   cwd: string
   model?: string
+  reasoningEffort?: string
   onChunk?: (text: string) => void
   signal?: AbortSignal
 }): Promise<string> {
@@ -311,6 +319,7 @@ async function runAppServerTurn(options: {
         threadId,
         input: [{ type: 'text', text: options.prompt }],
         model: isLikelyCodexModel(options.model) ? options.model : undefined,
+        reasoning_effort: options.reasoningEffort?.trim() || undefined,
       },
     })
 

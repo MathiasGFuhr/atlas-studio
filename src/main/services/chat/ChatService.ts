@@ -170,6 +170,9 @@ export class ChatService {
     title?: string
     projectId?: string | null
     useProjectContext?: boolean
+    lastAgent?: ChatAgentId | null
+    modelOverride?: string | null
+    effortOverride?: string | null
   }): ChatConversation {
     return chatRepository.createConversation(input)
   }
@@ -180,7 +183,13 @@ export class ChatService {
 
   setConversationContext(
     id: string,
-    patch: { projectId?: string | null; useProjectContext?: boolean },
+    patch: {
+      projectId?: string | null
+      useProjectContext?: boolean
+      lastAgent?: ChatAgentId | null
+      modelOverride?: string | null
+      effortOverride?: string | null
+    },
   ): ChatConversation | null {
     return chatRepository.updateConversation(id, patch)
   }
@@ -234,12 +243,18 @@ export class ChatService {
         projectId: client.projectId ?? null,
         useProjectContext: client.useProjectContext,
         lastAgent: agent,
+        modelOverride: request.modelOverride ?? null,
+        effortOverride: request.effortOverride ?? null,
       })
     } else {
       chatRepository.updateConversation(conversation.id, {
         lastAgent: agent,
         projectId: client.projectId ?? conversation.projectId,
         useProjectContext: client.useProjectContext,
+        modelOverride:
+          request.modelOverride !== undefined ? request.modelOverride : conversation.modelOverride,
+        effortOverride:
+          request.effortOverride !== undefined ? request.effortOverride : conversation.effortOverride,
       })
       conversation = chatRepository.getConversation(conversation.id)!
     }
@@ -260,6 +275,8 @@ export class ChatService {
       confirmed: false,
       readableDirs: attachmentParentDirs(attachments),
       attachmentPrompt: formatAttachmentsForPrompt(attachments),
+      model: conversation.modelOverride,
+      effort: conversation.effortOverride,
     })
 
     if (conversation.title === 'Nova conversa') {
@@ -374,6 +391,8 @@ export class ChatService {
     extra?: string
     readableDirs?: string[]
     attachmentPrompt?: string
+    model?: string | null
+    effort?: string | null
   }): Promise<{ message: ChatMessage; logs: ChatActionLog[] }> {
     this.abort?.abort()
     this.abort = new AbortController()
@@ -407,7 +426,10 @@ export class ChatService {
       .filter((line) => line !== '')
       .join('\n')
 
-    const raw = await this.callAgent(agent, prompt, opts.readableDirs)
+    const raw = await this.callAgent(agent, prompt, opts.readableDirs, {
+      model: opts.model,
+      effort: opts.effort,
+    })
     let parsed = parseAgentResponse(raw)
 
     let results: ChatActionResult[] = []
@@ -452,6 +474,7 @@ export class ChatService {
           agent,
           `${prompt}\n\nResultados já executados (use para responder com precisão, sem repetir as ações):\n${extra}\n\nJSON final com message e actions vazio, a menos que falte uma ação de escrita.`,
           opts.readableDirs,
+          { model: opts.model, effort: opts.effort },
         )
         const follow = parseAgentResponse(followRaw)
         if (follow.message) parsed = { ...parsed, message: follow.message }
@@ -534,11 +557,16 @@ export class ChatService {
     return chatRepository.listLogs(conversationId)
   }
 
-  private async callAgent(agent: ChatAgentId, prompt: string, readableDirs?: string[]): Promise<string> {
+  private async callAgent(
+    agent: ChatAgentId,
+    prompt: string,
+    readableDirs?: string[],
+    override?: { model?: string | null; effort?: string | null },
+  ): Promise<string> {
     if (agent === 'codex') {
-      return this.deps.codexService.runChatPrompt(prompt, this.abort?.signal, readableDirs)
+      return this.deps.codexService.runChatPrompt(prompt, this.abort?.signal, readableDirs, override)
     }
-    const structured = await this.deps.antigravityService.runChatPrompt(prompt)
+    const structured = await this.deps.antigravityService.runChatPrompt(prompt, override)
     return JSON.stringify(structured)
   }
 

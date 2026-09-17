@@ -25,15 +25,12 @@ import { getAtlasApi } from '../lib/api'
 import { cn } from '../lib/utils'
 import { Button } from '../components/Button'
 import { ChatActionCards } from '../components/chat/ChatActionCards'
+import { ChatAgentBar } from '../components/chat/ChatAgentBar'
+import { useAgentModels } from '../hooks/useAgentModels'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { notifyChannelsChanged } from '../lib/channelEvents'
 import { notifyTasksChanged } from '../lib/taskEvents'
 import { useToast } from '../components/Toast'
-
-const AGENTS: Array<{ id: ChatAgentId; label: string }> = [
-  { id: 'codex', label: 'Codex' },
-  { id: 'antigravity', label: 'Antigravity' },
-]
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -73,6 +70,8 @@ export function ChatPage({
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [actionLogs, setActionLogs] = useState<{ createdAt: string; summary: string }[]>([])
   const [agent, setAgent] = useState<ChatAgentId>('codex')
+  const [modelOverride, setModelOverride] = useState<string | null>(null)
+  const [effortOverride, setEffortOverride] = useState<string | null>(null)
   const [agentStatus, setAgentStatus] = useState<ChatAgentStatusSnapshot | null>(null)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
@@ -87,6 +86,7 @@ export function ChatPage({
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const listRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { bundle, loading } = useAgentModels()
   const bootstrapped = useRef(false)
   const consumedLaunch = useRef<string | null>(null)
 
@@ -105,6 +105,8 @@ export function ChatPage({
       setActionLogs(detail.actionLogs.map((item) => ({ createdAt: item.createdAt, summary: item.summary })))
       setUseProjectContext(detail.conversation.useProjectContext)
       if (detail.conversation.lastAgent) setAgent(detail.conversation.lastAgent)
+      setModelOverride(detail.conversation.modelOverride)
+      setEffortOverride(detail.conversation.effortOverride)
       if (detail.conversation.projectId) {
         const project = await api.projects.get(detail.conversation.projectId)
         setContextProject(project)
@@ -191,12 +193,45 @@ export function ChatPage({
   const lastAssistant = [...messages].reverse().find((item) => item.role === 'assistant')
 
   const selectedStatus = agentStatus?.agents.find((item) => item.id === agent)
+  const agentSnapshot = bundle[agent]
+
+  async function persistConversationPatch(patch: {
+    lastAgent?: ChatAgentId | null
+    modelOverride?: string | null
+    effortOverride?: string | null
+  }) {
+    if (!activeId) return
+    await api.chat.setContext(activeId, patch)
+    await loadList()
+  }
+
+  async function changeAgent(next: ChatAgentId) {
+    setAgent(next)
+    await persistConversationPatch({ lastAgent: next })
+  }
+
+  async function changeModelOverride(value: string) {
+    const next = value.trim() || null
+    setModelOverride(next)
+    await persistConversationPatch({ modelOverride: next })
+  }
+
+  async function changeEffortOverride(value: string) {
+    const next = value.trim() || null
+    setEffortOverride(next)
+    await persistConversationPatch({ effortOverride: next })
+  }
 
   async function startNewConversation() {
     const created = await api.chat.createConversation({
       projectId: useProjectContext ? contextProject?.id ?? null : null,
       useProjectContext: Boolean(useProjectContext && contextProject),
+      lastAgent: agent,
+      modelOverride: null,
+      effortOverride: null,
     })
+    setModelOverride(null)
+    setEffortOverride(null)
     await loadList()
     await loadConversation(created.id)
   }
@@ -218,6 +253,8 @@ export function ChatPage({
         agent,
         text,
         attachments: pendingAttachments,
+        modelOverride,
+        effortOverride,
         context: {
           useProjectContext: Boolean(useProjectContext && contextProject),
           projectId: contextProject?.id ?? null,
@@ -397,29 +434,28 @@ export function ChatPage({
             <h1 className={cn('font-semibold tracking-tight', compact ? 'text-base' : 'text-[22px]')}>CHAT</h1>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {AGENTS.map((item) => {
-              const status = agentStatus?.agents.find((entry) => entry.id === item.id)
-              const ready = Boolean(status?.ready)
-              const selected = agent === item.id
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setAgent(item.id)}
+            <ChatAgentBar
+              agent={agent}
+              snapshot={agentSnapshot}
+              modelOverride={modelOverride}
+              effortOverride={effortOverride}
+              loading={loading[agent]}
+              compact={compact}
+              onAgentChange={(next) => void changeAgent(next)}
+              onModelChange={(value) => void changeModelOverride(value)}
+              onEffortChange={(value) => void changeEffortOverride(value)}
+            />
+            {selectedStatus ? (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted">
+                <span
                   className={cn(
-                    'rounded-xl border text-left transition-colors',
-                    compact ? 'px-2 py-1.5 text-xs' : 'px-3 py-2 text-sm',
-                    selected ? 'border-accent/50 bg-accent-dark/40 text-text' : 'border-border bg-card-2 text-muted hover:text-text',
+                    'h-1.5 w-1.5 rounded-full',
+                    selectedStatus.ready ? 'bg-accent' : 'bg-muted-2',
                   )}
-                >
-                  <div className="font-semibold">{item.label}</div>
-                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px]">
-                    <span className={cn('h-1.5 w-1.5 rounded-full', ready ? 'bg-accent' : 'bg-muted-2')} />
-                    {ready ? 'Pronto' : 'Desconectado'}
-                  </div>
-                </button>
-              )
-            })}
+                />
+                {selectedStatus.ready ? 'Pronto' : 'Desconectado'}
+              </div>
+            ) : null}
             {selectedStatus && !selectedStatus.ready ? (
               <Button variant="secondary" className="h-8 text-xs" onClick={() => navigate('/configuracoes')}>
                 Configurar

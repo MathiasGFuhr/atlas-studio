@@ -15,7 +15,7 @@ export function Modal({
   children: ReactNode
   onClose: () => void
   footer?: ReactNode
-  size?: 'md' | 'lg' | 'xl'
+  size?: 'md' | 'lg' | 'xl' | '2xl'
 }) {
   if (!open) return null
   return (
@@ -25,7 +25,9 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={
-          size === 'xl'
+          size === '2xl'
+            ? 'w-full max-w-6xl rounded-2xl border border-border bg-card shadow-2xl'
+            : size === 'xl'
             ? 'w-full max-w-4xl rounded-2xl border border-border bg-card shadow-2xl'
             : size === 'lg'
             ? 'w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl'
@@ -43,7 +45,7 @@ export function Modal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
+        <div className={size === '2xl' ? 'max-h-[80vh] overflow-y-auto px-5 py-4' : 'max-h-[70vh] overflow-y-auto px-5 py-4'}>{children}</div>
         {footer ? (
           <div className="flex justify-end gap-2 border-t border-border-soft px-5 py-4">{footer}</div>
         ) : null}

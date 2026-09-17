@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -30,13 +30,28 @@ import {
   buildShortsAnalysisPrompt,
   normalizeShortsAnalysis,
 } from '../../../shared/antigravity/shortsAnalysis'
-import type { ShortsDurationMode, ShortsLocalCandidate, ShortsProfile, TranscriptCue } from '../../../shared/shorts'
+import {
+  SHORTS_COPY_FAIL_MESSAGE,
+  SHORTS_COPY_SCHEMA,
+  buildShortsCopiesPrompt,
+  normalizeShortsCopies,
+  type ShortsCopyClipInput,
+} from '../../../shared/antigravity/shortsCopy'
+import type {
+  ShortsCopyFields,
+  ShortsDurationMode,
+  ShortsEditorialContext,
+  ShortsLocalCandidate,
+  ShortsProfile,
+  TranscriptCue,
+} from '../../../shared/shorts'
 import { enrichTitleAnalysisPayload } from './enrichTitleContext'
 import { IPC } from '../../../shared/types'
 import { logger } from '../logging/logger'
 import { settingsRepository } from '../../repositories/settingsRepository'
 import { channelRepository } from '../../repositories/channelRepository'
 import { getUserDataPath } from '../../paths'
+import { resolveRunConfig } from '../../../shared/agents/resolveRunConfig'
 
 const CHAT_RESPONSE_SCHEMA = {
   type: 'object',
@@ -83,6 +98,38 @@ export class AntigravityService {
 
   getStatus(): AntigravityStatus {
     return this.status
+  }
+
+  getBinaryPath(): string | null {
+    return this.status.runtimePath
+  }
+
+  getVersion(): string | null {
+    return this.status.version
+  }
+
+  getAuthFingerprint(): string {
+    try {
+      const file = this.tokenFilePath()
+      if (!existsSync(file)) return 'none'
+      const stats = statSync(file)
+      return `token:${stats.mtimeMs}:${stats.size}`
+    } catch {
+      return 'unknown'
+    }
+  }
+
+  async ensureBinary(): Promise<string | null> {
+    return this.status.runtimePath || (await this.locateBinary())
+  }
+
+  async runCli(
+    args: string[],
+    timeoutMs = 15_000,
+  ): Promise<{ code: number | null; stdout: string; stderr: string }> {
+    const binary = await this.ensureBinary()
+    if (!binary) return { code: 1, stdout: '', stderr: 'no binary' }
+    return this.runAgy(binary, args, timeoutMs)
   }
 
   async initialize(): Promise<AntigravityStatus> {
@@ -354,12 +401,17 @@ export class AntigravityService {
     return { analysis: normalizeQuickPromptAnalysis(structured, prompt) }
   }
 
-  async runChatPrompt(prompt: string): Promise<Record<string, unknown>> {
+  async runChatPrompt(
+    prompt: string,
+    override?: { model?: string | null; effort?: string | null },
+  ): Promise<Record<string, unknown>> {
     return this.runStructuredPrompt({
       schemaFile: 'chat-schema.json',
       schema: CHAT_RESPONSE_SCHEMA,
       prompt,
       invalidMessage: 'O Antigravity não devolveu uma resposta válida para o Chat.',
+      model: override?.model,
+      effort: override?.effort,
     })
   }
 
@@ -389,6 +441,29 @@ export class AntigravityService {
       requestedDuration: request.requestedDuration,
       durationMode: request.durationMode,
     })
+  }
+
+  async generateShortsCopies(request: {
+    profile: ShortsProfile
+    editorial: ShortsEditorialContext
+    fileName: string
+    videoDuration: number
+    fields: ShortsCopyFields
+    clips: ShortsCopyClipInput[]
+  }) {
+    if (request.clips.length === 0) return []
+    const structured = await this.runStructuredPrompt({
+      schemaFile: 'shorts-copy-schema.json',
+      schema: SHORTS_COPY_SCHEMA,
+      prompt: buildShortsCopiesPrompt(request),
+      invalidMessage: SHORTS_COPY_FAIL_MESSAGE,
+      timeoutMs: request.clips.length > 1 ? 180_000 : 90_000,
+      printTimeout: request.clips.length > 1 ? '3m' : '2m',
+    })
+    return normalizeShortsCopies(
+      structured,
+      request.clips.map((clip) => ({ index: clip.index })),
+    )
   }
 
   private buildQuickPromptAudit(request: AnalyzeQuickPromptRequest): string {
@@ -446,6 +521,8 @@ export class AntigravityService {
     invalidMessage: string
     timeoutMs?: number
     printTimeout?: string
+    model?: string | null
+    effort?: string | null
   }): Promise<Record<string, unknown>> {
     const binary = this.status.runtimePath || (await this.locateBinary())
     if (!binary) {
@@ -456,6 +533,7 @@ export class AntigravityService {
     mkdirSync(path.dirname(schemaPath), { recursive: true })
     writeFileSync(schemaPath, JSON.stringify(opts.schema), 'utf8')
 
+    const run = this.resolveAntigravityRun({ model: opts.model, effort: opts.effort })
     const args = [
       '-p',
       opts.prompt,
@@ -463,11 +541,11 @@ export class AntigravityService {
       'json',
       '--json-schema',
       schemaPath,
-      '--effort',
-      'low',
       '--print-timeout',
       opts.printTimeout ?? '3m',
     ]
+    if (run.model) args.push('--model', run.model)
+    if (run.effort) args.push('--effort', run.effort)
 
     const result = await this.runAgy(binary, args, opts.timeoutMs ?? 200_000)
     const combined = `${result.stdout}\n${result.stderr}`
@@ -548,6 +626,16 @@ export class AntigravityService {
 
   private hasStoredToken(): boolean {
     return existsSync(this.tokenFilePath())
+  }
+
+  private resolveAntigravityRun(override?: { model?: string | null; effort?: string | null }) {
+    const settings = settingsRepository.get()
+    return resolveRunConfig({
+      overrideModel: override?.model,
+      overrideEffort: override?.effort,
+      defaultModel: settings.defaultAntigravityModel,
+      defaultEffort: settings.defaultAntigravityEffort,
+    })
   }
 
   private tokenFilePath(): string {

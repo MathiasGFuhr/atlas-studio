@@ -1,7 +1,7 @@
 {
   "name": "atlas-studio",
   "productName": "Atlas Studio",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Atlas Studio — Sistema de roteiros com IA",
   "private": true,
   "main": "dist-electron/main.js",
@@ -28,7 +28,7 @@
     "electron:build": "npm run build && electron-builder --win --publish never",
     "electron:release": "npm run build && electron-builder --win --publish always",
     "codex:status": "npm run build && node scripts/check-codex-status.mjs",
-    "test:e2e": "npm run build && node scripts/run-e2e.mjs",
+    "test:e2e": "node scripts/run-e2e.mjs",
     "postinstall": "node scripts/patch-electron-plugin.mjs"
   },
   "dependencies": {
@@ -73,6 +73,11 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "!dist-electron/e2e-main.js",
+      "!dist-electron/e2e-main.js.map",
+      "!dist-electron/e2e-main.*",
+      "!dist-electron/**/runRealFlowTest*",
+      "!dist-electron/index-*.js",
       "package.json",
       "!node_modules/ffmpeg-static/**"
     ],

@@ -1,3 +1,7 @@
+/**
+ * Usado apenas por `src/main/e2eMain.ts` / `npm run test:e2e`.
+ * Não entra na build pública.
+ */
 import fs from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'

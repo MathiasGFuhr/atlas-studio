@@ -8,12 +8,14 @@ export type ShortsAspectMode = 'original' | 'center_9_16' | 'auto_focus_9_16'
 export type ShortsJobStatus = 'draft' | 'analyzing' | 'ready' | 'error'
 export type ShortsFocusStrategy = 'center'
 export type ShortsTranscriptSource = 'whisper' | 'silence' | 'none'
+export type ShortsCopyFields = 'title' | 'description' | 'all'
 export type ShortsProgressStage =
   | 'analyzing'
   | 'extracting_audio'
   | 'transcribing'
   | 'detecting_moments'
   | 'preparing_cuts'
+  | 'writing_copy'
   | 'exporting'
 
 export const SHORTS_CLIP_COUNTS: ShortsClipCount[] = [3, 5, 10]
@@ -35,6 +37,7 @@ export const SHORTS_PROGRESS_LABEL: Record<ShortsProgressStage, string> = {
   transcribing: 'Transcrevendo...',
   detecting_moments: 'Analisando melhores momentos...',
   preparing_cuts: 'Preparando cortes...',
+  writing_copy: 'Gerando títulos e descrições...',
   exporting: 'Exportando...',
 }
 
@@ -76,9 +79,54 @@ export interface ShortsClip {
   score: number
   reason: string
   hook: string
+  title: string
+  description: string
+  hashtags: string[]
   accepted: boolean
   exportedPath: string | null
   focusStrategy: ShortsFocusStrategy
+}
+
+export type ShortsClipPatch = Partial<
+  Pick<ShortsClip, 'start' | 'end' | 'title' | 'description' | 'hashtags'>
+>
+
+export interface ShortsCopyRequest {
+  jobId: string
+  clipId: string
+  fields: ShortsCopyFields
+}
+
+/** Snapshot editorial para calendário/publicação futura — não publica nesta V1. */
+export interface ShortsEditorialRecord {
+  sourceVideo: string
+  sourceName: string
+  start: number
+  end: number
+  duration: number
+  score: number
+  reason: string
+  hook: string
+  title: string
+  description: string
+  hashtags: string[]
+  format: ShortsAspectMode
+  crop: {
+    cropWidth: number
+    cropHeight: number
+    cropX: number
+    cropY: number
+    focusStrategy: ShortsFocusStrategy
+  } | null
+  exportPath: string | null
+}
+
+export interface ShortsEditorialContext {
+  language: string
+  channelName?: string
+  artistName?: string
+  songTitle?: string
+  sourceName: string
 }
 
 export interface ShortsJob {
@@ -162,6 +210,71 @@ export function formatShortsDuration(seconds: number): string {
 
 export function clipDuration(clip: Pick<ShortsClip, 'start' | 'end'>): number {
   return Math.max(0, clip.end - clip.start)
+}
+
+export function normalizeHashtags(value: unknown): string[] {
+  const raw = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/[\s,;]+/)
+      : []
+  const seen = new Set<string>()
+  const tags: string[] = []
+  for (const item of raw) {
+    const tag = String(item ?? '')
+      .trim()
+      .replace(/^#+/, '')
+      .replace(/\s+/g, '')
+    if (!tag) continue
+    const key = tag.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    tags.push(tag)
+    if (tags.length >= 5) break
+  }
+  return tags
+}
+
+export function formatHashtags(tags: string[]): string {
+  return normalizeHashtags(tags)
+    .map((tag) => `#${tag}`)
+    .join(' ')
+}
+
+export function formatShortsCopy(clip: Pick<ShortsClip, 'title' | 'description' | 'hashtags'>, part: 'title' | 'description' | 'all'): string {
+  const tags = formatHashtags(clip.hashtags)
+  if (part === 'title') return clip.title.trim()
+  if (part === 'description') return [clip.description.trim(), tags].filter(Boolean).join('\n\n')
+  return [clip.title.trim(), clip.description.trim(), tags].filter(Boolean).join('\n\n')
+}
+
+function asText(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
+export function normalizeShortsClip(value: unknown, fallbackIndex = 1): ShortsClip | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const start = Number(record.start)
+  const end = Number(record.end)
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null
+  const index = Number(record.index)
+  const score = Number(record.score)
+  return {
+    id: asText(record.id),
+    index: Number.isFinite(index) && index > 0 ? Math.round(index) : fallbackIndex,
+    start,
+    end,
+    score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : 0,
+    reason: asText(record.reason),
+    hook: asText(record.hook),
+    title: asText(record.title),
+    description: asText(record.description),
+    hashtags: normalizeHashtags(record.hashtags),
+    accepted: Boolean(record.accepted),
+    exportedPath: record.exportedPath ? asText(record.exportedPath) : null,
+    focusStrategy: 'center',
+  }
 }
 
 function gcd(a: number, b: number): number {

@@ -3,7 +3,7 @@ import type { AppDatabase } from './database'
 import { backupSqliteFile, isBackupSettingEnabled } from './backup'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 5
+export const CURRENT_SCHEMA_VERSION = 6
 
 type SchemaStep = {
   version: number
@@ -47,6 +47,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'shorts-custom-duration',
     backup: false,
     up: applyShortsCustomDuration,
+  },
+  {
+    version: 6,
+    name: 'chat-agent-model-overrides',
+    backup: false,
+    up: applyChatAgentModelOverrides,
   },
 ]
 
@@ -198,6 +204,16 @@ function applyShortsCustomDuration(database: AppDatabase): {
   return { historyCreated: 0, musicCreated: 0 }
 }
 
+function applyChatAgentModelOverrides(database: AppDatabase): {
+  historyCreated: number
+  musicCreated: number
+} {
+  ensureChatTables(database)
+  ensureColumn(database, 'chat_conversations', 'model_override', 'TEXT')
+  ensureColumn(database, 'chat_conversations', 'effort_override', 'TEXT')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
 function applyIncrementalBase(database: AppDatabase): {
   historyCreated: number
   musicCreated: number
@@ -257,6 +273,8 @@ function ensureChatTables(database: AppDatabase) {
       project_id TEXT,
       use_project_context INTEGER NOT NULL DEFAULT 0,
       last_agent TEXT,
+      model_override TEXT,
+      effort_override TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )
@@ -298,6 +316,8 @@ function ensureChatTables(database: AppDatabase) {
     'CREATE INDEX IF NOT EXISTS idx_chat_logs_conversation ON chat_action_logs(conversation_id, created_at)',
   )
   ensureColumn(database, 'chat_messages', 'attachments_json', "TEXT NOT NULL DEFAULT '[]'")
+  ensureColumn(database, 'chat_conversations', 'model_override', 'TEXT')
+  ensureColumn(database, 'chat_conversations', 'effort_override', 'TEXT')
 }
 
 export function ensureColumn(

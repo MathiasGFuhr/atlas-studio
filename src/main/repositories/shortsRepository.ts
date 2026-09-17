@@ -12,7 +12,7 @@ import type {
   TranscriptCue,
   VideoProbeInfo,
 } from '../../shared/shorts'
-import { isShortsAspectMode, isShortsClipCount, isShortsDurationMode, isShortsProfile } from '../../shared/shorts'
+import { isShortsAspectMode, isShortsClipCount, isShortsDurationMode, isShortsProfile, normalizeShortsClip } from '../../shared/shorts'
 import { requestedDurationFromLegacyPreset } from '../../shared/shortsDuration'
 
 type JobRow = {
@@ -65,7 +65,9 @@ function mapJob(row: JobRow): ShortsJob {
     aspectMode: isShortsAspectMode(row.aspect_mode) ? row.aspect_mode : 'center_9_16',
     captionsEnabled: Boolean(row.captions_enabled),
     probe: parseJson<VideoProbeInfo | null>(row.probe_json, null),
-    clips: parseJson<ShortsClip[]>(row.clips_json, []),
+    clips: parseJson<unknown[]>(row.clips_json, [])
+      .map((item, index) => normalizeShortsClip(item, index + 1))
+      .filter((item): item is ShortsClip => Boolean(item)),
     transcript: parseJson<TranscriptCue[]>(row.transcript_json, []),
     transcriptSource: (row.transcript_source as ShortsTranscriptSource) || 'none',
     analysisNotes: row.analysis_notes,

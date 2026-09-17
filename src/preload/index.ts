@@ -33,6 +33,8 @@ import type {
 import type { MusicCutMode, MusicSegment, MusicTrack } from '../shared/musicAnalysis'
 import type {
   ShortsAnalyzeInput,
+  ShortsClipPatch,
+  ShortsCopyFields,
   ShortsJob,
   ShortsProgressEvent,
 } from '../shared/shorts'
@@ -49,6 +51,7 @@ import type {
 import type { AppUpdateStatus } from '../shared/updates'
 import { IPC } from '../shared/types'
 import type { WorkspaceCapabilities } from '../shared/workspaceCapabilities'
+import type { AgentModelSnapshot, AgentModelsBundle, AgentProviderId } from '../shared/agents/types'
 
 const api = {
   projects: {
@@ -202,8 +205,10 @@ const api = {
       ipcRenderer.invoke(IPC.shorts.import, projectId) as Promise<ShortsJob | null>,
     analyze: (request: ShortsAnalyzeInput) =>
       ipcRenderer.invoke(IPC.shorts.analyze, request) as Promise<ShortsJob>,
-    updateClip: (jobId: string, clipId: string, patch: { start?: number; end?: number }) =>
+    updateClip: (jobId: string, clipId: string, patch: ShortsClipPatch) =>
       ipcRenderer.invoke(IPC.shorts.updateClip, jobId, clipId, patch) as Promise<ShortsJob | null>,
+    regenerateCopy: (payload: { jobId: string; clipId: string; fields?: ShortsCopyFields }) =>
+      ipcRenderer.invoke(IPC.shorts.regenerateCopy, payload) as Promise<ShortsJob>,
     updateSettings: (
       jobId: string,
       patch: Partial<
@@ -306,6 +311,29 @@ const api = {
     isOnboardingDismissed: () =>
       ipcRenderer.invoke(IPC.codex.isOnboardingDismissed) as Promise<boolean>,
   },
+  agents: {
+    getCapabilities: () =>
+      ipcRenderer.invoke(IPC.agents.getCapabilities) as Promise<AgentModelsBundle>,
+    refreshModels: (provider?: AgentProviderId) =>
+      ipcRenderer.invoke(IPC.agents.refreshModels, provider) as Promise<
+        AgentModelSnapshot | AgentModelsBundle
+      >,
+    setDefaultModel: (provider: AgentProviderId, model: string) =>
+      ipcRenderer.invoke(IPC.agents.setDefaultModel, provider, model) as Promise<AgentModelSnapshot>,
+    setReasoningEffort: (provider: AgentProviderId, effort: string) =>
+      ipcRenderer.invoke(
+        IPC.agents.setReasoningEffort,
+        provider,
+        effort,
+      ) as Promise<AgentModelSnapshot>,
+    onCapabilitiesChanged: (callback: (bundle: AgentModelsBundle) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: AgentModelsBundle) => callback(data)
+      ipcRenderer.on(IPC.agents.capabilitiesChanged, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.agents.capabilitiesChanged, listener)
+      }
+    },
+  },
   generation: {
     start: (request: GenerateScriptRequest) =>
       ipcRenderer.invoke(IPC.generation.start, request) as Promise<GenerationResult>,
@@ -339,12 +367,21 @@ const api = {
       title?: string
       projectId?: string | null
       useProjectContext?: boolean
+      lastAgent?: 'codex' | 'antigravity' | null
+      modelOverride?: string | null
+      effortOverride?: string | null
     }) => ipcRenderer.invoke(IPC.chat.createConversation, input) as Promise<ChatConversation>,
     renameConversation: (id: string, title: string) =>
       ipcRenderer.invoke(IPC.chat.renameConversation, id, title) as Promise<ChatConversation | null>,
     setContext: (
       id: string,
-      patch: { projectId?: string | null; useProjectContext?: boolean },
+      patch: {
+        projectId?: string | null
+        useProjectContext?: boolean
+        lastAgent?: 'codex' | 'antigravity' | null
+        modelOverride?: string | null
+        effortOverride?: string | null
+      },
     ) => ipcRenderer.invoke(IPC.chat.setContext, id, patch) as Promise<ChatConversation | null>,
     removeConversation: (id: string) =>
       ipcRenderer.invoke(IPC.chat.removeConversation, id) as Promise<boolean>,
