@@ -10,7 +10,6 @@ import {
   ProjectEditorModal,
   type ProjectFormValues,
 } from '../components/ProjectEditorModal'
-import { QuickPromptsPanel } from '../components/QuickPromptsPanel'
 import { getAtlasApi } from '../lib/api'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { useToast } from '../components/Toast'
@@ -260,14 +259,6 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
           ))}
         </div>
       )}
-
-      {/* Prompts rápidos não dependem de projeto: ficam disponíveis assim que
-          o usuário entra em Música, mesmo sem nada criado ainda. */}
-      {projectType === 'music' ? (
-        <div className="mt-6">
-          <QuickPromptsPanel />
-        </div>
-      ) : null}
 
       <ProjectEditorModal
         open={modalOpen}

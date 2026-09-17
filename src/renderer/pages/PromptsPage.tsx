@@ -3,9 +3,7 @@ import { QuickPromptsPanel } from '../components/QuickPromptsPanel'
 import { environmentBreadcrumb } from '../lib/environments'
 
 /**
- * Entrada global da biblioteca de Prompts rápidos.
- * Reusa o mesmo painel dos projetos de Música, sem persistência própria.
- * Sem projeto selecionado, só presets e prompts globais.
+ * Biblioteca de Prompts rápidos, acessível pelo sidebar do ambiente Música.
  */
 export function PromptsPage() {
   return (
@@ -15,10 +13,6 @@ export function PromptsPage() {
         title="Prompts"
         subtitle="Biblioteca de Prompts rápidos do ambiente Música."
       />
-      <p className="mb-5 text-xs leading-relaxed text-muted">
-        Sem projeto selecionado, entram só os presets e os prompts globais. Prompts
-        salvos para um projeto específico continuam no próprio projeto de Música.
-      </p>
       <QuickPromptsPanel />
     </div>
   )

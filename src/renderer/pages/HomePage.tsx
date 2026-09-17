@@ -29,6 +29,7 @@ import { notifyProjectsChanged, onProjectsChanged } from '../lib/projectEvents'
 import { notifyTasksChanged, onTasksChanged } from '../lib/taskEvents'
 import { onChannelsChanged } from '../lib/channelEvents'
 import { onVideosChanged } from '../lib/videoEvents'
+import { onSettingsChanged } from '../lib/settingsEvents'
 import { useToast } from '../components/Toast'
 import { formatRelativeDate } from '../lib/utils'
 import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
@@ -36,11 +37,12 @@ import { enabledContentAreas } from '@shared/workspaceCapabilities'
 
 const EMPTY_FORM: ProjectFormValues = { name: '', description: '', channelId: '' }
 
-function homeGreeting(now = new Date()): string {
+function homeGreeting(name?: string | null, now = new Date()): string {
   const hour = now.getHours()
-  if (hour < 12) return 'Bom dia'
-  if (hour < 18) return 'Boa tarde'
-  return 'Boa noite'
+  const hello = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
+  const trimmed = name?.trim()
+  if (!trimmed) return hello
+  return `${hello}, ${trimmed}`
 }
 
 function homeDateLabel(now = new Date()): string {
@@ -65,12 +67,13 @@ export function HomePage() {
   const [scripts, setScripts] = useState<ScriptRecord[]>([])
   const [tracks, setTracks] = useState<MusicTrack[]>([])
   const [upcomingVideos, setUpcomingVideos] = useState<ChannelVideo[]>([])
+  const [accountName, setAccountName] = useState('')
   const [createType, setCreateType] = useState<ProjectType | null>(null)
   const [form, setForm] = useState<ProjectFormValues>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
-    const [history, music, taskList, channelList, scriptList, trackList, videoList] = await Promise.all([
+    const [history, music, taskList, channelList, scriptList, trackList, videoList, settings] = await Promise.all([
       api.projects.list({ projectType: 'history' }),
       api.projects.list({ projectType: 'music' }),
       api.tasks.list(),
@@ -78,6 +81,7 @@ export function HomePage() {
       api.scripts.list(),
       api.music.list(),
       api.videos.list({ from: todayDateKey(), limit: HOME_UPCOMING_VIDEO_LIMIT }),
+      api.settings.get(),
     ])
     setProjects([...history, ...music])
     setTasks(taskList)
@@ -85,6 +89,7 @@ export function HomePage() {
     setScripts(scriptList)
     setTracks(trackList)
     setUpcomingVideos(videoList)
+    setAccountName(settings.accountName?.trim() ?? '')
   }, [api])
 
   useEffect(() => {
@@ -96,6 +101,7 @@ export function HomePage() {
     const stopProjects = onProjectsChanged(refresh)
     const stopVideos = onVideosChanged(refresh)
     const stopChannels = onChannelsChanged(refresh)
+    const stopSettings = onSettingsChanged(refresh)
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh()
     }
@@ -106,6 +112,7 @@ export function HomePage() {
       stopProjects()
       stopVideos()
       stopChannels()
+      stopSettings()
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', refresh)
     }
@@ -199,7 +206,7 @@ export function HomePage() {
         <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-2">Início</p>
-            <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-text">{homeGreeting()}</h1>
+            <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-text">{homeGreeting(accountName)}</h1>
             <p className="mt-1.5 text-sm text-muted">{homeDateLabel()}</p>
           </div>
           <p className="max-w-sm text-right text-sm leading-relaxed text-muted-2">

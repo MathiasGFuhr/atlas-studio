@@ -14,7 +14,6 @@ import {
 } from '../components/ProjectEditorModal'
 import { StatusBadge } from '../components/StatusBadge'
 import { ProjectFolderPanel } from '../components/ProjectFolderPanel'
-import { QuickPromptsPanel } from '../components/QuickPromptsPanel'
 import { getAtlasApi } from '../lib/api'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { useToast } from '../components/Toast'
@@ -255,9 +254,6 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
               ))}
             </div>
           )}
-
-          {/* Prompts rápidos existem apenas no ambiente Música. */}
-          {projectType === 'music' ? <QuickPromptsPanel projectId={project.id} /> : null}
         </div>
 
         <aside className="space-y-4">
