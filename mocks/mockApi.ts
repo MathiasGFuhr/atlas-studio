@@ -32,6 +32,7 @@ import type {
 import { MUSIC_PROJECT_HAS_PUBLICATION_ERROR } from '../src/shared/types'
 import type { MusicTrack } from '../src/shared/musicAnalysis'
 import type { ShortsAnalyzeInput, ShortsJob, ShortsProgressEvent } from '../src/shared/shorts'
+import { TEXT_ONLY_CAPABILITIES } from '../src/shared/agents/capabilities'
 import type { ShortsImportResult } from '../src/shared/shortsProjectIdentity'
 import type { CustomPrompt } from '../src/shared/quickPrompts/types'
 import type {
@@ -112,6 +113,7 @@ const settings: AppSettings = {
   defaultCodexEffort: '',
   defaultAntigravityModel: '',
   defaultAntigravityEffort: '',
+  allowExternalVideoAnalysis: false,
   autoApproval: false,
   backupEnabled: true,
   autoCheckUpdates: true,
@@ -684,7 +686,19 @@ export const mockApi = {
     analyze: async (_request: ShortsAnalyzeInput) => {
       throw new Error('Análise de Shorts indisponível no modo mock. Use o Electron.')
     },
+    getAnalysisPlan: async () => ({
+      provider: 'antigravity' as const,
+      currentModel: null,
+      currentCapabilities: TEXT_ONLY_CAPABILITIES,
+      compatibleVideoModels: [],
+      allowExternalVideoAnalysis: false,
+      recommendedMode: 'frames_audio_transcript' as const,
+      needsVideoConsent: false,
+      needsModelChoice: false,
+      canSendVideo: false,
+    }),
     updateClip: async () => null,
+    removeClip: async () => null,
     regenerateCopy: async () => {
       throw new Error('Regenerar título/descrição indisponível no modo mock. Use o Electron.')
     },
@@ -860,7 +874,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.9.0',
+      currentVersion: '1.10.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

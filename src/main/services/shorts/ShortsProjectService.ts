@@ -151,6 +151,24 @@ export function updateClip(jobId: string, clipId: string, patch: ShortsClipPatch
   return updateClipWith(liveStore, jobId, clipId, patch)
 }
 
+export function removeClipWith(
+  store: ShortsProjectStore,
+  jobId: string,
+  clipId: string,
+): ShortsJob | null {
+  const job = store.get(jobId)
+  if (!job) return null
+  if (!job.clips.some((clip) => clip.id === clipId)) return null
+  const clips = job.clips
+    .filter((clip) => clip.id !== clipId)
+    .map((clip, index) => ({ ...clip, index: index + 1 }))
+  return store.update(jobId, { clips })
+}
+
+export function removeClip(jobId: string, clipId: string) {
+  return removeClipWith(liveStore, jobId, clipId)
+}
+
 export function addClipWith(store: ShortsProjectStore, jobId: string, clip: ShortsClip): ShortsJob | null {
   const job = store.get(jobId)
   if (!job) return null

@@ -23,6 +23,7 @@ export function ShortsAdjustModal({
   onCopy,
   onRegenerate,
   onExport,
+  onDelete,
 }: {
   open: boolean
   job: ShortsJob | null
@@ -38,6 +39,7 @@ export function ShortsAdjustModal({
   onCopy: (part: 'title' | 'description' | 'all') => void
   onRegenerate: (fields: 'title' | 'description' | 'all') => void
   onExport: () => void
+  onDelete: () => void
 }) {
   const duration = job?.probe?.duration ?? clip?.end ?? 0
   const start = clip?.start ?? 0
@@ -54,6 +56,9 @@ export function ShortsAdjustModal({
       size="2xl"
       footer={
         <>
+          <Button variant="ghost" disabled={busy} onClick={onDelete}>
+            Excluir Short
+          </Button>
           <Button variant="secondary" onClick={onClose}>
             Fechar
           </Button>
@@ -77,6 +82,7 @@ export function ShortsAdjustModal({
                 sourceHeight={sourceHeight}
                 active={playing}
                 resetToken={shortsClipPreviewKey({ id: clip.id, start, end })}
+                posterUrl={clip.posterUrl}
                 onPlayingChange={onPlayingChange}
               />
               <div className="mt-3 flex items-center gap-2">

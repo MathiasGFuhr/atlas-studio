@@ -19,7 +19,7 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 10
+export const CURRENT_SCHEMA_VERSION = 11
 
 type SchemaStepResult = {
   historyCreated: number
@@ -102,6 +102,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'shorts-project-source-dedup',
     backup: true,
     up: applyShortsProjectDedup,
+  },
+  {
+    version: 11,
+    name: 'shorts-audiovisual-analysis-mode',
+    backup: false,
+    up: applyShortsAnalysisMode,
   },
 ]
 
@@ -200,6 +206,11 @@ function readBackupEnabled(database: AppDatabase): boolean {
   } catch {
     return isBackupSettingEnabled(row.value)
   }
+}
+
+function applyShortsAnalysisMode(database: AppDatabase): SchemaStepResult {
+  ensureColumn(database, 'shorts_jobs', 'analysis_mode', 'TEXT')
+  return { historyCreated: 0, musicCreated: 0 }
 }
 
 function applyChannelVideoPipelineStatus(database: AppDatabase): {

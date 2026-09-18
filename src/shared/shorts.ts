@@ -11,13 +11,24 @@ export type ShortsFocusStrategy = 'center'
 export type ShortsTranscriptSource = 'whisper' | 'silence' | 'none'
 export type ShortsCopyFields = 'title' | 'description' | 'all'
 export type ShortsProgressStage =
+  | 'preparing_video'
+  | 'analyzing_visual'
+  | 'analyzing_audio'
+  | 'detecting_language'
+  | 'understanding_structure'
+  | 'selecting_moments'
+  | 'validating_cuts'
+  | 'writing_copy'
+  | 'exporting'
+  /** @deprecated etapas antigas ainda aceitas na leitura */
   | 'analyzing'
   | 'extracting_audio'
   | 'transcribing'
   | 'detecting_moments'
   | 'preparing_cuts'
-  | 'writing_copy'
-  | 'exporting'
+
+export type ShortsAnalysisMode = 'audiovisual' | 'frames_audio_transcript'
+export type ShortsModelDecision = 'current' | 'use_compatible' | 'continue_frames'
 
 export const SHORTS_CLIP_COUNTS: ShortsClipCount[] = [3, 5, 10]
 
@@ -33,13 +44,29 @@ export const SHORTS_OUTPUT_HEIGHT = 1920
 export const SHORTS_VIDEO_EXTENSIONS = ['mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v', 'mpeg', 'mpg', 'wmv']
 
 export const SHORTS_PROGRESS_LABEL: Record<ShortsProgressStage, string> = {
-  analyzing: 'Analisando vídeo...',
-  extracting_audio: 'Extraindo áudio...',
-  transcribing: 'Transcrevendo...',
-  detecting_moments: 'Analisando melhores momentos...',
-  preparing_cuts: 'Preparando cortes...',
-  writing_copy: 'Gerando títulos e descrições...',
+  preparing_video: 'Preparando vídeo...',
+  analyzing_visual: 'Analisando conteúdo visual...',
+  analyzing_audio: 'Analisando áudio...',
+  detecting_language: 'Detectando idioma...',
+  understanding_structure: 'Compreendendo estrutura...',
+  selecting_moments: 'Selecionando momentos...',
+  validating_cuts: 'Validando cortes...',
+  writing_copy: 'Criando títulos e descrições...',
   exporting: 'Exportando...',
+  analyzing: 'Preparando vídeo...',
+  extracting_audio: 'Analisando áudio...',
+  transcribing: 'Analisando áudio...',
+  detecting_moments: 'Selecionando momentos...',
+  preparing_cuts: 'Validando cortes...',
+}
+
+export const SHORTS_ANALYSIS_MODE_LABEL: Record<ShortsAnalysisMode, string> = {
+  audiovisual: 'Audiovisual por IA',
+  frames_audio_transcript: 'Frames + áudio + transcrição',
+}
+
+export function isShortsAnalysisMode(value: unknown): value is ShortsAnalysisMode {
+  return value === 'audiovisual' || value === 'frames_audio_transcript'
 }
 
 export interface VideoProbeInfo {
@@ -89,6 +116,8 @@ export interface ShortsClip {
   accepted: boolean
   exportedPath: string | null
   focusStrategy: ShortsFocusStrategy
+  /** URL atlas-media do frame deste corte, gerada na apresentação. */
+  posterUrl?: string | null
 }
 
 export type ShortsClipPatch = Partial<
@@ -164,6 +193,8 @@ export interface ShortsJob {
   detectedLanguage: string | null
   /** Idioma devolvido pelo Whisper, se houver. */
   transcriptLanguage: string | null
+  /** Como a IA analisou de verdade. Nunca marcar audiovisual sem enviar o vídeo. */
+  analysisMode: ShortsAnalysisMode | null
   analysisNotes: string | null
   errorMessage: string | null
   status: ShortsJobStatus
@@ -189,6 +220,9 @@ export interface ShortsAnalyzeInput {
   durationMode: ShortsDurationMode
   aspectMode: ShortsAspectMode
   captionsEnabled: boolean
+  allowExternalVideoAnalysis?: boolean
+  modelDecision?: ShortsModelDecision
+  modelOverride?: string | null
 }
 
 export interface ShortsExportInput {
@@ -238,6 +272,34 @@ export function clipDuration(clip: Pick<ShortsClip, 'start' | 'end'>): number {
 
 export function shortsClipPreviewKey(clip: Pick<ShortsClip, 'id' | 'start' | 'end'>): string {
   return `${clip.id}:${clip.start}:${clip.end}`
+}
+
+/** Tempo do frame de capa: dentro do próprio corte, não no início do vídeo. */
+export function clipPosterSeekSeconds(clip: Pick<ShortsClip, 'start' | 'end'>): number {
+  const duration = Math.max(0, clip.end - clip.start)
+  if (duration <= 0) return Math.max(0, clip.start)
+  return clip.start + Math.min(1.5, Math.max(0.15, duration * 0.18))
+}
+
+/**
+ * URL única por corte. Sem isso o Chromium compartilha o decoder e todos
+ * os cards mostram o mesmo frame do vídeo original.
+ */
+export function shortsClipPreviewSrc(
+  mediaUrl: string | null,
+  clip: Pick<ShortsClip, 'id' | 'start' | 'end'>,
+): string | null {
+  if (!mediaUrl) return null
+  try {
+    const url = new URL(mediaUrl)
+    url.searchParams.set('clip', clip.id || 'clip')
+    url.searchParams.set('from', clip.start.toFixed(3))
+    url.searchParams.set('to', clip.end.toFixed(3))
+    url.hash = `t=${clip.start.toFixed(3)},${clip.end.toFixed(3)}`
+    return url.toString()
+  } catch {
+    return mediaUrl
+  }
 }
 
 export function shortsExportWindow(clip: Pick<ShortsClip, 'id' | 'start' | 'end'>): {

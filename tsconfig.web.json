@@ -22,5 +22,6 @@
       "@mocks/*": ["mocks/*"]
     }
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*", "mocks/**/*", "src/renderer/vite-env.d.ts"]
+  "include": ["src/renderer/**/*", "src/shared/**/*", "mocks/**/*", "src/renderer/vite-env.d.ts"],
+  "exclude": ["src/shared/audio"]
 }

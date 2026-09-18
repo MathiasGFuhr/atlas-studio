@@ -11,34 +11,26 @@ import type {
   ShortsProgressEvent,
 } from '../../../shared/shorts'
 import { capRequestedDuration } from '../../../shared/shortsDuration'
-import { analyzeMusic } from '../../../shared/musicAnalysis'
-import { decodeWavPcm } from '../../../shared/decodeWav'
-import { shortsCandidatePoolSize, toRankedWindows } from '../../../shared/shortsDiversity'
-import { buildLocalShortsCandidates } from '../../../shared/shortsMoments'
-import { finalizeShortsSelection } from '../../../shared/shortsSelection'
-import {
-  normalizeShortsAnalysis,
-  SHORTS_ANALYSIS_FAIL_MESSAGE,
-  shortsAiClipsToRanked,
-} from '../../../shared/antigravity/shortsAnalysis'
+import { toRankedWindows } from '../../../shared/shortsDiversity'
 import { logger } from '../logging/logger'
-import {
-  fallbackShortsCopy,
-  type ShortsCopyClipInput,
-} from '../../../shared/antigravity/shortsCopy'
-import { cuesForClip } from '../../../shared/shortsExport'
 import { mergeReanalysisClips } from '../../../shared/shortsProjectIdentity'
 import { shortsRepository } from '../../repositories/shortsRepository'
 import { getUserDataPath } from '../../paths'
+import { settingsRepository } from '../../repositories/settingsRepository'
 import type { AntigravityService } from '../antigravity/AntigravityService'
-import {
-  detectScenes,
-  detectSilence,
-  extractAudioWav,
-  probeVideo,
-} from '../media/ffmpegVideo'
-import { cuesFromSilence, transcribeLocalAudio } from './transcribeLocal'
+import type { AgentModelCatalog } from '../agents/AgentModelCatalog'
+import { probeVideo } from '../media/ffmpegVideo'
 import { resolveShortsEditorialContext, resolveShortsLanguageFields, shortsLanguageAnalysisNote } from './editorialContext'
+import { loadShortsAnalysisPlan } from './ShortsAnalysisPlanner'
+import { resolveAnalysisRuntime } from '../../../shared/shorts/analysisPlan'
+import { AudioAnalysisService, audioWorkPath } from './AudioAnalysisService'
+import { SceneAnalysisService } from './SceneAnalysisService'
+import { TranscriptService } from './TranscriptService'
+import { VideoProxyService } from './VideoProxyService'
+import { VideoUnderstandingService } from './VideoUnderstandingService'
+import { ShortCandidateService } from './ShortCandidateService'
+import { ShortMetadataService } from './ShortMetadataService'
+import { understandingHasSignal } from '../../../shared/shorts/videoUnderstanding'
 
 function jobDir(id: string) {
   return path.join(getUserDataPath(), 'shorts', id)
@@ -81,94 +73,10 @@ function toClips(
   }))
 }
 
-function toCopyInputs(
-  clips: ShortsClip[],
-  transcript: ShortsJob['transcript'],
-  focus?: ShortsClip,
-): ShortsCopyClipInput[] {
-  const targets = focus ? [focus] : clips
-  return targets.map((clip) => ({
-    index: clip.index,
-    start: clip.start,
-    end: clip.end,
-    score: clip.score,
-    reason: clip.reason,
-    hook: clip.hook,
-    transcript: transcript.filter(
-      (cue) => cue.end > clip.start && cue.start < clip.end && cue.text.trim(),
-    ),
-    currentTitle: clip.title,
-    currentDescription: clip.description,
-    usedTitles: clips
-      .filter((item) => item.id !== clip.id)
-      .map((item) => item.title.trim())
-      .filter(Boolean),
-  }))
-}
-
-async function attachShortsCopies(input: {
-  job: ShortsJob
-  clips: ShortsClip[]
-  fields: ShortsCopyFields
-  focus?: ShortsClip
-  antigravity: AntigravityService
-  send: (stage: ShortsProgressEvent['stage'], message: string) => void
-}): Promise<ShortsClip[]> {
-  const editorial = resolveShortsEditorialContext(input.job)
-  input.send('writing_copy', 'Gerando títulos e descrições...')
-  try {
-    const copies = await input.antigravity.generateShortsCopies({
-      profile: input.job.profile,
-      editorial,
-      fileName: input.job.sourceName,
-      videoDuration: input.job.probe?.duration ?? Math.max(...input.clips.map((clip) => clip.end), 0),
-      fields: input.fields,
-      clips: toCopyInputs(input.clips, input.job.transcript, input.focus),
-    })
-    const byIndex = new Map(copies.map((item) => [item.index, item]))
-    return input.clips.map((clip) => {
-      const copy = byIndex.get(clip.index)
-      if (!copy || (input.focus && clip.id !== input.focus.id)) return clip
-      const next = { ...clip }
-      if (input.fields !== 'description') next.title = copy.title.trim() || next.title
-      if (input.fields !== 'title') {
-        next.description = copy.description.trim() || next.description
-        if (copy.hashtags.length) next.hashtags = copy.hashtags
-      }
-      if (!next.title.trim() || !next.description.trim()) {
-        const fallback = fallbackShortsCopy({
-          index: clip.index,
-          hook: clip.hook,
-          reason: clip.reason,
-          transcript: cuesForClip(input.job.transcript, clip.start, clip.end),
-        })
-        if (!next.title.trim()) next.title = fallback.title
-        if (!next.description.trim()) next.description = fallback.description
-      }
-      return next
-    })
-  } catch {
-    return input.clips.map((clip) => {
-      if (input.focus && clip.id !== input.focus.id) return clip
-      if (clip.title.trim() && clip.description.trim() && input.fields === 'all') return clip
-      const fallback = fallbackShortsCopy({
-        index: clip.index,
-        hook: clip.hook,
-        reason: clip.reason,
-        transcript: cuesForClip(input.job.transcript, clip.start, clip.end),
-      })
-      return {
-        ...clip,
-        title: input.fields === 'description' ? clip.title : clip.title.trim() || fallback.title,
-        description: input.fields === 'title' ? clip.description : clip.description.trim() || fallback.description,
-      }
-    })
-  }
-}
-
 export async function analyzeShortsJob(input: {
   request: ShortsAnalyzeInput
   antigravity: AntigravityService
+  catalog: AgentModelCatalog
   getWindow: () => BrowserWindow | null
 }): Promise<ShortsJob> {
   const job = shortsRepository.get(input.request.jobId)
@@ -179,6 +87,12 @@ export async function analyzeShortsJob(input: {
 
   const send = (stage: ShortsProgressEvent['stage'], message: string) =>
     emitProgress(input.getWindow, { jobId: job.id, stage, message })
+
+  const allow =
+    input.request.allowExternalVideoAnalysis ?? Boolean(settingsRepository.get().allowExternalVideoAnalysis)
+  if (input.request.allowExternalVideoAnalysis != null) {
+    settingsRepository.update({ allowExternalVideoAnalysis: Boolean(input.request.allowExternalVideoAnalysis) })
+  }
 
   shortsRepository.update(job.id, {
     profile: input.request.profile,
@@ -191,108 +105,166 @@ export async function analyzeShortsJob(input: {
     errorMessage: null,
   })
 
+  const audio = new AudioAnalysisService()
+  const scenes = new SceneAnalysisService()
+  const transcript = new TranscriptService()
+  const proxy = new VideoProxyService()
+  const understanding = new VideoUnderstandingService(input.antigravity)
+  const candidates = new ShortCandidateService(input.antigravity)
+  const metadata = new ShortMetadataService(input.antigravity)
+
   try {
-    send('analyzing', 'Analisando vídeo...')
+    send('preparing_video', 'Preparando vídeo...')
+    const plan = await loadShortsAnalysisPlan({
+      antigravity: input.antigravity,
+      catalog: input.catalog,
+      allowExternalVideoAnalysis: allow,
+    })
+    const runtime = resolveAnalysisRuntime({
+      plan,
+      modelDecision: input.request.modelDecision,
+      modelOverride: input.request.modelOverride,
+      allowExternalVideoAnalysis: allow,
+    })
+
     const probe = await probeVideo(job.sourcePath)
     shortsRepository.update(job.id, { probe })
-
-    send('extracting_audio', 'Extraindo áudio...')
     const dir = jobDir(job.id)
     fs.mkdirSync(dir, { recursive: true })
-    const audioPath = path.join(dir, 'audio.wav')
-    await extractAudioWav(job.sourcePath, audioPath)
+    const originalPath = job.sourcePath
 
-    send('transcribing', 'Transcrevendo...')
-    const silence = await detectSilence(audioPath)
-    const localTranscript = await transcribeLocalAudio(audioPath, dir)
-    const transcript =
-      localTranscript.cues.length > 0 ? localTranscript.cues : cuesFromSilence(probe.duration, silence)
-    const transcriptSource = localTranscript.cues.length > 0 ? localTranscript.source : silence.length > 0 ? 'silence' : 'none'
-    const transcriptLanguage = localTranscript.language
+    let proxyPath: string | null = null
+    if (runtime.sendVideo) {
+      try {
+        proxyPath = await proxy.createAnalysisProxy({ sourcePath: originalPath, dir, probe })
+      } catch (error) {
+        logger.warn('shorts.proxy.failed', {
+          jobId: job.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        runtime.sendVideo = false
+        runtime.mode = 'frames_audio_transcript'
+        runtime.watchedVideoClaimAllowed = false
+      }
+    }
+
+    send('analyzing_audio', 'Analisando áudio...')
+    const audioPath = audioWorkPath(dir)
+    await audio.extractWav(originalPath, audioPath)
+    const audioAnalysis = await audio.analyze(audioPath, probe.duration)
+
+    const localTranscript = await transcript.transcribe({
+      audioPath,
+      dir,
+      duration: probe.duration,
+    })
+    send('detecting_language', 'Detectando idioma...')
     const languageSeed = {
       ...(shortsRepository.get(job.id) ?? job),
       probe,
-      transcript,
-      transcriptSource,
-      transcriptLanguage,
+      transcript: localTranscript.cues,
+      transcriptSource: localTranscript.source,
+      transcriptLanguage: localTranscript.language,
     }
     const languageFields = resolveShortsLanguageFields(languageSeed)
     shortsRepository.update(job.id, {
       probe,
-      transcript,
-      transcriptSource,
+      transcript: localTranscript.cues,
+      transcriptSource: localTranscript.source,
       ...languageFields,
     })
 
-    send('detecting_moments', 'Analisando melhores momentos...')
-    const scenes = (await detectScenes(job.sourcePath)).map((time) => ({ time }))
-    let analysis = null
-    try {
-      const wav = fs.readFileSync(audioPath)
-      const decoded = decodeWavPcm(wav)
-      analysis = analyzeMusic(decoded.samples, decoded.sampleRate)
-      if (silence.length > 0) analysis = { ...analysis, silence }
-    } catch {
-      analysis = {
-        duration: probe.duration,
-        sampleRate: 16000,
-        energy: [],
-        frameDuration: 0.046,
-        silence,
-        onsets: [],
-      }
-    }
-
+    send('analyzing_visual', 'Analisando conteúdo visual...')
+    const sceneTimes = await scenes.detect(originalPath)
     const durationCap = capRequestedDuration(input.request.requestedDuration, probe.duration)
     const requestedDuration = durationCap.requested
     const durationMode = input.request.durationMode
-
-    const localCandidates = buildLocalShortsCandidates({
+    const localCandidates = candidates.buildLocal({
       profile: input.request.profile,
       duration: probe.duration,
       requestedDuration,
       durationMode,
       count: input.request.clipCount,
-      analysis,
-      scenes,
-      cues: transcript.filter((cue) => cue.text.trim()),
+      analysis: audioAnalysis,
+      scenes: sceneTimes.map((time) => ({ time })),
+      cues: localTranscript.cues.filter((cue) => cue.text.trim()),
+    })
+    const keyframeTimes = scenes.planTimes({
+      duration: probe.duration,
+      scenes: sceneTimes,
+      audio: audioAnalysis,
+      candidateEdges: localCandidates.flatMap((item) => [item.start, item.end]),
+    })
+    const framesDir = path.join(dir, 'frames')
+    fs.mkdirSync(framesDir, { recursive: true })
+    const keyframes = await scenes.extract({
+      sourcePath: originalPath,
+      dir: framesDir,
+      times: keyframeTimes,
     })
 
-    send('preparing_cuts', 'Preparando cortes...')
     const editorial = resolveShortsEditorialContext({
       ...(shortsRepository.get(job.id) ?? job),
       profile: input.request.profile,
       probe,
-      transcript,
-      transcriptSource,
+      transcript: localTranscript.cues,
+      transcriptSource: localTranscript.source,
       ...languageFields,
     })
-    let aiClips = [] as ReturnType<typeof normalizeShortsAnalysis>['clips']
-    let notes: string | null = durationCap.capped ? durationCap.message : null
-    try {
-      const analyzed = await input.antigravity.analyzeShorts({
-        profile: input.request.profile,
-        duration: probe.duration,
-        clipCount: input.request.clipCount,
-        requestedDuration,
-        durationMode,
-        fileName: job.sourceName,
-        transcript: transcript.filter((cue) => cue.text.trim()).slice(0, 220),
-        scenes,
-        localCandidates,
-        hasTranscript: transcriptSource === 'whisper',
-        editorial,
+
+    const addDirs: string[] = []
+    if (runtime.sendVideo && proxyPath) addDirs.push(dir)
+    else if (keyframes.length > 0) addDirs.push(framesDir)
+
+    const watchedVideo = Boolean(runtime.sendVideo && proxyPath)
+    send('understanding_structure', 'Compreendendo estrutura...')
+    const global = await understanding.understand({
+      profile: input.request.profile,
+      duration: probe.duration,
+      fileName: job.sourceName,
+      mediaPath: watchedVideo ? proxyPath : null,
+      watchedVideo,
+      keyframes,
+      audio: audioAnalysis,
+      transcript: localTranscript.cues,
+      editorial,
+      model: runtime.model,
+      addDirs,
+    })
+    if (global.language && !languageFields.contentLanguage) {
+      const fromUnderstanding = resolveShortsLanguageFields({
+        ...(shortsRepository.get(job.id) ?? job),
+        probe,
+        transcript: localTranscript.cues,
+        transcriptSource: localTranscript.source,
+        transcriptLanguage: localTranscript.language || global.language,
       })
-      aiClips = analyzed.clips
-      notes = [notes, analyzed.notes].filter(Boolean).join('\n') || null
-    } catch (error) {
-      const fail = error instanceof Error ? error.message : SHORTS_ANALYSIS_FAIL_MESSAGE
-      notes = [notes, fail].filter(Boolean).join('\n')
+      Object.assign(languageFields, fromUnderstanding)
     }
 
+    send('selecting_moments', 'Selecionando momentos...')
+    const proposed = await candidates.propose({
+      profile: input.request.profile,
+      duration: probe.duration,
+      clipCount: input.request.clipCount,
+      requestedDuration,
+      durationMode,
+      fileName: job.sourceName,
+      mediaPath: watchedVideo ? proxyPath : null,
+      watchedVideo,
+      understanding: global,
+      keyframes,
+      audio: audioAnalysis,
+      transcript: localTranscript.cues,
+      localCandidates,
+      model: runtime.model,
+      addDirs,
+    })
+
+    send('validating_cuts', 'Validando cortes...')
     const fallback = toRankedWindows(localCandidates)
-    const ranked = aiClips.length > 0 ? shortsAiClipsToRanked(aiClips) : fallback
-    const selection = finalizeShortsSelection({
+    const ranked = proposed.ranked.length > 0 ? proposed.ranked : fallback
+    const selection = candidates.finalize({
       ranked,
       fallback,
       clipCount: input.request.clipCount,
@@ -300,11 +272,12 @@ export async function analyzeShortsJob(input: {
       requestedDuration,
       durationMode,
       profile: input.request.profile,
-      cues: transcript,
+      cues: localTranscript.cues,
     })
     logger.info('shorts.selection', {
       jobId: job.id,
-      poolSize: shortsCandidatePoolSize(input.request.clipCount),
+      mode: runtime.mode,
+      watchedVideo,
       generated: selection.diagnostics.generated,
       selected: selection.diagnostics.selected,
       discarded: selection.diagnostics.discarded,
@@ -320,24 +293,56 @@ export async function analyzeShortsJob(input: {
       })),
       probe.duration,
     )
-    if (selection.note) notes = notes ? `${notes}\n${selection.note}` : selection.note
-    if (transcriptSource !== 'whisper') {
-      const extra =
-        'Transcrição local completa não encontrada. Os cortes usaram áudio, cenas e o Antigravity só com timestamps — o vídeo original não foi enviado.'
-      notes = notes ? `${notes}\n${extra}` : extra
-    }
+
+    let notes: string | null = durationCap.capped ? durationCap.message : null
+    notes = [notes, proposed.notes, selection.note].filter(Boolean).join('\n') || null
     const languageNote = shortsLanguageAnalysisNote({
       ...(shortsRepository.get(job.id) ?? job),
-      transcript,
-      transcriptSource,
+      transcript: localTranscript.cues,
+      transcriptSource: localTranscript.source,
       ...languageFields,
     })
     if (languageNote) notes = notes ? `${notes}\n${languageNote}` : languageNote
+    if (watchedVideo && !understandingHasSignal(global)) {
+      const extra = 'O proxy foi enviado à IA, mas a compreensão global veio incompleta. Os cortes ainda usaram o conteúdo audiovisual quando possível.'
+      notes = notes ? `${notes}\n${extra}` : extra
+    }
+    if (!watchedVideo) {
+      const extra = 'A IA não assistiu ao arquivo de vídeo. Análise por frames-chave, áudio e transcrição.'
+      notes = notes ? `${notes}\n${extra}` : extra
+    }
 
+    const clipMediaByIndex = new Map<number, string>()
+    if (watchedVideo && proxyPath) {
+      for (const clip of clips) {
+        try {
+          const clipPath = await proxy.createClipProxy({
+            sourcePath: proxyPath,
+            dir,
+            index: clip.index,
+            start: clip.start,
+            end: clip.end,
+          })
+          clipMediaByIndex.set(clip.index, clipPath)
+        } catch {
+          clipMediaByIndex.set(clip.index, proxyPath)
+        }
+      }
+    }
+
+    send('writing_copy', 'Criando títulos e descrições...')
     const latest = shortsRepository.get(job.id) ?? job
+    const copyInputs = metadata.toCopyInputs({
+      clips,
+      transcript: localTranscript.cues,
+      audio: audioAnalysis,
+      watchedVideo,
+      clipMediaByIndex,
+      sceneFrames: (start, end) => scenes.clipFrames(keyframes, start, end),
+    })
     const withCopy =
       clips.length > 0
-        ? await attachShortsCopies({
+        ? await metadata.generate({
             job: {
               ...latest,
               profile: input.request.profile,
@@ -345,28 +350,32 @@ export async function analyzeShortsJob(input: {
               clips,
               requestedDuration,
               durationMode,
-              transcript,
-              transcriptSource,
+              transcript: localTranscript.cues,
+              transcriptSource: localTranscript.source,
               ...languageFields,
             },
             clips,
             fields: 'all',
-            antigravity: input.antigravity,
-            send,
+            editorial,
+            copyInputs,
+            model: runtime.model,
+            addDirs,
           })
         : clips
 
     const latestClips = shortsRepository.get(job.id)?.clips ?? job.clips
     const mergedClips = mergeReanalysisClips(latestClips, withCopy)
+    const analysisMode = runtime.watchedVideoClaimAllowed ? 'audiovisual' : 'frames_audio_transcript'
 
     return shortsRepository.update(job.id, {
       probe,
       clips: mergedClips,
       requestedDuration,
       durationMode,
-      transcript,
-      transcriptSource,
+      transcript: localTranscript.cues,
+      transcriptSource: localTranscript.source,
       ...languageFields,
+      analysisMode,
       analysisNotes: notes,
       errorMessage: null,
       status: mergedClips.length > 0 ? 'ready' : 'error',
@@ -386,6 +395,7 @@ export async function regenerateShortsClipCopy(input: {
   clipId: string
   fields: ShortsCopyFields
   antigravity: AntigravityService
+  catalog?: AgentModelCatalog
   getWindow: () => BrowserWindow | null
 }): Promise<ShortsJob> {
   const job = shortsRepository.get(input.jobId)
@@ -395,14 +405,23 @@ export async function regenerateShortsClipCopy(input: {
 
   const send = (stage: ShortsProgressEvent['stage'], message: string) =>
     emitProgress(input.getWindow, { jobId: job.id, stage, message })
+  send('writing_copy', 'Criando títulos e descrições...')
 
-  const clips = await attachShortsCopies({
+  const metadata = new ShortMetadataService(input.antigravity)
+  const editorial = resolveShortsEditorialContext(job)
+  const copyInputs = metadata.toCopyInputs({
+    clips: job.clips,
+    transcript: job.transcript,
+    focus: clip,
+    watchedVideo: job.analysisMode === 'audiovisual',
+  })
+  const clips = await metadata.generate({
     job,
     clips: job.clips,
     fields: input.fields,
+    editorial,
+    copyInputs,
     focus: clip,
-    antigravity: input.antigravity,
-    send,
   })
   return shortsRepository.update(job.id, { clips })!
 }

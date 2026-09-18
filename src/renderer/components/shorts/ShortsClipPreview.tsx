@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pause, Play } from 'lucide-react'
 import type { ShortsAspectMode } from '@shared/shorts'
-import { formatShortsTimecode } from '@shared/shorts'
+import { formatShortsTimecode, shortsClipPreviewSrc } from '@shared/shorts'
 import { formatClipLength } from '@shared/shortsDuration'
 import { buildShortsPreviewFrame } from '@shared/shortsExport'
 import { cn } from '../../lib/utils'
@@ -17,6 +17,7 @@ export function ShortsClipPreview({
   active,
   onPlayingChange,
   resetToken,
+  posterUrl,
   className,
 }: {
   clipId?: string
@@ -29,28 +30,70 @@ export function ShortsClipPreview({
   active: boolean
   onPlayingChange: (playing: boolean) => void
   resetToken?: string
+  posterUrl?: string | null
   className?: string
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const windowRef = useRef({ start, end })
   const [current, setCurrent] = useState(start)
+  const [frameReady, setFrameReady] = useState(false)
   const duration = Math.max(0.1, end - start)
   const frame = buildShortsPreviewFrame(sourceWidth || 1920, sourceHeight || 1080, aspectMode)
   const previewKey = resetToken ?? `${clipId ?? 'clip'}:${start}:${end}`
+  const clipSrc = useMemo(
+    () => shortsClipPreviewSrc(src, { id: clipId ?? 'clip', start, end }),
+    [src, clipId, start, end],
+  )
   windowRef.current = { start, end }
 
   useEffect(() => {
+    setFrameReady(false)
+    setCurrent(start)
+  }, [clipSrc, previewKey, start])
+
+  useEffect(() => {
     const video = videoRef.current
-    if (!video) return
-    const apply = () => {
+    if (!video || !clipSrc) return
+    let cancelled = false
+
+    let seeks = 0
+    const seekToClip = () => {
+      if (cancelled) return
       const from = windowRef.current.start
-      video.currentTime = from
-      setCurrent(from)
+      if (Math.abs(video.currentTime - from) > 0.04) {
+        seeks += 1
+        video.currentTime = from
+        return
+      }
+      setCurrent(video.currentTime)
+      setFrameReady(true)
     }
-    if (video.readyState >= 1) apply()
-    video.addEventListener('loadedmetadata', apply)
-    return () => video.removeEventListener('loadedmetadata', apply)
-  }, [src, previewKey])
+
+    const onSeeked = () => {
+      if (cancelled) return
+      const window = windowRef.current
+      if ((video.currentTime < window.start - 0.08 || video.currentTime > window.end) && seeks < 4) {
+        seeks += 1
+        video.currentTime = window.start
+        return
+      }
+      if (video.currentTime < window.start - 0.08) return
+      setCurrent(video.currentTime)
+      setFrameReady(true)
+    }
+
+    video.addEventListener('loadedmetadata', seekToClip)
+    video.addEventListener('loadeddata', seekToClip)
+    video.addEventListener('seeked', onSeeked)
+    if (video.readyState >= 1) seekToClip()
+
+    return () => {
+      cancelled = true
+      video.removeEventListener('loadedmetadata', seekToClip)
+      video.removeEventListener('loadeddata', seekToClip)
+      video.removeEventListener('seeked', onSeeked)
+    }
+  }, [clipSrc, previewKey])
 
   useEffect(() => {
     const video = videoRef.current
@@ -58,6 +101,7 @@ export function ShortsClipPreview({
     if (video.currentTime < start || video.currentTime > end) {
       video.currentTime = start
       setCurrent(start)
+      setFrameReady(false)
     }
   }, [clipId, start, end])
 
@@ -65,6 +109,7 @@ export function ShortsClipPreview({
     const video = videoRef.current
     if (!video) return
     if (active) {
+      setFrameReady(true)
       if (video.currentTime < start || video.currentTime >= end - 0.04) video.currentTime = start
       void video.play().catch(() => undefined)
       return
@@ -91,6 +136,15 @@ export function ShortsClipPreview({
   }, [active, onPlayingChange])
 
   const progress = Math.max(0, Math.min(1, (current - start) / duration))
+  const mediaStyle = {
+    width: `${frame.videoWidthPct}%`,
+    height: `${frame.videoHeightPct}%`,
+    left: `${frame.videoLeftPct}%`,
+    top: `${frame.videoTopPct}%`,
+    maxWidth: 'none',
+    maxHeight: 'none',
+    objectFit: 'fill' as const,
+  }
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -98,27 +152,29 @@ export function ShortsClipPreview({
         className="relative overflow-hidden rounded-xl bg-black"
         style={{ aspectRatio: String(frame.aspectRatio) }}
       >
-        {src ? (
+        {clipSrc ? (
           <video
+            key={previewKey}
             ref={videoRef}
-            src={src}
-            preload="metadata"
+            src={clipSrc}
+            poster={posterUrl ?? undefined}
+            preload={active ? 'auto' : 'metadata'}
             playsInline
             className="absolute max-h-none max-w-none bg-black"
-            style={{
-              width: `${frame.videoWidthPct}%`,
-              height: `${frame.videoHeightPct}%`,
-              left: `${frame.videoLeftPct}%`,
-              top: `${frame.videoTopPct}%`,
-              maxWidth: 'none',
-              maxHeight: 'none',
-              objectFit: 'fill',
-            }}
+            style={mediaStyle}
             onClick={() => onPlayingChange(!active)}
           />
         ) : (
           <div className="absolute inset-0 bg-card-2" />
         )}
+        {posterUrl && !frameReady ? (
+          <img
+            src={posterUrl}
+            alt=""
+            className="absolute z-[1] max-h-none max-w-none bg-black"
+            style={mediaStyle}
+          />
+        ) : null}
         <button
           type="button"
           className={cn(

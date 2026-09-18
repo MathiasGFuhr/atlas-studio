@@ -36,6 +36,14 @@ export function shortsProjectDeleteMessage(exportedCount: number): string {
   return lines.join('\n\n')
 }
 
+export function shortsClipDeleteMessage(exported: boolean): string {
+  const lines = ['Este Short será removido do projeto. O vídeo original não será apagado.']
+  if (exported) {
+    lines.push('O arquivo MP4 já exportado permanece no computador.')
+  }
+  return lines.join('\n\n')
+}
+
 export function matchesShortsProjectSearch(
   project: Pick<ShortsJob, 'name' | 'sourceName' | 'profile'>,
   query: string,

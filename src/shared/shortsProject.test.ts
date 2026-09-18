@@ -6,6 +6,7 @@ import {
   shortsProjectNameFromFileName,
   shortsProjectStatusLabel,
   shortsProjectDeleteMessage,
+  shortsClipDeleteMessage,
   sortShortsProjects,
 } from './shortsProject'
 
@@ -52,6 +53,7 @@ function job(partial: Partial<ShortsJob> = {}): ShortsJob {
     detectedLanguage: null,
     transcriptLanguage: null,
     analysisNotes: null,
+    analysisMode: null,
     errorMessage: null,
     status: 'draft',
     createdAt: '2026-09-17T10:00:00.000Z',
@@ -102,6 +104,10 @@ describe('shorts project helpers', () => {
       'O projeto será removido do Atlas. O vídeo original não será apagado.',
     )
     expect(shortsProjectDeleteMessage(1)).toContain('Os Shorts já exportados também serão mantidos no computador.')
+    expect(shortsClipDeleteMessage(false)).toBe(
+      'Este Short será removido do projeto. O vídeo original não será apagado.',
+    )
+    expect(shortsClipDeleteMessage(true)).toContain('O arquivo MP4 já exportado permanece no computador.')
   })
 
   it('ordena por edição recente e por nome', () => {

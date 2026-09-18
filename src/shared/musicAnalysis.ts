@@ -1,5 +1,7 @@
+import { formatTimecode as formatTimecodeMs, roundTime as roundTimeMs } from './audio/time'
+
 export type MusicCutMode = 'automatico' | 'manual'
-export type MusicSegmentSource = 'auto' | 'manual'
+export type MusicSegmentSource = 'auto' | 'manual' | 'codex'
 
 export interface MusicSegment {
   id: string
@@ -7,6 +9,8 @@ export interface MusicSegment {
   end: number
   label: string
   source: MusicSegmentSource
+  reason?: string
+  confidence?: number
 }
 
 export interface MusicSilenceRegion {
@@ -33,18 +37,20 @@ export interface MusicTrack {
   duration: number
   cutMode: MusicCutMode
   cuts: MusicSegment[]
+  selectedId?: string | null
+  appliedPreset?: AutoCutPreset | null
   createdAt: string
   updatedAt: string
 }
 
-export type AutoCutPreset = 'completo' | 'silencio' | 'gancho15' | 'gancho30'
+export type AutoCutPreset = 'completo' | 'silencio' | 'gancho15' | 'gancho30' | 'estrutura'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
 function roundTime(value: number) {
-  return Math.round(value * 100) / 100
+  return roundTimeMs(value)
 }
 
 function percentile(sorted: number[], p: number) {
@@ -190,13 +196,21 @@ function mergeShortGaps(
   return merged.filter((region) => region.end - region.start >= 0.45)
 }
 
-function makeSegment(start: number, end: number, index: number, source: MusicSegmentSource): MusicSegment {
+function makeSegment(
+  start: number,
+  end: number,
+  index: number,
+  source: MusicSegmentSource,
+  extra?: Partial<Pick<MusicSegment, 'label' | 'reason' | 'confidence'>>,
+): MusicSegment {
   return {
     id: `cut-${index}-${Math.round(start * 1000)}`,
     start: roundTime(Math.max(0, start)),
     end: roundTime(Math.max(start + 0.05, end)),
-    label: `Corte ${index}`,
+    label: extra?.label ?? `Corte ${index}`,
     source,
+    reason: extra?.reason,
+    confidence: extra?.confidence,
   }
 }
 
@@ -217,11 +231,44 @@ function highestEnergyWindow(analysis: MusicAnalysis, windowSec: number): MusicS
   return makeSegment(start, end, 1, 'auto')
 }
 
+function structureCuts(analysis: MusicAnalysis): MusicSegment[] {
+  const energy = analysis.energy
+  if (energy.length === 0) return [makeSegment(0, analysis.duration, 1, 'auto')]
+  const avg = energy.reduce((a, b) => a + b, 0) / energy.length
+  const variance = energy.reduce((acc, value) => acc + (value - avg) ** 2, 0) / energy.length
+  const std = Math.sqrt(variance)
+  const times: number[] = []
+  const minGap = Math.max(5, Math.min(12, analysis.duration / 8))
+  for (let i = 4; i < energy.length - 4; i += 1) {
+    const before = energy.slice(i - 4, i).reduce((a, b) => a + b, 0) / 4
+    const after = energy.slice(i, i + 4).reduce((a, b) => a + b, 0) / 4
+    const time = i * analysis.frameDuration
+    if (Math.abs(after - before) < std * 0.55) continue
+    const last = times[times.length - 1]
+    if (last != null && time - last < minGap) continue
+    const snapped = snapToOnset(time, analysis.onsets, 0.18)
+    times.push(snapped)
+  }
+  const points = [0, ...times, analysis.duration]
+  const segments: MusicSegment[] = []
+  for (let i = 0; i < points.length - 1; i += 1) {
+    if (points[i + 1] - points[i] < 0.8) continue
+    segments.push(
+      makeSegment(points[i], points[i + 1], segments.length + 1, 'auto', {
+        label: `Bloco ${segments.length + 1}`,
+        reason: 'Mudança local de dinâmica/seção',
+      }),
+    )
+  }
+  return segments.length > 0 ? segments : [makeSegment(0, analysis.duration, 1, 'auto')]
+}
+
 export function autoCutMusic(analysis: MusicAnalysis, preset: AutoCutPreset = 'completo'): MusicSegment[] {
   if (analysis.duration <= 0) return []
 
   if (preset === 'gancho15') return [highestEnergyWindow(analysis, Math.min(15, analysis.duration))]
   if (preset === 'gancho30') return [highestEnergyWindow(analysis, Math.min(30, analysis.duration))]
+  if (preset === 'estrutura') return structureCuts(analysis)
 
   const audible = mergeShortGaps(invertSilence(analysis.duration, analysis.silence))
   if (audible.length === 0) {
@@ -231,7 +278,12 @@ export function autoCutMusic(analysis: MusicAnalysis, preset: AutoCutPreset = 'c
   if (preset === 'silencio') {
     const start = snapToOnset(audible[0].start, analysis.onsets)
     const end = audible[audible.length - 1].end
-    return [makeSegment(start, Math.min(analysis.duration, end), 1, 'auto')]
+    return [
+      makeSegment(start, Math.min(analysis.duration, end), 1, 'auto', {
+        label: 'Faixa (sem pontas)',
+        reason: 'Remove silêncio/fade das extremidades',
+      }),
+    ]
   }
 
   return audible.map((region, index) => {
@@ -242,9 +294,5 @@ export function autoCutMusic(analysis: MusicAnalysis, preset: AutoCutPreset = 'c
 }
 
 export function formatTimecode(seconds: number) {
-  const safe = Math.max(0, seconds)
-  const m = Math.floor(safe / 60)
-  const s = Math.floor(safe % 60)
-  const cs = Math.floor((safe % 1) * 100)
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`
+  return formatTimecodeMs(seconds)
 }

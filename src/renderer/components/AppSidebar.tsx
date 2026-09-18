@@ -1,14 +1,16 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { BookOpen, CheckSquare, Clapperboard, Home, MessageSquareText, Music2, PanelLeftClose, PanelLeftOpen, Settings, Tv } from 'lucide-react'
+import { BookOpen, CheckSquare, ChevronLeft, ChevronRight, Clapperboard, Home, MessageSquareText, Music2, Settings, Tv } from 'lucide-react'
+import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
 import { isContentAreaEnabled, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
-import { CodexStatusCard } from './CodexStatus'
+import { AtlasAiStatusCard } from './AtlasAiStatusCard'
 import { SidebarUpdateCard } from './SidebarUpdateCard'
 import { ENVIRONMENTS } from '../lib/environments'
 import { cn } from '../lib/utils'
 import { getAtlasApi } from '../lib/api'
 import { onTasksChanged } from '../lib/taskEvents'
+import { useAntigravityStatus } from '../hooks/useAntigravityStatus'
 import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 
 const globalItems = [
@@ -57,13 +59,14 @@ const SIDEBAR_COLLAPSED_KEY = 'atlas.sidebar.collapsed'
 
 export function AppSidebar({
   codexStatus,
-  onCodexClick,
 }: {
   codexStatus: CodexStatus | null
-  onCodexClick?: () => void
 }) {
   const api = getAtlasApi()
-  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const { pathname, search } = useLocation()
+  const antigravityStatus = useAntigravityStatus()
+  const aiStatus = deriveAtlasAiStatus(codexStatus, antigravityStatus)
   const [pendingCount, setPendingCount] = useState(0)
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -98,13 +101,34 @@ export function AppSidebar({
     })
   }
 
+  function openAiSettings() {
+    const onAiSection = pathname === '/configuracoes' && new URLSearchParams(search).get('secao') === 'ia'
+    if (onAiSection) {
+      document.getElementById('ia')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    navigate(AI_SETTINGS_HREF)
+  }
+
+  const collapseLabel = collapsed ? 'Expandir menu' : 'Recolher menu'
+
   return (
     <aside
       className={cn(
-        'flex h-full shrink-0 flex-col border-r border-border-soft bg-sidebar',
+        'relative z-10 flex h-full shrink-0 flex-col border-r border-border-soft bg-sidebar',
         collapsed ? 'w-[72px]' : 'w-[248px]',
       )}
     >
+      <button
+        type="button"
+        title={collapseLabel}
+        aria-label={collapseLabel}
+        aria-expanded={!collapsed}
+        onClick={toggleCollapsed}
+        className="absolute right-0 top-[4.75rem] z-20 flex h-6 w-6 translate-x-1/2 items-center justify-center rounded-full border border-border-soft bg-sidebar text-muted shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition-colors hover:bg-card-2 hover:text-text"
+      >
+        {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+      </button>
       <div className={cn('flex items-center pb-6 pt-5', collapsed ? 'justify-center px-2' : 'gap-3 px-5')}>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-dark text-accent">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -189,16 +213,7 @@ export function AppSidebar({
 
       <div className="flex flex-col gap-2 px-3 pb-4 pt-2">
         <SidebarUpdateCard compact={collapsed} />
-        <CodexStatusCard status={codexStatus} onClick={onCodexClick} compact={collapsed} />
-        <button
-          type="button"
-          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
-          aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
-          onClick={toggleCollapsed}
-          className="flex w-full items-center justify-center rounded-lg py-1.5 text-muted transition-colors hover:bg-white/[0.03] hover:text-text"
-        >
-          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-        </button>
+        <AtlasAiStatusCard view={aiStatus} onClick={openAiSettings} compact={collapsed} />
       </div>
     </aside>
   )

@@ -452,6 +452,8 @@ export class AntigravityService {
     videoDuration: number
     fields: ShortsCopyFields
     clips: ShortsCopyClipInput[]
+    model?: string | null
+    addDirs?: string[]
   }) {
     if (request.clips.length === 0) return []
     const structured = await this.runStructuredPrompt({
@@ -459,8 +461,11 @@ export class AntigravityService {
       schema: SHORTS_COPY_SCHEMA,
       prompt: buildShortsCopiesPrompt(request),
       invalidMessage: SHORTS_COPY_FAIL_MESSAGE,
-      timeoutMs: request.clips.length > 1 ? 180_000 : 90_000,
-      printTimeout: request.clips.length > 1 ? '3m' : '2m',
+      timeoutMs: request.clips.length > 1 ? 240_000 : 120_000,
+      printTimeout: request.clips.length > 1 ? '4m' : '2m',
+      model: request.model,
+      addDirs: request.addDirs,
+      skipPermissions: Boolean(request.addDirs?.length),
     })
     return normalizeShortsCopies(
       structured,
@@ -516,6 +521,28 @@ export class AntigravityService {
       .join('\n')
   }
 
+  async runMediaStructuredPrompt(opts: {
+    schemaFile: string
+    schema: object
+    prompt: string
+    invalidMessage: string
+    timeoutMs?: number
+    printTimeout?: string
+    model?: string | null
+    effort?: string | null
+    addDirs?: string[]
+    skipPermissions?: boolean
+  }): Promise<Record<string, unknown>> {
+    return this.runStructuredPrompt(opts)
+  }
+
+  async readCliHelp(): Promise<string> {
+    const binary = this.status.runtimePath || (await this.locateBinary())
+    if (!binary) return ''
+    const help = await this.runAgy(binary, ['--help'], 8000)
+    return `${help.stdout}\n${help.stderr}`
+  }
+
   private async runStructuredPrompt(opts: {
     schemaFile: string
     schema: object
@@ -525,6 +552,8 @@ export class AntigravityService {
     printTimeout?: string
     model?: string | null
     effort?: string | null
+    addDirs?: string[]
+    skipPermissions?: boolean
   }): Promise<Record<string, unknown>> {
     const binary = this.status.runtimePath || (await this.locateBinary())
     if (!binary) {
@@ -536,9 +565,7 @@ export class AntigravityService {
     writeFileSync(schemaPath, JSON.stringify(opts.schema), 'utf8')
 
     const run = this.resolveAntigravityRun({ model: opts.model, effort: opts.effort })
-    const args = [
-      '-p',
-      opts.prompt,
+    const args: string[] = [
       '--output-format',
       'json',
       '--json-schema',
@@ -548,6 +575,13 @@ export class AntigravityService {
     ]
     if (run.model) args.push('--model', run.model)
     if (run.effort) args.push('--effort', run.effort)
+    for (const dir of opts.addDirs ?? []) {
+      if (dir.trim()) args.push('--add-dir', dir)
+    }
+    if (opts.skipPermissions && (opts.addDirs ?? []).length > 0) {
+      args.push('--dangerously-skip-permissions')
+    }
+    args.push('-p', opts.prompt)
 
     const result = await this.runAgy(binary, args, opts.timeoutMs ?? 200_000)
     const combined = `${result.stdout}\n${result.stderr}`

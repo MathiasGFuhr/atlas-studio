@@ -1,10 +1,12 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import type { VideoProbeInfo } from '../../../shared/shorts'
+import { buildAnalysisProxyArgs, buildClipProxyArgs, buildKeyframeArgs } from '../../../shared/shorts/analysisProxy'
 import { runFfmpegResult } from '../audio/ffmpeg'
 import { parseFfmpegProbe, parseSceneTimes, parseSilenceRegions } from './ffmpegParse'
 
 export { parseFfmpegProbe, parseSceneTimes, parseSilenceRegions } from './ffmpegParse'
+export { buildAnalysisProxyArgs, buildClipProxyArgs, buildKeyframeArgs } from '../../../shared/shorts/analysisProxy'
 
 export async function probeVideo(filePath: string): Promise<VideoProbeInfo> {
   const resolved = path.resolve(filePath)
@@ -155,4 +157,94 @@ export async function extractVideoThumbnail(input: {
       failMessage: 'Falha ao gerar a thumbnail do vídeo.',
     },
   )
+}
+
+export async function createAnalysisProxy(input: {
+  sourcePath: string
+  outputPath: string
+  probe: Pick<VideoProbeInfo, 'duration' | 'width' | 'height' | 'hasAudio'>
+}): Promise<string> {
+  const resolved = path.resolve(input.sourcePath)
+  if (!fs.existsSync(resolved)) throw new Error('Arquivo de vídeo não encontrado.')
+  fs.mkdirSync(path.dirname(input.outputPath), { recursive: true })
+  const timeoutMs = Math.min(20 * 60_000, Math.max(90_000, Math.round(input.probe.duration * 2500)))
+  await runFfmpegResult(
+    buildAnalysisProxyArgs({
+      sourcePath: resolved,
+      outputPath: input.outputPath,
+      duration: input.probe.duration,
+      width: input.probe.width,
+      height: input.probe.height,
+      hasAudio: input.probe.hasAudio,
+    }),
+    {
+      timeoutMs,
+      timeoutMessage: 'O FFmpeg demorou demais para preparar o proxy de análise.',
+      failMessage: 'Falha ao criar o proxy de análise. O vídeo original não foi alterado.',
+    },
+  )
+  if (!fs.existsSync(input.outputPath)) {
+    throw new Error('O proxy de análise não foi gerado.')
+  }
+  return input.outputPath
+}
+
+export async function createClipProxy(input: {
+  sourcePath: string
+  outputPath: string
+  start: number
+  end: number
+}): Promise<string> {
+  fs.mkdirSync(path.dirname(input.outputPath), { recursive: true })
+  try {
+    await runFfmpegResult(buildClipProxyArgs(input), {
+      timeoutMs: 3 * 60_000,
+      timeoutMessage: 'O FFmpeg demorou demais para recortar o proxy do Short.',
+      failMessage: 'Falha ao recortar o proxy do Short.',
+    })
+  } catch {
+    await runFfmpegResult(
+      [
+        '-y',
+        '-ss',
+        input.start.toFixed(3),
+        '-i',
+        input.sourcePath,
+        '-t',
+        Math.max(0.4, input.end - input.start).toFixed(3),
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '30',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '96k',
+        input.outputPath,
+      ],
+      {
+        timeoutMs: 6 * 60_000,
+        timeoutMessage: 'O FFmpeg demorou demais para recortar o proxy do Short.',
+        failMessage: 'Falha ao recortar o proxy do Short.',
+      },
+    )
+  }
+  return input.outputPath
+}
+
+export async function extractKeyframe(input: {
+  sourcePath: string
+  outputPath: string
+  atSeconds: number
+}): Promise<void> {
+  const resolved = path.resolve(input.sourcePath)
+  if (!fs.existsSync(resolved)) throw new Error('Arquivo de vídeo não encontrado.')
+  fs.mkdirSync(path.dirname(input.outputPath), { recursive: true })
+  await runFfmpegResult(buildKeyframeArgs({ ...input, sourcePath: resolved }), {
+    timeoutMs: 30_000,
+    timeoutMessage: 'O FFmpeg demorou demais para extrair um frame.',
+    failMessage: 'Falha ao extrair frame-chave.',
+  })
 }

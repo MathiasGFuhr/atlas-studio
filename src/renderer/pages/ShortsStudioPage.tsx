@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Clapperboard, Loader2, Pencil, Scissors } from 'lucide-react'
+import { ArrowLeft, Clapperboard, Loader2, Pencil, Scissors, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { Project } from '@shared/types'
 import type {
@@ -18,9 +18,12 @@ import {
   SHORTS_ASPECT_MODES,
   SHORTS_CLIP_COUNTS,
   SHORTS_PROGRESS_LABEL,
+  SHORTS_ANALYSIS_MODE_LABEL,
   formatShortsCopy,
   formatShortsTimecode,
+  type ShortsModelDecision,
 } from '@shared/shorts'
+import type { ShortsAnalysisPlan } from '@shared/shorts/analysisPlan'
 import {
   SHORTS_CONTENT_LANGUAGE_OPTIONS,
   contentLanguageLabel,
@@ -33,6 +36,11 @@ import {
   parseDurationInput,
 } from '@shared/shortsDuration'
 import { isProtectedShortsClip } from '@shared/shortsProjectIdentity'
+import {
+  exportedShortsCount,
+  shortsClipDeleteMessage,
+  shortsProjectDeleteMessage,
+} from '@shared/shortsProject'
 import { PageHeader } from '../components/PageHeader'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
@@ -98,6 +106,11 @@ export function ShortsStudioPage() {
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [reanalyzeOpen, setReanalyzeOpen] = useState(false)
+  const [deletingProject, setDeletingProject] = useState(false)
+  const [deletingClip, setDeletingClip] = useState<ShortsClip | null>(null)
+  const [allowExternalVideoAnalysis, setAllowExternalVideoAnalysis] = useState(false)
+  const [analysisPlan, setAnalysisPlan] = useState<ShortsAnalysisPlan | null>(null)
+  const [modelChoiceOpen, setModelChoiceOpen] = useState(false)
 
   const analyzing = job?.status === 'analyzing' || (busy && progress?.stage !== 'exporting')
 
@@ -128,6 +141,13 @@ export function ShortsStudioPage() {
   useEffect(() => {
     void loadJob()
   }, [jobId])
+
+  useEffect(() => {
+    void api.settings.get().then((settings) => {
+      setAllowExternalVideoAnalysis(Boolean(settings.allowExternalVideoAnalysis))
+    })
+    void api.shorts.getAnalysisPlan().then(setAnalysisPlan).catch(() => setAnalysisPlan(null))
+  }, [api])
 
   useEffect(() => {
     if (missing) navigate(listPath, { replace: true })
@@ -221,16 +241,31 @@ export function ShortsStudioPage() {
       setReanalyzeOpen(true)
       return
     }
-    await analyze()
+    await continueAnalyzeAfterConfirm()
   }
 
-  async function analyze() {
+  async function continueAnalyzeAfterConfirm() {
+    let plan = analysisPlan
+    try {
+      plan = await api.shorts.getAnalysisPlan()
+      setAnalysisPlan(plan)
+    } catch {
+      /* usa o plano em cache se a descoberta falhar */
+    }
+    if (plan?.needsModelChoice) {
+      setModelChoiceOpen(true)
+      return
+    }
+    await analyze('current')
+  }
+
+  async function analyze(decision: ShortsModelDecision = 'current') {
     if (!job) {
       push('Abra um projeto com vídeo para analisar.', 'error')
       return
     }
     setBusy(true)
-    setProgress({ jobId: job.id, stage: 'analyzing', message: SHORTS_PROGRESS_LABEL.analyzing })
+    setProgress({ jobId: job.id, stage: 'preparing_video', message: SHORTS_PROGRESS_LABEL.preparing_video })
     try {
       const next = await api.shorts.analyze({
         jobId: job.id,
@@ -240,6 +275,9 @@ export function ShortsStudioPage() {
         durationMode,
         aspectMode,
         captionsEnabled,
+        allowExternalVideoAnalysis,
+        modelDecision: decision,
+        modelOverride: decision === 'use_compatible' ? analysisPlan?.compatibleVideoModels[0]?.id ?? null : null,
       })
       setJob(next)
       if (next.status === 'error') {
@@ -344,6 +382,40 @@ export function ShortsStudioPage() {
     }
   }
 
+  async function confirmDeleteProject() {
+    if (!job) return
+    try {
+      await api.shorts.remove(job.id)
+      push('Projeto excluído. O vídeo original e os exports foram preservados.', 'success')
+      navigate(listPath)
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao excluir o projeto', 'error')
+    } finally {
+      setDeletingProject(false)
+    }
+  }
+
+  async function confirmDeleteClip() {
+    if (!job || !deletingClip) return
+    try {
+      const next = await api.shorts.removeClip(job.id, deletingClip.id)
+      if (next) setJob(next)
+      if (previewClip?.id === deletingClip.id) {
+        setPreviewClip(null)
+        setPlayingClipId(null)
+      }
+      setDeletingClip(null)
+      push(
+        deletingClip.exportedPath
+          ? 'Short removido do projeto. O MP4 exportado permanece no computador.'
+          : 'Short removido do projeto.',
+        'success',
+      )
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao excluir o Short', 'error')
+    }
+  }
+
   const probe = job?.probe
 
   if (loading && !job) {
@@ -397,18 +469,29 @@ export function ShortsStudioPage() {
           }
         />
         </div>
-        <Button
-          variant="secondary"
-          className="mt-7 h-9 px-3 text-xs"
-          icon={<Pencil className="h-3.5 w-3.5" />}
-          disabled={!job}
-          onClick={() => {
-            setRenameValue(job?.name ?? '')
-            setRenameOpen(true)
-          }}
-        >
-          Renomear
-        </Button>
+        <div className="mt-7 flex flex-wrap gap-2">
+          <Button
+            variant="ghost"
+            className="h-9 px-3 text-xs"
+            icon={<Trash2 className="h-3.5 w-3.5" />}
+            disabled={!job || busy}
+            onClick={() => setDeletingProject(true)}
+          >
+            Excluir
+          </Button>
+          <Button
+            variant="secondary"
+            className="h-9 px-3 text-xs"
+            icon={<Pencil className="h-3.5 w-3.5" />}
+            disabled={!job}
+            onClick={() => {
+              setRenameValue(job?.name ?? '')
+              setRenameOpen(true)
+            }}
+          >
+            Renomear
+          </Button>
+        </div>
       </div>
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -577,7 +660,7 @@ export function ShortsStudioPage() {
                 </option>
               ))}
             </FieldSelect>
-            <label className="flex items-center gap-3 md:col-span-2">
+            <label className="flex items-start gap-3 md:col-span-2">
               <input
                 type="checkbox"
                 checked={captionsEnabled}
@@ -586,9 +669,27 @@ export function ShortsStudioPage() {
                   setCaptionsEnabled(next)
                   void persistSettings({ captionsEnabled: next })
                 }}
-                className="h-4 w-4 accent-accent"
+                className="mt-0.5 h-4 w-4 accent-accent"
               />
               <span className="text-sm text-text">Legendas</span>
+            </label>
+            <label className="flex items-start gap-3 md:col-span-2">
+              <input
+                type="checkbox"
+                checked={allowExternalVideoAnalysis}
+                onChange={(event) => {
+                  const next = event.target.checked
+                  setAllowExternalVideoAnalysis(next)
+                  void api.settings.update({ allowExternalVideoAnalysis: next })
+                }}
+                className="mt-0.5 h-4 w-4 accent-accent"
+              />
+              <span className="text-sm text-text">
+                Permitir que a IA analise o vídeo
+                <span className="mt-1 block text-xs leading-relaxed text-muted-2">
+                  O Atlas poderá enviar uma versão otimizada do vídeo ao provedor de IA selecionado. O FFmpeg continua local. Sem esta opção, a análise usa frames + áudio + transcrição.
+                </span>
+              </span>
             </label>
             <div className="md:col-span-2">
               <Button
@@ -620,6 +721,11 @@ export function ShortsStudioPage() {
           {job?.errorMessage ? (
             <Card className="border-danger/30 text-sm text-danger">{job.errorMessage}</Card>
           ) : null}
+          {job?.analysisMode ? (
+            <p className="text-xs text-muted-2">
+              Análise: {SHORTS_ANALYSIS_MODE_LABEL[job.analysisMode]}
+            </p>
+          ) : null}
           {job?.analysisNotes ? (
             <p className="text-xs leading-relaxed text-muted-2 whitespace-pre-line">{job.analysisNotes}</p>
           ) : null}
@@ -646,6 +752,7 @@ export function ShortsStudioPage() {
                   onPersist={(patch) => void persistClip(clip, patch)}
                   onCopy={(part) => void copyClip(clip, part)}
                   onRegenerate={(fields) => void regenerateClip(clip, fields)}
+                  onDelete={() => setDeletingClip(clip)}
                 />
               ))}
             </div>
@@ -660,11 +767,14 @@ export function ShortsStudioPage() {
         <aside className="space-y-4">
           <Card padding="sm" className="space-y-2 text-xs text-muted">
             <p className="font-medium text-text">Como funciona</p>
-            <p>O FFmpeg roda localmente. O Antigravity recebe só transcrição, timestamps e contexto — nunca o arquivo bruto por padrão.</p>
+            <p>O FFmpeg roda localmente. O vídeo original nunca é alterado.</p>
+            <p>
+              Se você permitir, o Atlas envia um proxy otimizado ao Antigravity para análise audiovisual. Sem permissão, ou se o modelo não suportar vídeo, a IA recebe frames-chave, áudio e transcrição — e o resultado deixa isso explícito.
+            </p>
             <p>
               {profile === 'music'
-                ? 'Perfil Música: refrão, clímax, solo, entrada forte, plateia, dinâmica, final.'
-                : 'Perfil História: gancho, curiosidade, revelação, conflito, frase memorável, virada.'}
+                ? 'Perfil Música: performance, banda, público, luz, solo, refrão, clímax, dinâmica — não só o trecho mais alto.'
+                : 'Perfil História: fala, edição, B-roll, revelação, pergunta e resposta, clímax narrativo, unidade de pensamento.'}
             </p>
           </Card>
         </aside>
@@ -727,6 +837,27 @@ export function ShortsStudioPage() {
         onExport={() => {
           if (previewClip) void exportClip(previewClip)
         }}
+        onDelete={() => {
+          if (previewClip) setDeletingClip(previewClip)
+        }}
+      />
+
+      <ConfirmDialog
+        open={deletingProject}
+        title="Excluir projeto de Shorts?"
+        message={job ? shortsProjectDeleteMessage(exportedShortsCount(job.clips)) : ''}
+        confirmLabel="Excluir projeto"
+        onConfirm={() => void confirmDeleteProject()}
+        onClose={() => setDeletingProject(false)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deletingClip)}
+        title="Excluir este Short?"
+        message={deletingClip ? shortsClipDeleteMessage(Boolean(deletingClip.exportedPath)) : ''}
+        confirmLabel="Excluir Short"
+        onConfirm={() => void confirmDeleteClip()}
+        onClose={() => setDeletingClip(null)}
       />
 
       <ConfirmDialog
@@ -736,10 +867,46 @@ export function ShortsStudioPage() {
         confirmLabel="Reanalisar"
         onConfirm={() => {
           setReanalyzeOpen(false)
-          void analyze()
+          void continueAnalyzeAfterConfirm()
         }}
         onClose={() => setReanalyzeOpen(false)}
       />
+
+      <Modal
+        open={modelChoiceOpen}
+        title="O modelo atual não suporta análise direta de vídeo."
+        onClose={() => setModelChoiceOpen(false)}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setModelChoiceOpen(false)
+                void analyze('continue_frames')
+              }}
+            >
+              Continuar com análise por frames
+            </Button>
+            <Button
+              onClick={() => {
+                setModelChoiceOpen(false)
+                void analyze('use_compatible')
+              }}
+            >
+              Usar modelo compatível
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm leading-relaxed text-muted">
+          {analysisPlan?.currentModel
+            ? `O modelo ${analysisPlan.currentModel} não declara suporte a vídeo.`
+            : 'O modelo atual não declara suporte a vídeo.'}
+          {analysisPlan?.compatibleVideoModels[0]
+            ? ` Você pode usar ${analysisPlan.compatibleVideoModels[0].label} nesta análise, sem trocar o padrão das Configurações, ou continuar com frames + áudio + transcrição.`
+            : ' Continue com frames + áudio + transcrição.'}
+        </p>
+      </Modal>
     </div>
   )
 }

@@ -80,7 +80,7 @@ export function ShortsProjectCard({
       padding="sm"
       role="button"
       tabIndex={0}
-      className="flex min-w-0 cursor-pointer flex-col overflow-hidden transition-colors hover:border-[#334049]"
+      className="flex min-w-0 cursor-pointer flex-col transition-colors hover:border-[#334049]"
       onClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -183,7 +183,18 @@ export function ShortsProjectCard({
         <p className="mt-2 text-xs text-muted-2">{formatEditedLabel(project.updatedAt)}</p>
       </div>
 
-      <div className="mt-3 flex justify-end">
+      <div className="mt-3 flex justify-end gap-2">
+        <Button
+          variant="ghost"
+          className="h-9 px-3 text-xs"
+          icon={<Trash2 className="h-3.5 w-3.5" />}
+          onClick={(event) => {
+            event.stopPropagation()
+            onDelete()
+          }}
+        >
+          Excluir
+        </Button>
         <Button
           variant="secondary"
           className="h-9 px-3 text-xs"

@@ -12,7 +12,7 @@ import type {
   TranscriptCue,
   VideoProbeInfo,
 } from '../../shared/shorts'
-import { isShortsAspectMode, isShortsClipCount, isShortsDurationMode, isShortsProfile, normalizeShortsClip } from '../../shared/shorts'
+import { isShortsAnalysisMode, isShortsAspectMode, isShortsClipCount, isShortsDurationMode, isShortsProfile, normalizeShortsClip } from '../../shared/shorts'
 import type { ContentLanguageSource } from '../../shared/shortsLanguage'
 import { defaultShortsLanguageFields } from '../../shared/shortsLanguage'
 import { requestedDurationFromLegacyPreset } from '../../shared/shortsDuration'
@@ -46,6 +46,7 @@ type JobRow = {
   language_override: string | null
   detected_language: string | null
   transcript_language: string | null
+  analysis_mode: string | null
   analysis_notes: string | null
   error_message: string | null
   status: string
@@ -93,6 +94,7 @@ function mapJob(row: JobRow): ShortsJob {
     languageOverride: row.language_override ? String(row.language_override).trim() || null : null,
     detectedLanguage: row.detected_language ? String(row.detected_language).trim() || null : null,
     transcriptLanguage: row.transcript_language ? String(row.transcript_language).trim() || null : null,
+    analysisMode: isShortsAnalysisMode(row.analysis_mode) ? row.analysis_mode : null,
     analysisNotes: row.analysis_notes,
     errorMessage: row.error_message,
     status: (row.status as ShortsJobStatus) || 'draft',
@@ -145,9 +147,9 @@ export const shortsRepository = {
           id, project_id, name, source_path, source_name, profile, clip_count, duration_preset,
           requested_duration, duration_mode, aspect_mode, captions_enabled, probe_json, clips_json,
           transcript_json, transcript_source, content_language, language_source, language_confidence,
-          language_override, detected_language, transcript_language, analysis_notes, error_message,
+          language_override, detected_language, transcript_language, analysis_mode, analysis_notes, error_message,
           status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -172,6 +174,7 @@ export const shortsRepository = {
         language.languageOverride,
         language.detectedLanguage,
         language.transcriptLanguage,
+        null,
         null,
         null,
         'draft',
@@ -204,6 +207,7 @@ export const shortsRepository = {
       languageOverride: string | null
       detectedLanguage: string | null
       transcriptLanguage: string | null
+      analysisMode: ShortsJob['analysisMode']
       analysisNotes: string | null
       errorMessage: string | null
       status: ShortsJobStatus
@@ -224,7 +228,7 @@ export const shortsRepository = {
           duration_preset = ?, requested_duration = ?, duration_mode = ?, aspect_mode = ?,
           captions_enabled = ?, probe_json = ?, clips_json = ?, transcript_json = ?,
           transcript_source = ?, content_language = ?, language_source = ?, language_confidence = ?,
-          language_override = ?, detected_language = ?, transcript_language = ?,
+          language_override = ?, detected_language = ?, transcript_language = ?, analysis_mode = ?,
           analysis_notes = ?, error_message = ?, status = ?, updated_at = ?
          WHERE id = ?`,
       )
@@ -250,6 +254,7 @@ export const shortsRepository = {
         next.languageOverride,
         next.detectedLanguage,
         next.transcriptLanguage,
+        next.analysisMode,
         next.analysisNotes,
         next.errorMessage,
         next.status,

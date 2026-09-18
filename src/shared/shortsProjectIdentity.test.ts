@@ -52,6 +52,7 @@ function job(partial: Partial<ShortsJob> = {}): ShortsJob {
     languageOverride: null,
     detectedLanguage: null,
     transcriptLanguage: null,
+    analysisMode: null,
     analysisNotes: null,
     errorMessage: null,
     status: 'draft',

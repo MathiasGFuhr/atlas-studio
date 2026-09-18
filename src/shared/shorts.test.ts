@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { formatHashtags, formatShortsCopy, normalizeHashtags, normalizeShortsClip, shortsClipPreviewKey, shortsExportWindow } from './shorts'
+import {
+  clipPosterSeekSeconds,
+  formatHashtags,
+  formatShortsCopy,
+  normalizeHashtags,
+  normalizeShortsClip,
+  shortsClipPreviewKey,
+  shortsClipPreviewSrc,
+  shortsExportWindow,
+} from './shorts'
 
 describe('shorts metadata helpers', () => {
   it('normaliza hashtags sem muralha e sem duplicata', () => {
@@ -45,5 +54,19 @@ describe('shorts metadata helpers', () => {
     expect(shortsExportWindow(a)).toEqual({ clipId: 'clip-a', start: 20, end: 52, duration: 32 })
     expect(shortsExportWindow(b).clipId).toBe('clip-b')
     expect(shortsExportWindow(b).start).toBe(80)
+  })
+
+  it('cada Short recebe uma URL de preview distinta sem perder o arquivo', () => {
+    const base = `atlas-media://local/?p=${encodeURIComponent('D:\\videos\\show.mp4')}`
+    const a = shortsClipPreviewSrc(base, { id: 'clip-a', start: 13, end: 43 })!
+    const b = shortsClipPreviewSrc(base, { id: 'clip-b', start: 55, end: 85 })!
+    expect(a).not.toBe(b)
+    expect(new URL(a).searchParams.get('p')).toBe('D:\\videos\\show.mp4')
+    expect(new URL(b).searchParams.get('clip')).toBe('clip-b')
+    expect(a).toContain('#t=13.000,43.000')
+    expect(b).toContain('#t=55.000,85.000')
+    expect(clipPosterSeekSeconds({ start: 13, end: 43 })).not.toBe(clipPosterSeekSeconds({ start: 55, end: 85 }))
+    expect(clipPosterSeekSeconds({ start: 13, end: 43 })).toBeGreaterThan(13)
+    expect(clipPosterSeekSeconds({ start: 13, end: 43 })).toBeLessThan(43)
   })
 })

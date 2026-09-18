@@ -463,6 +463,8 @@ export interface AppSettings {
   defaultCodexEffort: string
   defaultAntigravityModel: string
   defaultAntigravityEffort: string
+  /** Consentimento explícito para enviar o proxy de vídeo ao provedor de IA. */
+  allowExternalVideoAnalysis: boolean
   autoApproval: boolean
   backupEnabled: boolean
   /** Em produção, verifica atualizações alguns segundos após abrir. */
@@ -767,7 +769,9 @@ export const IPC = {
     import: 'shorts:import',
     createFromSourceVideo: 'shorts:createFromSourceVideo',
     analyze: 'shorts:analyze',
+    getAnalysisPlan: 'shorts:getAnalysisPlan',
     updateClip: 'shorts:updateClip',
+    removeClip: 'shorts:removeClip',
     regenerateCopy: 'shorts:regenerateCopy',
     updateSettings: 'shorts:updateSettings',
     export: 'shorts:export',

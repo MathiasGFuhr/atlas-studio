@@ -40,6 +40,7 @@ import type {
   ShortsJob,
   ShortsProgressEvent,
 } from '../shared/shorts'
+import type { ShortsAnalysisPlan } from '../shared/shorts/analysisPlan'
 import type { ShortsProjectListFilters } from '../shared/shortsProject'
 import type { ShortsImportResult } from '../shared/shortsProjectIdentity'
 import type { CustomPrompt } from '../shared/quickPrompts/types'
@@ -211,8 +212,11 @@ const api = {
       ipcRenderer.invoke(IPC.shorts.createFromSourceVideo, input) as Promise<ShortsImportResult>,
     analyze: (request: ShortsAnalyzeInput) =>
       ipcRenderer.invoke(IPC.shorts.analyze, request) as Promise<ShortsJob>,
+    getAnalysisPlan: () => ipcRenderer.invoke(IPC.shorts.getAnalysisPlan) as Promise<ShortsAnalysisPlan>,
     updateClip: (jobId: string, clipId: string, patch: ShortsClipPatch) =>
       ipcRenderer.invoke(IPC.shorts.updateClip, jobId, clipId, patch) as Promise<ShortsJob | null>,
+    removeClip: (jobId: string, clipId: string) =>
+      ipcRenderer.invoke(IPC.shorts.removeClip, jobId, clipId) as Promise<ShortsJob | null>,
     regenerateCopy: (payload: { jobId: string; clipId: string; fields?: ShortsCopyFields }) =>
       ipcRenderer.invoke(IPC.shorts.regenerateCopy, payload) as Promise<ShortsJob>,
     updateSettings: (

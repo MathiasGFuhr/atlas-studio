@@ -75,7 +75,8 @@ describe('shortsCopy', () => {
     expect(music).toContain('NÃO traduza automaticamente para inglês')
     expect(music).toContain('reação da plateia')
     expect(music).not.toContain('virada narrativa')
-    expect(music).toContain('zu viel von allem')
+    expect(music).toContain('Não gere título/descrição só com a análise global')
+    expect(music).toContain('NÃO invente tema político')
 
     expect(history).toContain('Perfil editorial: HISTÓRIA')
     expect(history).toContain('idiomaObrigatorio: pt-BR')
@@ -134,7 +135,7 @@ describe('shortsCopy', () => {
       },
       [{ index: 1 }, { index: 2 }],
     )
-    expect(result[0]).toEqual({ index: 1, title: '', description: '', hashtags: [] })
+    expect(result[0]).toEqual({ index: 1, title: '', description: '', hashtags: [], hook: '' })
     expect(result[1].title).toBe('O solo que corta a luz')
     expect(result[1].hashtags).toEqual(['solo', 'JohannFalk'])
   })

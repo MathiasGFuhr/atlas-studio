@@ -7,6 +7,8 @@ export interface AgentModelInfo {
   label: string
   description?: string
   reasoningEfforts?: AgentReasoningEffort[]
+  /** Modalidades declaradas pelo catálogo do CLI, se existirem. */
+  inputModalities?: Array<'text' | 'image' | 'audio' | 'video'>
 }
 
 export interface AgentReasoningEffort {

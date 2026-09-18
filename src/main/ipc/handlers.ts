@@ -52,13 +52,15 @@ import type { CustomPrompt } from '../../shared/quickPrompts/types'
 import { musicRepository } from '../repositories/musicRepository'
 import { shortsRepository } from '../repositories/shortsRepository'
 import { analyzeShortsJob, regenerateShortsClipCopy } from '../services/shorts/ShortsPipeline'
+import { loadShortsAnalysisPlan } from '../services/shorts/ShortsAnalysisPlanner'
 import { exportVideoClip, probeVideo } from '../services/media/ffmpegVideo'
 import { toAtlasMediaUrl } from '../services/media/atlasMediaProtocol'
-import { ensureShortsThumbnail, presentShortsJob } from '../services/shorts/shortsThumbnail'
+import { ensureShortsClipPoster, ensureShortsClipPosters, ensureShortsThumbnail, presentShortsJob } from '../services/shorts/shortsThumbnail'
 import {
   createFromSourceVideo,
   deleteProject as deleteShortsProject,
   markClipExported,
+  removeClip as removeShortsClip,
   toImportResult,
   updateClip as updateShortsClip,
   updateProjectSettings,
@@ -419,9 +421,11 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.shorts.list, (_e, filters?: ShortsProjectListFilters) =>
     shortsRepository.list(filters).map(presentShortsJob),
   )
-  ipcMain.handle(IPC.shorts.get, (_e, id: string) => {
+  ipcMain.handle(IPC.shorts.get, async (_e, id: string) => {
     const job = shortsRepository.get(id)
-    return job ? presentShortsJob(job) : null
+    if (!job) return null
+    await ensureShortsClipPosters(job)
+    return presentShortsJob(shortsRepository.get(id) ?? job)
   })
   ipcMain.handle(IPC.shorts.import, async (_e, projectId?: string | null) => {
     const win = getMainWindow()
@@ -478,22 +482,39 @@ export function registerIpcHandlers(deps: {
       return toImportResult({ ...created, project: presentShortsJob(latest) }, sourcePath)
     },
   )
+  ipcMain.handle(IPC.shorts.getAnalysisPlan, async () => {
+    return loadShortsAnalysisPlan({
+      antigravity: antigravityService,
+      catalog: agentModelCatalog,
+    })
+  })
   ipcMain.handle(IPC.shorts.analyze, async (_e, request: ShortsAnalyzeInput) => {
     const job = await analyzeShortsJob({
       request,
       antigravity: antigravityService,
+      catalog: agentModelCatalog,
       getWindow: getMainWindow,
     })
     await ensureShortsThumbnail(job)
+    await ensureShortsClipPosters(job)
     return presentShortsJob(shortsRepository.get(job.id) ?? job)
   })
   ipcMain.handle(
     IPC.shorts.updateClip,
-    (_e, jobId: string, clipId: string, patch: ShortsClipPatch) => {
+    async (_e, jobId: string, clipId: string, patch: ShortsClipPatch) => {
       const updated = updateShortsClip(jobId, clipId, patch)
-      return updated ? presentShortsJob(updated) : null
+      if (!updated) return null
+      const clip = updated.clips.find((item) => item.id === clipId)
+      if (clip && (patch.start != null || patch.end != null)) {
+        await ensureShortsClipPoster(updated, clip)
+      }
+      return presentShortsJob(shortsRepository.get(jobId) ?? updated)
     },
   )
+  ipcMain.handle(IPC.shorts.removeClip, (_e, jobId: string, clipId: string) => {
+    const updated = removeShortsClip(jobId, clipId)
+    return updated ? presentShortsJob(updated) : null
+  })
   ipcMain.handle(
     IPC.shorts.regenerateCopy,
     async (_e, payload: { jobId: string; clipId: string; fields?: ShortsCopyFields }) => {

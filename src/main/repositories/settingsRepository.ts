@@ -46,6 +46,7 @@ const DEFAULTS: AppSettings = {
   defaultCodexEffort: '',
   defaultAntigravityModel: '',
   defaultAntigravityEffort: '',
+  allowExternalVideoAnalysis: false,
   autoApproval: false,
   backupEnabled: true,
   autoCheckUpdates: true,
@@ -99,6 +100,7 @@ export const settingsRepository = {
     }
     settings.defaultAntigravityModel = String(settings.defaultAntigravityModel || '')
     settings.defaultAntigravityEffort = String(settings.defaultAntigravityEffort || '')
+    settings.allowExternalVideoAnalysis = Boolean(settings.allowExternalVideoAnalysis)
 
     settings.accountPhotoDataUrl = readImageDataUrl(String(settings.accountPhotoPath || ''))
     settings.notificationReadKeys = normalizeNotificationReadKeys(settings.notificationReadKeys)

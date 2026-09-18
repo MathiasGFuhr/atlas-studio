@@ -18,6 +18,13 @@ export interface ShortsCopyClipInput {
   currentTitle?: string
   currentDescription?: string
   usedTitles?: string[]
+  visualReason?: string
+  audioReason?: string
+  visualSummary?: string
+  audioSummary?: string
+  keyframePaths?: string[]
+  clipMediaPath?: string | null
+  watchedClip?: boolean
 }
 
 export interface ShortsAiCopy {
@@ -25,6 +32,7 @@ export interface ShortsAiCopy {
   title: string
   description: string
   hashtags: string[]
+  hook?: string
 }
 
 export const SHORTS_COPY_FAIL_MESSAGE = 'O Antigravity não devolveu título e descrição válidos.'
@@ -38,6 +46,7 @@ export const SHORTS_COPY_SCHEMA = {
         type: 'object',
         properties: {
           index: { type: 'integer', description: 'Número do Short (1-based)' },
+          hook: { type: 'string', description: 'Gancho de 1 frase no idioma do conteúdo, específico deste trecho' },
           title: { type: 'string', description: 'Título editorial nativo no idioma do conteúdo (contentLanguage)' },
           description: { type: 'string', description: 'Descrição curta nativa no idioma do conteúdo (1 a 3 frases)' },
           hashtags: {
@@ -154,7 +163,16 @@ export function buildShortsCopiesPrompt(input: {
         `endSeconds: ${clip.end.toFixed(2)}`,
         `score: ${clip.score}`,
         `motivoDoCorte: ${clip.reason || '(não informado)'}`,
-        `hook: ${clip.hook || '(não informado)'}`,
+        clip.visualReason ? `visualDesteTrecho: ${clip.visualReason}` : '',
+        clip.audioReason ? `audioDesteTrecho: ${clip.audioReason}` : '',
+        clip.visualSummary ? `oQueSeVeNesteTrecho: ${clip.visualSummary}` : '',
+        clip.audioSummary ? `oQueSeOuveNesteTrecho: ${clip.audioSummary}` : '',
+        clip.watchedClip && clip.clipMediaPath
+          ? `Assista/ouça ESTE recorte em ${clip.clipMediaPath} (intervalo ${clip.start.toFixed(1)}–${clip.end.toFixed(1)}s). Não recicle a análise global.`
+          : clip.keyframePaths?.length
+            ? `Frames deste Short:\n${clip.keyframePaths.map((path) => `  ${path}`).join('\n')}\nAnalise ESTE trecho. Você não necessariamente assistiu ao vídeo inteiro.`
+            : 'Analise o conteúdo específico deste Short, não o vídeo inteiro.',
+        `hookAtual: ${clip.hook || '(vazio)'}`,
         clip.currentTitle ? `tituloAtual: ${clip.currentTitle}` : '',
         clip.currentDescription ? `descricaoAtual: ${clip.currentDescription}` : '',
         used.length ? `titulosJaUsadosEmOutrosShorts: ${used.join(' | ')}` : '',
@@ -178,7 +196,8 @@ export function buildShortsCopiesPrompt(input: {
 
   return [
     'Você é editor de YouTube Shorts do Atlas Studio.',
-    'Os cortes JÁ foram escolhidos. NÃO altere timestamps. Só escreva metadados editoriais de cada trecho.',
+    'Os cortes JÁ foram escolhidos. NÃO altere timestamps. Escreva metadados de CADA trecho depois de analisar aquele Short.',
+    'Não gere título/descrição só com a análise global. Short #1 usa o conteúdo do Short #1; Short #2 usa o conteúdo do Short #2.',
     `Perfil editorial: ${profileLabel}. NÃO use a estratégia do outro perfil.`,
     `videoDuration: ${input.videoDuration.toFixed(1)}`,
     contextLines.join('\n'),
@@ -197,6 +216,8 @@ export function buildShortsCopiesPrompt(input: {
     '- reason/hook abaixo: reason é nota interna; hook já deve estar no idioma do conteúdo. Não copie reason como título.',
     '',
     musicRules.join('\n'),
+    '- NÃO invente tema político, social ou letra que não esteja evidenciada neste trecho.',
+    '- Se não entender a letra, descreva a performance visível/auditiva (ex.: “Johann Falk live during the final chorus”).',
     '',
     'Regras de título:',
     '- um título por Short, específico DAQUELE trecho (transcript + motivo + hook)',
@@ -242,12 +263,13 @@ export function normalizeShortsCopies(
       title,
       description,
       hashtags: normalizeHashtags(record.hashtags),
+      hook: asText(record.hook),
     })
   }
 
   return expected.map((item) => {
     const found = byIndex.get(item.index)
     if (found) return found
-    return { index: item.index, title: '', description: '', hashtags: [] }
+    return { index: item.index, title: '', description: '', hashtags: [], hook: '' }
   })
 }

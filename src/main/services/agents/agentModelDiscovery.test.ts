@@ -11,12 +11,14 @@ describe('lista de modelos Codex', () => {
           slug: 'runtime-alpha',
           display_name: 'Runtime Alpha',
           supported_reasoning_levels: [{ effort: 'low' }, { effort: 'high' }],
+          input_modalities: ['text', 'image'],
         },
         { slug: 'runtime-beta', visibility: 'hidden' },
       ],
     })
     expect(models.map((model) => model.id)).toEqual(['runtime-alpha'])
     expect(models[0]?.reasoningEfforts?.map((item) => item.id)).toEqual(['low', 'high'])
+    expect(models[0]?.inputModalities).toEqual(['text', 'image'])
   })
 
   it('inclui o modelo configurado mesmo se estiver oculto', () => {

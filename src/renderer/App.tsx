@@ -58,10 +58,6 @@ export default function App() {
     void api.settings.get().then(setSettings)
   }, [api])
 
-  const handleSidebarCodexClick = useCallback(() => {
-    setLinkModalOpen(true)
-  }, [])
-
   const handleOnboardingLink = useCallback(() => {
     codexAuth.dismissOnboarding()
     setLinkModalOpen(true)
@@ -78,10 +74,7 @@ export default function App() {
         <WorkspaceCapabilitiesProvider>
         <CreateActionsProvider>
         <div className="flex h-full w-full overflow-hidden bg-bg text-text">
-          <AppSidebar
-            codexStatus={codexAuth.status}
-            onCodexClick={handleSidebarCodexClick}
-          />
+          <AppSidebar codexStatus={codexAuth.status} />
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar settings={settings} />
             <main className="min-h-0 flex-1 overflow-hidden">

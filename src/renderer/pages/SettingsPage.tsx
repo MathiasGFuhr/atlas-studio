@@ -17,6 +17,7 @@ import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 import { notifySettingsChanged } from '../lib/settingsEvents'
 import { AgentIntegrationModels } from '../components/settings/AgentIntegrationModels'
 import { useAgentModels } from '../hooks/useAgentModels'
+import { cn } from '../lib/utils'
 
 export function SettingsPage({
   onSettingsSaved,
@@ -39,7 +40,9 @@ export function SettingsPage({
   const [agyLinkOpen, setAgyLinkOpen] = useState(false)
   const [confirmAgyLogout, setConfirmAgyLogout] = useState(false)
   const [searchParams] = useSearchParams()
-  const updatesHighlight = searchParams.get('secao') === 'atualizacoes'
+  const section = searchParams.get('secao')
+  const updatesHighlight = section === 'atualizacoes'
+  const aiHighlight = section === 'ia'
   const agentModels = useAgentModels()
 
   useEffect(() => {
@@ -62,9 +65,11 @@ export function SettingsPage({
   }, [api])
 
   useEffect(() => {
-    if (!updatesHighlight || !settings) return
-    document.getElementById('atualizacoes')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [updatesHighlight, settings])
+    if (!settings) return
+    const target = aiHighlight ? 'ia' : updatesHighlight ? 'atualizacoes' : null
+    if (!target) return
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [aiHighlight, updatesHighlight, settings])
 
   async function handleLogout() {
     setConfirmLogout(false)
@@ -367,7 +372,7 @@ export function SettingsPage({
           />
         </SettingsCard>
 
-        <SettingsCard title="Codex" icon={Bot}>
+        <SettingsCard title="Codex" icon={Bot} id="ia" highlight={aiHighlight}>
           <KV
             label="Status"
             value={
@@ -455,7 +460,7 @@ export function SettingsPage({
           </div>
         </SettingsCard>
 
-        <SettingsCard title="Antigravity" icon={Sparkles}>
+        <SettingsCard title="Antigravity" icon={Sparkles} highlight={aiHighlight}>
           <KV
             label="Status"
             value={
@@ -851,13 +856,17 @@ function SettingsCard({
   title,
   icon: Icon,
   children,
+  id,
+  highlight,
 }: {
   title: string
   icon: typeof Bot
   children: ReactNode
+  id?: string
+  highlight?: boolean
 }) {
   return (
-    <Card>
+    <Card id={id} className={cn(id && 'scroll-mt-4', highlight && 'ring-1 ring-accent/40')}>
       <div className="mb-4 flex items-center gap-2">
         <Icon className="h-4 w-4 text-accent" />
         <h3 className="text-sm font-semibold text-text">{title}</h3>

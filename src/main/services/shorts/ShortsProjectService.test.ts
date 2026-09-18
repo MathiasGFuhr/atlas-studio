@@ -7,6 +7,7 @@ import {
   createFromSourceVideoWith,
   deleteProjectWith,
   markClipExportedWith,
+  removeClipWith,
   type ShortsProjectStore,
 } from './ShortsProjectService'
 
@@ -71,6 +72,7 @@ function createStore(): ShortsProjectStore & { projects: Map<string, ShortsJob> 
         transcriptSource: 'none',
         ...defaultShortsLanguageFields(),
         analysisNotes: null,
+        analysisMode: null,
         errorMessage: null,
         status: 'draft',
         createdAt: now,
@@ -243,5 +245,23 @@ describe('ShortsProjectService', () => {
     expect(deleteProjectWith(store, created.id, { removeCacheDir: (id) => cacheRemoved.push(id) })).toBe(true)
     expect(store.list()).toHaveLength(0)
     expect(cacheRemoved).toEqual([created.id])
+  })
+
+  it('excluir um Short remove só o corte e reindexa os demais', () => {
+    const store = createStore()
+    const created = store.create({
+      sourcePath: 'D:\\videos\\VIDEO A.mp4',
+      sourceName: 'VIDEO A.mp4',
+      probe: probe({ name: 'VIDEO A.mp4', duration: 287 }),
+    })
+    addClipWith(store, created.id, clip({ id: 's1', index: 1, start: 10, end: 40 }))
+    addClipWith(store, created.id, clip({ id: 's2', index: 2, start: 80, end: 110 }))
+    addClipWith(store, created.id, clip({ id: 's3', index: 3, start: 150, end: 180 }))
+    markClipExportedWith(store, created.id, 's2', 'D:\\out\\a-short-2.mp4')
+
+    const next = removeClipWith(store, created.id, 's2')
+    expect(next?.clips.map((item) => item.id)).toEqual(['s1', 's3'])
+    expect(next?.clips.map((item) => item.index)).toEqual([1, 2])
+    expect(store.list()).toHaveLength(1)
   })
 })

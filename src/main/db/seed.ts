@@ -44,6 +44,7 @@ export function seedIfEmpty(db: AppDatabase, workspaceRoot: string) {
     defaultCodexEffort: '',
     defaultAntigravityModel: '',
     defaultAntigravityEffort: '',
+    allowExternalVideoAnalysis: false,
     autoApproval: false,
     backupEnabled: true,
     autoCheckUpdates: true,

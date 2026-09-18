@@ -22,6 +22,7 @@ export function ShortsResultCard({
   onPersist,
   onCopy,
   onRegenerate,
+  onDelete,
 }: {
   clip: ShortsClip
   mediaUrl: string | null
@@ -37,6 +38,7 @@ export function ShortsResultCard({
   onPersist: (patch: ShortsClipPatch) => void
   onCopy: (part: 'title' | 'description' | 'all') => void
   onRegenerate: (fields: ShortsCopyFields) => void
+  onDelete: () => void
 }) {
   const vertical = aspectMode !== 'original'
 
@@ -53,6 +55,7 @@ export function ShortsResultCard({
           sourceHeight={sourceHeight}
           active={playing}
           resetToken={shortsClipPreviewKey(clip)}
+          posterUrl={clip.posterUrl}
           onPlayingChange={onPlayingChange}
         />
       </div>
@@ -88,6 +91,9 @@ export function ShortsResultCard({
           </Button>
           <Button className="h-9 px-3 text-xs" disabled={busy} onClick={onExport}>
             Gerar Short
+          </Button>
+          <Button variant="ghost" className="h-9 px-3 text-xs" disabled={busy} onClick={onDelete}>
+            Excluir
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import type { AgentModelInfo } from '../../../shared/agents/types'
+import { extractModelModalities } from '../../../shared/agents/capabilities'
 import { extractJsonValue } from './extractJson'
 import { effortsFromUnknown } from './parseReasoningEfforts'
 
@@ -28,11 +29,13 @@ function toModel(entry: Record<string, unknown>, configured: string | null): Age
   )
   const label = String(entry.display_name ?? entry.displayName ?? entry.label ?? id).trim() || id
   const description = String(entry.description ?? '').trim()
+  const modalities = extractModelModalities(entry)
   return {
     id,
     label,
     description: description || undefined,
     reasoningEfforts: efforts.length > 0 ? efforts : undefined,
+    inputModalities: modalities ?? undefined,
   }
 }
 
@@ -131,6 +134,7 @@ export function mergeModelLists(...lists: AgentModelInfo[][]): AgentModelInfo[] 
         reasoningEfforts: model.reasoningEfforts?.length
           ? model.reasoningEfforts
           : current.reasoningEfforts,
+        inputModalities: model.inputModalities?.length ? model.inputModalities : current.inputModalities,
       })
     }
   }
