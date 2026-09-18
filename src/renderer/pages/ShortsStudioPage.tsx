@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Clapperboard, Loader2, Pencil, Scissors, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -31,6 +31,7 @@ import {
 import {
   SHORTS_DURATION_SHORTCUTS,
   capRequestedDuration,
+  evaluateShortsFeasibility,
   formatDurationInput,
   isDurationShortcut,
   parseDurationInput,
@@ -418,6 +419,15 @@ export function ShortsStudioPage() {
   }
 
   const probe = job?.probe
+  const feasibility = useMemo(() => {
+    if (!probe?.duration) return null
+    return evaluateShortsFeasibility({
+      videoDuration: probe.duration,
+      requestedCount: clipCount,
+      requestedDuration,
+      durationMode,
+    })
+  }, [probe?.duration, clipCount, requestedDuration, durationMode])
 
   if (loading && !job) {
     return (
@@ -643,6 +653,12 @@ export function ShortsStudioPage() {
                 <p className="text-xs text-muted">
                   Vídeo original: {formatShortsTimecode(job.probe.duration)}
                 </p>
+              ) : null}
+              {feasibility?.overlapHint ? (
+                <p className="text-xs leading-relaxed text-muted">{feasibility.overlapHint}</p>
+              ) : null}
+              {feasibility?.countHint && !durationWarning ? (
+                <p className="text-xs leading-relaxed text-muted">{feasibility.countHint}</p>
               ) : null}
               {durationWarning ? <p className="text-xs text-danger">{durationWarning}</p> : null}
             </div>

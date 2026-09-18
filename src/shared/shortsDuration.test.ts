@@ -3,6 +3,8 @@ import {
   capRequestedDuration,
   constrainClipWindow,
   durationBounds,
+  autoMinClipDuration,
+  evaluateShortsFeasibility,
   formatClipLength,
   formatDurationInput,
   parseDurationInput,
@@ -34,6 +36,46 @@ describe('shortsDuration', () => {
     expect(bounds.min).toBeLessThan(30)
     expect(bounds.max).toBeGreaterThanOrEqual(34)
     expect(bounds.max).toBeLessThanOrEqual(36)
+  })
+
+  it('não reduz 45s para um Short absurdo ao cumprir quantidade', () => {
+    expect(autoMinClipDuration(45)).toBe(27)
+    expect(autoMinClipDuration(30)).toBe(18)
+    expect(autoMinClipDuration(15)).toBe(15)
+    const fill = durationBounds(45, 56.6, 'approximate', 'fill')
+    expect(fill.min).toBe(27)
+    expect(fill.min).toBeGreaterThanOrEqual(15)
+    expect(fill.max).toBeGreaterThanOrEqual(45)
+    const exact = durationBounds(45, 56.6, 'exact', 'fill')
+    expect(exact.min).toBe(45)
+    expect(exact.max).toBe(45)
+  })
+
+  it('sinaliza overlap em 56.6s / 3 / 45s sem bloquear, e limita vídeo de 12s', () => {
+    const feasible = evaluateShortsFeasibility({
+      videoDuration: 56.6,
+      requestedCount: 3,
+      requestedDuration: 45,
+      durationMode: 'approximate',
+    })
+    expect(feasible.durationCapped).toBe(false)
+    expect(feasible.possibleCount).toBeGreaterThanOrEqual(3)
+    expect(feasible.overlapRequired).toBe(true)
+    expect(feasible.overlapHint).toContain('terão sobreposição')
+    expect(feasible.countHint).toBeNull()
+
+    const short = evaluateShortsFeasibility({
+      videoDuration: 12,
+      requestedCount: 3,
+      requestedDuration: 30,
+      durationMode: 'approximate',
+    })
+    expect(short.durationCapped).toBe(true)
+    expect(short.cappedDuration).toBe(12)
+    expect(short.possibleCount).toBe(1)
+    expect(short.durationMessage).toContain('O vídeo possui apenas')
+    expect(short.overlapHint).toBeNull()
+    expect(short.countHint).toContain('só é possível gerar 1 corte')
   })
 
   it('no modo exato trava a duração e não ultrapassa o vídeo', () => {

@@ -7,6 +7,13 @@ export const SHORTS_APPROX_RATIO = 0.15
 export const SHORTS_APPROX_MIN_SLACK = 3
 /** Folga de encode/frame no modo exato. */
 export const SHORTS_EXACT_TOLERANCE = 0.12
+/** Piso para encurtar automaticamente no modo aproximado ao cumprir quantidade. */
+export const SHORTS_AUTO_MIN_SECONDS = 15
+export const SHORTS_AUTO_MIN_RATIO = 0.6
+/** Distância mínima de start para duas janelas contarem como temporalmente distintas. */
+export const SHORTS_MIN_START_DELTA = 0.4
+
+export type DurationBoundLevel = 'standard' | 'fill'
 
 export type DurationCapResult = {
   requested: number
@@ -19,6 +26,21 @@ export type DurationBounds = {
   target: number
   min: number
   max: number
+  level: DurationBoundLevel
+}
+
+export type ShortsFeasibility = {
+  videoDuration: number
+  requestedCount: number
+  requestedDuration: number
+  durationMode: ShortsDurationMode
+  cappedDuration: number
+  durationCapped: boolean
+  durationMessage: string | null
+  possibleCount: number
+  overlapRequired: boolean
+  overlapHint: string | null
+  countHint: string | null
 }
 
 export function parseDurationInput(raw: string): number | null {
@@ -122,20 +144,120 @@ export function capRequestedDuration(requested: number, videoDuration?: number |
   return clampRequestedDuration(requested, videoDuration)
 }
 
+/** Piso para adaptação automática: max(15s, requested × 0.6), sem ultrapassar o vídeo. */
+export function autoMinClipDuration(requestedDuration: number, videoDuration?: number | null): number {
+  const requested = Math.max(SHORTS_MIN_CLIP_SECONDS, requestedDuration)
+  const floor = Math.max(SHORTS_AUTO_MIN_SECONDS, roundTime(requested * SHORTS_AUTO_MIN_RATIO))
+  if (Number.isFinite(videoDuration) && (videoDuration as number) > 0) {
+    return roundTime(Math.min(floor, videoDuration as number))
+  }
+  return floor
+}
+
 export function durationBounds(
   requested: number,
   videoDuration: number,
   mode: ShortsDurationMode,
+  level: DurationBoundLevel = 'standard',
 ): DurationBounds {
   const cap = capRequestedDuration(requested, videoDuration)
   const target = cap.requested
   if (mode === 'exact') {
-    return { target, min: target, max: Math.min(videoDuration, target) }
+    return { target, min: target, max: Math.min(videoDuration, target), level: 'standard' }
   }
   const slack = Math.max(SHORTS_APPROX_MIN_SLACK, target * SHORTS_APPROX_RATIO)
-  const min = Math.max(SHORTS_MIN_CLIP_SECONDS, roundTime(target - slack))
+  const standardMin = Math.max(SHORTS_MIN_CLIP_SECONDS, roundTime(target - slack))
   const max = roundTime(Math.min(videoDuration, target + slack))
-  return { target, min: Math.min(min, max), max: Math.max(min, max) }
+  const fillFloor = autoMinClipDuration(target, videoDuration)
+  const min = level === 'fill' ? Math.min(standardMin, fillFloor) : standardMin
+  return { target, min: Math.min(min, max), max: Math.max(min, max), level }
+}
+
+export function maxDistinctWindowCount(videoDuration: number, clipDuration: number): number {
+  const video = Math.max(0, videoDuration)
+  const length = Math.min(Math.max(0, clipDuration), video)
+  if (video < 0.8 || length < 0.8) return 0
+  const spare = Math.max(0, video - length)
+  if (spare < SHORTS_MIN_START_DELTA) return 1
+  return Math.floor(spare / SHORTS_MIN_START_DELTA) + 1
+}
+
+export function shortsOverlapRequired(
+  videoDuration: number,
+  requestedCount: number,
+  clipDuration: number,
+): boolean {
+  if (requestedCount <= 1) return false
+  return requestedCount * clipDuration > videoDuration + 0.05
+}
+
+export function formatShortsOverlapPreview(input: {
+  requestedCount: number
+  requestedDuration: number
+  videoDuration: number
+  durationMode: ShortsDurationMode
+}): string {
+  const approx = input.durationMode === 'approximate' ? '~' : ''
+  const duration = Math.max(1, Math.round(input.requestedDuration))
+  const video = Math.max(1, Math.round(input.videoDuration))
+  return `${input.requestedCount} Shorts de ${approx}${duration}s em um vídeo de ${video}s terão sobreposição entre os trechos.`
+}
+
+export function formatShortsOverlapResultNote(input: {
+  requestedCount: number
+  requestedDuration: number
+  durationMode: ShortsDurationMode
+}): string {
+  const approx = input.durationMode === 'approximate' ? '~' : ''
+  const duration = Math.max(1, Math.round(input.requestedDuration))
+  return `Como o vídeo é curto para ${input.requestedCount} cortes de ${approx}${duration}s, alguns trechos compartilham partes da apresentação.`
+}
+
+export function evaluateShortsFeasibility(input: {
+  videoDuration: number
+  requestedCount: number
+  requestedDuration: number
+  durationMode: ShortsDurationMode
+}): ShortsFeasibility {
+  const cap = capRequestedDuration(input.requestedDuration, input.videoDuration)
+  const video = Math.max(0, input.videoDuration)
+  const fillMin =
+    input.durationMode === 'exact' ? cap.requested : autoMinClipDuration(cap.requested, video)
+  const possibleCount = Math.max(
+    maxDistinctWindowCount(video, cap.requested),
+    input.durationMode === 'approximate' ? maxDistinctWindowCount(video, fillMin) : 0,
+  )
+  const overlapRequired = shortsOverlapRequired(video, input.requestedCount, cap.requested)
+  const countHint =
+    possibleCount < input.requestedCount && possibleCount > 0
+      ? possibleCount === 1
+        ? `Com ${formatDurationInput(video)} de vídeo, só é possível gerar 1 corte neste comprimento.`
+        : `Com ${formatDurationInput(video)} de vídeo, só é possível gerar ${possibleCount} cortes neste comprimento.`
+      : possibleCount <= 0
+        ? videoDurationMessage(video)
+        : null
+  const overlapHint =
+    possibleCount >= input.requestedCount && overlapRequired
+      ? formatShortsOverlapPreview({
+          requestedCount: input.requestedCount,
+          requestedDuration: cap.requested,
+          videoDuration: video,
+          durationMode: input.durationMode,
+        })
+      : null
+  return {
+    videoDuration: roundTime(video),
+    requestedCount: input.requestedCount,
+    requestedDuration: cap.requested,
+    durationMode: input.durationMode,
+    cappedDuration: cap.requested,
+    durationCapped: cap.capped,
+    durationMessage: cap.message,
+    possibleCount,
+    overlapRequired,
+    overlapHint,
+    countHint,
+  }
 }
 
 export function constrainClipWindow(input: {
@@ -145,9 +267,10 @@ export function constrainClipWindow(input: {
   requestedDuration: number
   mode: ShortsDurationMode
   moved?: 'start' | 'end' | 'both'
+  level?: DurationBoundLevel
 }): { start: number; end: number } {
   const video = Math.max(0, input.videoDuration)
-  const bounds = durationBounds(input.requestedDuration, video, input.mode)
+  const bounds = durationBounds(input.requestedDuration, video, input.mode, input.level)
   const target = bounds.target
   let start = Number.isFinite(input.start) ? input.start : 0
   let end = Number.isFinite(input.end) ? (input.end as number) : start + target

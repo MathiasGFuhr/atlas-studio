@@ -278,9 +278,13 @@ export async function analyzeShortsJob(input: {
       jobId: job.id,
       mode: runtime.mode,
       watchedVideo,
+      clipCount: input.request.clipCount,
       generated: selection.diagnostics.generated,
       selected: selection.diagnostics.selected,
       discarded: selection.diagnostics.discarded,
+      slidingWindows: selection.diagnostics.slidingWindows,
+      overlapPass: selection.diagnostics.overlapPass,
+      durationAdapted: selection.diagnostics.durationAdapted,
     })
 
     const clips = toClips(

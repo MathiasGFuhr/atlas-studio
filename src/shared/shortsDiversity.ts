@@ -1,15 +1,26 @@
 import type { ShortsLocalCandidate } from './shorts'
+import { SHORTS_MIN_START_DELTA } from './shortsDuration'
 
-/** Limite legado (vídeos longos). A seleção usa `adaptiveOverlapPolicy`. */
+/** Limite legado (vídeos longos). A seleção final usa passes progressivos. */
 export const SHORTS_OVERLAP_LIMIT = 0.28
 /** Pool interno só remove quase-duplicatas; a seleção final aplica a política adaptativa. */
-export const SHORTS_POOL_OVERLAP_LIMIT = 0.72
+export const SHORTS_POOL_OVERLAP_LIMIT = 0.92
 /** A IA pode afinar o timestamp no máximo nesta distância do candidato. */
 export const SHORTS_AI_ADJUST_SECONDS = 3
 
 const NEAR_DUPLICATE_RATIO = 0.72
 const NEAR_DUPLICATE_IOU = 0.58
 const NEAR_DUPLICATE_START_DELTA = 4
+const POOL_NEAR_START_DELTA = 1
+const POOL_NEAR_RATIO = 0.92
+const POOL_NEAR_IOU = 0.9
+
+export const SHORTS_OVERLAP_PASSES = [
+  { id: 1, maxOverlapRatio: 0.25, maxIoU: 0.18, relaxNearDuplicate: false },
+  { id: 2, maxOverlapRatio: 0.45, maxIoU: 0.32, relaxNearDuplicate: false },
+  { id: 3, maxOverlapRatio: 0.65, maxIoU: 0.5, relaxNearDuplicate: true },
+  { id: 4, maxOverlapRatio: 0.85, maxIoU: 0.74, relaxNearDuplicate: true },
+] as const
 
 export type ShortsTimeWindow = {
   start: number
@@ -34,6 +45,7 @@ export type ShortsDiscardedWindow = {
 export type ShortsDiversityResult = {
   selected: ShortsRankedWindow[]
   discarded: ShortsDiscardedWindow[]
+  pass?: number
 }
 
 export type ShortsOverlapRole = 'final' | 'pool'
@@ -45,6 +57,9 @@ export type ShortsOverlapPolicy = {
   maxOverlapSeconds: number
   nearDuplicateOnly: boolean
   shortVideo: boolean
+  relaxNearDuplicate?: boolean
+  exactTimestampsOnly?: boolean
+  pass?: number
 }
 
 export type ShortsConflictLimit = number | ShortsOverlapPolicy
@@ -54,7 +69,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function shortsCandidatePoolSize(clipCount: number): number {
-  return Math.min(25, Math.max(15, Math.max(1, clipCount) * 4))
+  return Math.min(30, Math.max(18, Math.max(1, clipCount) * 6))
 }
 
 export function windowDuration(window: ShortsTimeWindow): number {
@@ -81,6 +96,41 @@ export function temporalIoU(a: ShortsTimeWindow, b: ShortsTimeWindow): number {
   return union <= 0 ? 0 : overlap / union
 }
 
+export function sameTimestamps(
+  a: ShortsTimeWindow,
+  b: ShortsTimeWindow,
+  epsilon = 0.05,
+): boolean {
+  return Math.abs(a.start - b.start) <= epsilon && Math.abs(a.end - b.end) <= epsilon
+}
+
+export function minDistinctStartDelta(
+  videoDuration: number,
+  clipDuration: number,
+  requestedCount: number,
+): number {
+  const spare = Math.max(0, videoDuration - Math.min(clipDuration, videoDuration))
+  if (requestedCount <= 1) return Math.max(SHORTS_MIN_START_DELTA, spare)
+  return Math.max(SHORTS_MIN_START_DELTA, Math.min(2, spare / Math.max(1, requestedCount - 1)))
+}
+
+export function overlapPassPolicy(
+  pass: (typeof SHORTS_OVERLAP_PASSES)[number],
+  fallback: ShortsOverlapPolicy,
+): ShortsOverlapPolicy {
+  return {
+    ...fallback,
+    role: 'final',
+    maxOverlapRatio: pass.maxOverlapRatio,
+    maxIoU: pass.maxIoU,
+    maxOverlapSeconds: Number.POSITIVE_INFINITY,
+    nearDuplicateOnly: false,
+    relaxNearDuplicate: pass.relaxNearDuplicate,
+    exactTimestampsOnly: false,
+    pass: pass.id,
+  }
+}
+
 export function typicalClipDuration(candidates: ShortsTimeWindow[], fallback = 30): number {
   const durations = candidates.map(windowDuration).filter((item) => item >= 0.8)
   if (durations.length === 0) return fallback
@@ -102,11 +152,12 @@ export function adaptiveOverlapPolicy(input: {
   if (role === 'pool') {
     return {
       role,
-      maxOverlapRatio: NEAR_DUPLICATE_RATIO,
-      maxIoU: NEAR_DUPLICATE_IOU,
+      maxOverlapRatio: POOL_NEAR_RATIO,
+      maxIoU: POOL_NEAR_IOU,
       maxOverlapSeconds: Number.POSITIVE_INFINITY,
       nearDuplicateOnly: true,
       shortVideo,
+      relaxNearDuplicate: true,
     }
   }
 
@@ -149,10 +200,10 @@ export function isNearDuplicate(
   const iou = temporalIoU(a, b)
   const startDelta = Math.abs(a.start - b.start)
   const endDelta = Math.abs(a.end - b.end)
-  if (startDelta <= 0.05 && endDelta <= 0.05) return true
+  if (sameTimestamps(a, b)) return true
   if (loose) {
-    if (startDelta < 3 && ratio > 0.8) return true
-    if (iou > 0.78) return true
+    if (startDelta < POOL_NEAR_START_DELTA && ratio > POOL_NEAR_RATIO) return true
+    if (iou > POOL_NEAR_IOU) return true
     return false
   }
   if (startDelta < NEAR_DUPLICATE_START_DELTA && ratio > 0.65) return true
@@ -177,8 +228,13 @@ export function windowsConflict(
           nearDuplicateOnly: false,
           shortVideo: false,
         })
-  if (isNearDuplicate(a, b, policy.nearDuplicateOnly)) return true
-  if (policy.nearDuplicateOnly) return false
+  if (sameTimestamps(a, b)) return true
+  if (policy.exactTimestampsOnly) {
+    const delta = SHORTS_MIN_START_DELTA
+    return Math.abs(a.start - b.start) < delta && Math.abs(a.end - b.end) < delta
+  }
+  if (policy.nearDuplicateOnly) return isNearDuplicate(a, b, true)
+  if (isNearDuplicate(a, b, Boolean(policy.relaxNearDuplicate))) return true
   const overlap = temporalOverlapSeconds(a, b)
   const ratio = overlapRatio(a, b)
   const iou = temporalIoU(a, b)
@@ -191,8 +247,8 @@ export function windowsConflict(
 export function formatInsufficientShortsNote(found: number, requested: number): string {
   if (found >= requested) return ''
   if (found <= 0) return 'Não encontramos trechos com qualidade suficiente para este vídeo.'
-  const noun = found === 1 ? 'trecho realmente distinto' : 'trechos distintos'
-  return `Encontramos ${found} ${noun} com qualidade suficiente para este vídeo.`
+  const noun = found === 1 ? 'trecho' : 'trechos'
+  return `Encontramos ${found} ${noun} ${found === 1 ? 'possível' : 'possíveis'} para este vídeo.`
 }
 
 const COUNT_CLAIM_NOTE =
@@ -225,7 +281,7 @@ function uniqueCoverageSeconds(candidate: ShortsTimeWindow, selected: ShortsTime
   return Math.max(0, unique)
 }
 
-/** editorialScore + diversityScore + coverageScore */
+/** editorialScore + diversityScore + coverageScore — favorece centros temporais diferentes. */
 export function selectionScore(
   candidate: ShortsRankedWindow,
   selected: ShortsRankedWindow[],
@@ -235,7 +291,7 @@ export function selectionScore(
   const mid = midpoint(candidate)
   const minDist = Math.min(...selected.map((item) => Math.abs(mid - midpoint(item))))
   const span = Math.max(1, videoDuration)
-  const diversity = Math.min(10, (minDist / span) * 18)
+  const diversity = Math.min(18, (minDist / span) * 32)
   const coverage = Math.min(12, (uniqueCoverageSeconds(candidate, selected) / span) * 20)
   return candidate.score + diversity + coverage
 }
@@ -245,29 +301,40 @@ function qualityFloor(candidates: ShortsRankedWindow[]): number {
   return Math.max(40, best - 50)
 }
 
-export function selectDiverseClips(input: {
-  candidates: ShortsRankedWindow[]
-  count: number
-  videoDuration: number
-  requestedDuration?: number
-  overlapLimit?: ShortsConflictLimit
-  role?: ShortsOverlapRole
-}): ShortsDiversityResult {
-  const typical = input.requestedDuration ?? typicalClipDuration(input.candidates)
-  const policy = resolveOverlapPolicy(
-    input.overlapLimit,
-    adaptiveOverlapPolicy({
-      videoDuration: input.videoDuration,
-      requestedDuration: typical,
-      requestedCount: input.count,
-      role: input.role ?? 'final',
-    }),
-  )
-  const wanted = Math.max(0, input.count)
-  const discarded: ShortsDiscardedWindow[] = []
-  const unique: ShortsRankedWindow[] = []
+function pickWithPolicy(
+  selected: ShortsRankedWindow[],
+  remaining: ShortsRankedWindow[],
+  wanted: number,
+  policy: ShortsOverlapPolicy,
+  videoDuration: number,
+): ShortsRankedWindow[] {
+  const rejected: ShortsRankedWindow[] = []
+  const working = [...remaining]
+  while (selected.length < wanted && working.length > 0) {
+    working.sort(
+      (a, b) =>
+        selectionScore(b, selected, videoDuration) - selectionScore(a, selected, videoDuration) ||
+        b.score - a.score ||
+        a.start - b.start,
+    )
+    const next = working.shift()
+    if (!next) break
+    const conflict = selected.find((item) => windowsConflict(item, next, policy))
+    if (conflict) {
+      rejected.push(next)
+      continue
+    }
+    selected.push(next)
+  }
+  return [...working, ...rejected]
+}
 
-  for (const candidate of input.candidates) {
+function collectUniqueCandidates(
+  candidates: ShortsRankedWindow[],
+  discarded: ShortsDiscardedWindow[],
+): ShortsRankedWindow[] {
+  const unique: ShortsRankedWindow[] = []
+  for (const candidate of candidates) {
     if (!Number.isFinite(candidate.start) || !Number.isFinite(candidate.end)) {
       discarded.push({ id: candidate.id, reason: 'timestamp inválido' })
       continue
@@ -276,9 +343,7 @@ export function selectDiverseClips(input: {
       discarded.push({ id: candidate.id, reason: 'duração inválida' })
       continue
     }
-    const duplicate = unique.find(
-      (item) => Math.abs(item.start - candidate.start) < 0.05 && Math.abs(item.end - candidate.end) < 0.05,
-    )
+    const duplicate = unique.find((item) => sameTimestamps(item, candidate))
     if (duplicate) {
       discarded.push({
         id: candidate.id,
@@ -290,28 +355,96 @@ export function selectDiverseClips(input: {
     }
     unique.push(candidate)
   }
+  return unique
+}
 
-  const floor = qualityFloor(unique)
-  const viable = unique.filter((item) => {
-    if (item.score >= floor) return true
-    discarded.push({ id: item.id, reason: `score abaixo do piso (${floor})` })
-    return false
+export function selectDiverseClips(input: {
+  candidates: ShortsRankedWindow[]
+  count: number
+  videoDuration: number
+  requestedDuration?: number
+  overlapLimit?: ShortsConflictLimit
+  role?: ShortsOverlapRole
+}): ShortsDiversityResult {
+  const typical = input.requestedDuration ?? typicalClipDuration(input.candidates)
+  const role = input.role ?? 'final'
+  const fallback = adaptiveOverlapPolicy({
+    videoDuration: input.videoDuration,
+    requestedDuration: typical,
+    requestedCount: input.count,
+    role,
   })
+  const wanted = Math.max(0, input.count)
+  const discarded: ShortsDiscardedWindow[] = []
+  const unique = collectUniqueCandidates(input.candidates, discarded)
+  const floor = qualityFloor(unique)
+  const viable = unique.filter((item) => item.score >= floor)
   const pool = viable.length > 0 ? viable : unique
+  for (const item of unique) {
+    if (!pool.includes(item) && item.score < floor) {
+      discarded.push({ id: item.id, reason: `score abaixo do piso (${floor})` })
+    }
+  }
 
-  const remaining = [...pool].sort((a, b) => b.score - a.score || a.start - b.start)
   const selected: ShortsRankedWindow[] = []
+  const useProgressive = role === 'final' && input.overlapLimit == null
 
-  while (selected.length < wanted && remaining.length > 0) {
-    remaining.sort(
-      (a, b) =>
-        selectionScore(b, selected, input.videoDuration) - selectionScore(a, selected, input.videoDuration) ||
-        b.score - a.score ||
-        a.start - b.start,
-    )
-    const next = remaining.shift()
-    if (!next) break
-    const conflict = selected.find((item) => windowsConflict(item, next, policy))
+  if (!useProgressive) {
+    const policy = resolveOverlapPolicy(input.overlapLimit, fallback)
+    const leftover = pickWithPolicy(selected, pool, wanted, policy, input.videoDuration)
+    for (const next of leftover) {
+      const conflict = selected.find((item) => windowsConflict(item, next, policy))
+      if (conflict) {
+        discarded.push({
+          id: next.id,
+          reason: 'overlap excessivo',
+          overlapWith: conflict.id,
+          overlapPct: Math.round(overlapRatio(conflict, next) * 100),
+        })
+      }
+    }
+    selected.sort((a, b) => a.start - b.start || b.score - a.score)
+    return { selected, discarded, pass: policy.pass }
+  }
+
+  let remaining = [...pool]
+  let lastPass = 1
+  const lastPolicy: ShortsOverlapPolicy = {
+    ...fallback,
+    role: 'final',
+    maxOverlapRatio: 0.99,
+    maxIoU: 0.99,
+    maxOverlapSeconds: Number.POSITIVE_INFINITY,
+    nearDuplicateOnly: false,
+    relaxNearDuplicate: true,
+    exactTimestampsOnly: true,
+    pass: 5,
+  }
+
+  for (const pass of SHORTS_OVERLAP_PASSES) {
+    if (selected.length >= wanted) break
+    const policy = overlapPassPolicy(pass, fallback)
+    remaining = pickWithPolicy(selected, remaining, wanted, policy, input.videoDuration)
+    lastPass = pass.id
+  }
+
+  if (selected.length < wanted) {
+    remaining = pickWithPolicy(selected, remaining, wanted, lastPolicy, input.videoDuration)
+    lastPass = 5
+  }
+
+  if (selected.length < wanted) {
+    const extra = unique.filter((item) => !selected.some((pick) => pick.id === item.id))
+    remaining = pickWithPolicy(selected, extra, wanted, lastPolicy, input.videoDuration)
+    lastPass = 5
+  }
+
+  for (const next of remaining) {
+    const conflict = selected.find((item) => sameTimestamps(item, next) || windowsConflict(item, next, {
+      ...fallback,
+      exactTimestampsOnly: true,
+      pass: 5,
+    }))
     if (conflict) {
       discarded.push({
         id: next.id,
@@ -319,13 +452,11 @@ export function selectDiverseClips(input: {
         overlapWith: conflict.id,
         overlapPct: Math.round(overlapRatio(conflict, next) * 100),
       })
-      continue
     }
-    selected.push(next)
   }
 
   selected.sort((a, b) => a.start - b.start || b.score - a.score)
-  return { selected, discarded }
+  return { selected, discarded, pass: lastPass }
 }
 
 export function withCandidateIds<T extends object>(candidates: T[]): Array<T & { id: string }> {

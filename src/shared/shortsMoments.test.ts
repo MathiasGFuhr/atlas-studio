@@ -108,6 +108,30 @@ describe('shortsMoments', () => {
     expect(clips.some((clip) => clip.start >= 20 && clip.end >= 54)).toBe(true)
   })
 
+  it('em vídeo de 56.6s / 45s / 3 Shorts gera um pool com janelas diferentes', () => {
+    const clips = buildLocalShortsCandidates({
+      profile: 'history',
+      duration: 56.6,
+      requestedDuration: 45,
+      durationMode: 'approximate',
+      count: 3,
+      analysis: {
+        duration: 56.6,
+        sampleRate: 16000,
+        energy: [],
+        frameDuration: 0.046,
+        silence: [],
+        onsets: [],
+      },
+      scenes: [{ time: 8 }],
+      cues: [],
+    })
+    expect(clips.length).toBeGreaterThanOrEqual(3)
+    expect(new Set(clips.map((clip) => `${clip.start.toFixed(1)}-${clip.end.toFixed(1)}`)).size).toBe(clips.length)
+    expect(clips.some((clip) => clip.start <= 1)).toBe(true)
+    expect(clips.some((clip) => clip.end >= 54)).toBe(true)
+  })
+
   it('ajusta início e fim para não cortar no meio da fala', () => {
     const snapped = snapClipToCues(
       10.2,

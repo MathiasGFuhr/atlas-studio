@@ -182,7 +182,11 @@ export function buildLocalShortsCandidates(input: {
     })
   }
 
-  const gridStep = Math.min(5, Math.max(2.5, target / 6))
+  const spare = Math.max(0, duration - Math.min(target, duration))
+  const gridStep =
+    spare > 0 && spare < target
+      ? Math.min(2, Math.max(0.5, spare / Math.max(8, poolSize - 1)))
+      : Math.min(5, Math.max(2.5, target / 6))
   const gridStarts = new Set<number>()
   const maxStart = Math.max(0, duration - Math.min(target, duration))
   for (let t = 0; t <= maxStart + 0.001; t += gridStep) {
