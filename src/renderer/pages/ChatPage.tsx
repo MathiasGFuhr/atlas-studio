@@ -30,6 +30,7 @@ import { useAgentModels } from '../hooks/useAgentModels'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { notifyChannelsChanged } from '../lib/channelEvents'
 import { notifyTasksChanged } from '../lib/taskEvents'
+import { notifyPromptsChanged } from '../lib/promptEvents'
 import { useToast } from '../components/Toast'
 
 function formatTime(iso: string) {
@@ -300,6 +301,9 @@ export function ChatPage({
       notifyChannelsChanged()
     }
     if (names.some((name) => name.includes('task'))) notifyTasksChanged()
+    if (names.some((name) => name.includes('quick_prompt') || name.includes('prompt'))) {
+      notifyPromptsChanged()
+    }
   }
 
   async function saveRename(id: string) {

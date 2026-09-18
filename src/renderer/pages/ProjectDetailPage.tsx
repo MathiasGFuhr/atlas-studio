@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CalendarDays, Clapperboard, FileText, MessageSquare, Music2, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
+import { ArrowLeft, Clapperboard, FileText, MessageSquare, Music2, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
 import type { Channel, Project, ProjectType, ScriptRecord } from '@shared/types'
 import type { MusicTrack } from '@shared/musicAnalysis'
 import { formatTimecode } from '@shared/musicAnalysis'
-import { channelVideoPath, formatMusicProjectPublicationLine } from '@shared/channelVideos'
+import { channelVideoPath } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { Card } from '../components/Card'
@@ -15,9 +15,11 @@ import {
   type ProjectFormValues,
 } from '../components/ProjectEditorModal'
 import { StatusBadge } from '../components/StatusBadge'
+import { MusicPublicationCard } from '../components/MusicPublicationCard'
 import { ProjectFolderPanel } from '../components/ProjectFolderPanel'
 import { getAtlasApi } from '../lib/api'
 import { notifyProjectsChanged } from '../lib/projectEvents'
+import { onVideosChanged } from '../lib/videoEvents'
 import { useToast } from '../components/Toast'
 import { openAtlasChat } from '../lib/chatEvents'
 import { ENVIRONMENTS, environmentBreadcrumb } from '../lib/environments'
@@ -80,6 +82,12 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
 
   useEffect(() => {
     void load()
+  }, [load])
+
+  useEffect(() => {
+    return onVideosChanged(() => {
+      void load()
+    })
   }, [load])
 
   async function importTrack() {
@@ -174,6 +182,34 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-4">
+          {projectType === 'music' && project.scheduledVideoId ? (
+            <div className="space-y-3">
+              <h2 className="text-base font-semibold text-text">Publicação</h2>
+              <MusicPublicationCard
+                title={project.scheduledVideoTitle || project.name}
+                description={project.scheduledVideoDescription}
+                thumbnailDataUrl={project.scheduledVideoThumbnailDataUrl}
+                channelName={project.scheduledVideoChannelName || project.channelName}
+                scheduledDate={project.scheduledDate}
+                status={project.scheduledVideoStatus}
+                onOpen={
+                  project.scheduledVideoChannelId
+                    ? () =>
+                        navigate(
+                          channelVideoPath(
+                            project.scheduledVideoChannelId!,
+                            project.scheduledVideoId!,
+                            project.scheduledVideoStatus === 'publicado'
+                              ? { tab: 'publicados' }
+                              : undefined,
+                          ),
+                        )
+                    : undefined
+                }
+              />
+            </div>
+          ) : null}
+
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold text-text">
               {projectType === 'history' ? 'Roteiros do projeto' : 'Faixas do projeto'}
@@ -295,38 +331,6 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
           </Button>
 
           <ProjectFolderPanel project={project} onChange={setProject} />
-
-          {projectType === 'music' && project.scheduledVideoId && project.scheduledVideoChannelId ? (
-            <Card padding="sm" className="space-y-2">
-              <p className="text-xs font-medium text-muted">Publicação</p>
-              <p className="text-sm text-text">
-                {formatMusicProjectPublicationLine({
-                  channelName: project.channelName,
-                  scheduledDate: project.scheduledDate,
-                })}
-              </p>
-              <p className="text-xs text-muted-2">
-                {project.scheduledVideoStatus === 'publicado' ? 'Publicado' : 'Agendado'}
-              </p>
-              <Button
-                variant="secondary"
-                fullWidth
-                className="h-9 text-xs"
-                icon={<CalendarDays className="h-3.5 w-3.5" />}
-                onClick={() =>
-                  navigate(
-                    channelVideoPath(
-                      project.scheduledVideoChannelId!,
-                      project.scheduledVideoId!,
-                      project.scheduledVideoStatus === 'publicado' ? { tab: 'publicados' } : undefined,
-                    ),
-                  )
-                }
-              >
-                {project.scheduledVideoStatus === 'publicado' ? 'Abrir em vídeos publicados' : 'Abrir no calendário'}
-              </Button>
-            </Card>
-          ) : null}
 
           <Card padding="sm" className="space-y-2 text-xs text-muted">
             <div className="flex justify-between gap-3">

@@ -19,6 +19,7 @@ describe('Atlas action catalog', () => {
 
   it('exposes definitions used by the registry', () => {
     expect(getActionDefinition('save_quick_prompt')?.category).toBe('quick_prompts')
+    expect(getActionDefinition('save_quick_prompt')?.description).toMatch(/Meus prompts/)
   })
 })
 

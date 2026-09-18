@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, FolderKanban, FolderOpen, Files, Pencil, Plus, Scissors, Search, Tag, Trash2 } from 'lucide-react'
 import type { Channel, Project, ProjectType } from '@shared/types'
-import { formatMusicProjectPublicationLine } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
+import { MusicPublicationCard } from '../components/MusicPublicationCard'
 import { ConfirmDialog } from '../components/Modal'
 import {
   ProjectEditorModal,
@@ -288,33 +288,36 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
               className="flex cursor-pointer flex-col gap-3 transition-colors hover:border-[#334049]"
               onClick={() => navigate(projectPath(projectType, project.id))}
             >
-              <div className="flex items-start gap-3">
-                <div
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: `${env.color}1f`, color: env.color }}
-                >
-                  <env.icon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-[15px] font-semibold text-text">{project.name}</h3>
-                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">
-                    {project.description || 'Sem descrição'}
-                  </p>
-                  <p className="mt-1.5 truncate text-xs text-muted-2">
-                    {project.channelName ? `Canal: ${project.channelName}` : 'Sem canal vinculado'}
-                  </p>
-                  {projectType === 'music' && project.scheduledDate ? (
-                    <p className="mt-1 truncate text-xs text-accent/80">
-                      {formatMusicProjectPublicationLine({
-                        channelName: project.channelName,
-                        scheduledDate: project.scheduledDate,
-                      })}
-                      {' · '}
-                      {project.scheduledVideoStatus === 'publicado' ? 'Publicado' : 'Agendado'}
+              {projectType === 'music' && project.scheduledVideoId ? (
+                <MusicPublicationCard
+                  bare
+                  compact
+                  title={project.scheduledVideoTitle || project.name}
+                  description={project.scheduledVideoDescription}
+                  thumbnailDataUrl={project.scheduledVideoThumbnailDataUrl}
+                  channelName={project.scheduledVideoChannelName || project.channelName}
+                  scheduledDate={project.scheduledDate}
+                  status={project.scheduledVideoStatus}
+                />
+              ) : (
+                <div className="flex items-start gap-3">
+                  <div
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: `${env.color}1f`, color: env.color }}
+                  >
+                    <env.icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-[15px] font-semibold text-text">{project.name}</h3>
+                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">
+                      {project.description || 'Sem descrição'}
                     </p>
-                  ) : null}
+                    <p className="mt-1.5 truncate text-xs text-muted-2">
+                      {project.channelName ? `Canal: ${project.channelName}` : 'Sem canal vinculado'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex items-center justify-between text-xs text-muted">
                 <span>

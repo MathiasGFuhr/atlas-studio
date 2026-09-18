@@ -9,7 +9,7 @@ import {
   type ProjectType,
   type TaskRelatedType,
 } from '../../../shared/types'
-import { MUSIC_PROMPTS_PATH } from '../../../shared/workspaceCapabilities'
+import { MUSIC_PROMPTS_CUSTOM_PATH } from '../../../shared/workspaceCapabilities'
 import { isTaskCategory, isTaskPriority, isTaskRelatedType, todayYmd } from '../../../shared/tasks'
 import { channelRepository } from '../../repositories/channelRepository'
 import { nicheRepository } from '../../repositories/nicheRepository'
@@ -651,42 +651,37 @@ export function createAtlasActionRegistry(deps: {
       title: prompt.name,
       entityType: 'quick_prompt',
       entityId: prompt.id,
-      navigateTo: MUSIC_PROMPTS_PATH,
-      navigateLabel: 'Ver em Prompts rápidos',
+      navigateTo: MUSIC_PROMPTS_CUSTOM_PATH,
+      navigateLabel: 'Abrir Meus prompts',
       data: prompt,
     })
   })
 
-  function savePrompt(input: Record<string, unknown>, ctx: AtlasActionContext): ChatActionResult {
-    const name = str(input, 'name')
+  function savePrompt(input: Record<string, unknown>): ChatActionResult {
+    const name = str(input, 'name') || str(input, 'title')
     const text = str(input, 'text') || str(input, 'content') || str(input, 'prompt')
     if (!name) throw new Error('Informe o nome do prompt.')
     if (!text) throw new Error('Informe o texto do prompt para salvar.')
-    const projectId =
-      str(input, 'projectId') ||
-      (ctx.client.useProjectContext && ctx.client.projectType === 'music'
-        ? ctx.client.projectId ?? ''
-        : '')
     const created = quickPromptRepository.create({
       name,
       text,
       category: str(input, 'category') || 'custom',
-      projectId: projectId || null,
+      projectId: str(input, 'projectId') || null,
     })
     return ok({
       name: 'save_quick_prompt',
-      title: 'Prompt salvo',
+      title: 'Prompt salvo em Meus prompts',
       subtitle: created.name,
       entityType: 'quick_prompt',
       entityId: created.id,
-      navigateTo: MUSIC_PROMPTS_PATH,
-      navigateLabel: 'Ver em Prompts rápidos',
+      navigateTo: MUSIC_PROMPTS_CUSTOM_PATH,
+      navigateLabel: 'Abrir Meus prompts',
       data: { id: created.id, name: created.name },
     })
   }
 
-  registry.register('save_quick_prompt', (input, ctx) => savePrompt(input, ctx))
-  registry.register('create_quick_prompt', (input, ctx) => savePrompt(input, ctx))
+  registry.register('save_quick_prompt', (input) => savePrompt(input))
+  registry.register('create_quick_prompt', (input) => savePrompt(input))
 
   registry.register('update_quick_prompt', (input) => {
     const prompt = findPrompt(input)
@@ -702,8 +697,8 @@ export function createAtlasActionRegistry(deps: {
       subtitle: updated.name,
       entityType: 'quick_prompt',
       entityId: updated.id,
-      navigateTo: MUSIC_PROMPTS_PATH,
-      navigateLabel: 'Ver em Prompts rápidos',
+      navigateTo: MUSIC_PROMPTS_CUSTOM_PATH,
+      navigateLabel: 'Abrir Meus prompts',
     })
   })
 
@@ -728,8 +723,8 @@ export function createAtlasActionRegistry(deps: {
       title: bool(input, 'favorite', true) ? 'Prompt favoritado' : 'Favorito removido',
       entityType: 'quick_prompt',
       entityId: id,
-      navigateTo: MUSIC_PROMPTS_PATH,
-      navigateLabel: 'Ver em Prompts rápidos',
+      navigateTo: MUSIC_PROMPTS_CUSTOM_PATH,
+      navigateLabel: 'Abrir Meus prompts',
     })
   })
 

@@ -12,7 +12,7 @@ export function PromptsPage() {
       <PageHeader
         breadcrumb={environmentBreadcrumb('music', 'Prompts')}
         title="Prompts"
-        subtitle="Biblioteca de Prompts rápidos do ambiente Música."
+        subtitle="Presets de imagem e animação, e os prompts que você criar."
       />
       <QuickPromptsPanel />
     </PageShell>

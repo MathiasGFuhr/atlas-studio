@@ -3,6 +3,7 @@ import { getDb } from '../db/database'
 import type { ChannelVideoStatus, Project, ProjectType } from '../../shared/types'
 import { isProjectType, MUSIC_PROJECT_HAS_PUBLICATION_ERROR } from '../../shared/types'
 import { folderExists } from '../services/storage/projectFolders'
+import { readImageDataUrl } from '../services/storage/profilePhoto'
 import { channelRepository } from './channelRepository'
 
 type ProjectRow = {
@@ -22,6 +23,9 @@ type ProjectRow = {
   scheduled_date?: string | null
   scheduled_video_status?: string | null
   scheduled_video_title?: string | null
+  scheduled_video_description?: string | null
+  scheduled_video_thumbnail_path?: string | null
+  scheduled_video_channel_name?: string | null
 }
 
 function mapProject(row: ProjectRow): Project {
@@ -43,6 +47,9 @@ function mapProject(row: ProjectRow): Project {
     scheduledDate: row.scheduled_date?.trim() || null,
     scheduledVideoStatus: (row.scheduled_video_status as ChannelVideoStatus | null) ?? null,
     scheduledVideoTitle: row.scheduled_video_title ?? null,
+    scheduledVideoDescription: row.scheduled_video_description ?? null,
+    scheduledVideoThumbnailDataUrl: readImageDataUrl(row.scheduled_video_thumbnail_path ?? ''),
+    scheduledVideoChannelName: row.scheduled_video_channel_name ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -57,10 +64,14 @@ const SELECT_WITH_COUNTS = `
     v.channel_id AS scheduled_video_channel_id,
     v.scheduled_date AS scheduled_date,
     v.status AS scheduled_video_status,
-    v.title AS scheduled_video_title
+    v.title AS scheduled_video_title,
+    v.description AS scheduled_video_description,
+    v.thumbnail_path AS scheduled_video_thumbnail_path,
+    vc.name AS scheduled_video_channel_name
   FROM projects p
   LEFT JOIN channels c ON c.id = p.channel_id
   LEFT JOIN channel_videos v ON v.project_id = p.id
+  LEFT JOIN channels vc ON vc.id = v.channel_id
 `
 
 function resolveChannelId(projectType: ProjectType, channelId?: string | null): string | null {

@@ -10,6 +10,7 @@ import {
   resolveWorkspaceCapabilities,
   contentAreaFromPath,
   MUSIC_PROMPTS_PATH,
+  MUSIC_PROMPTS_CUSTOM_PATH,
 } from './workspaceCapabilities'
 
 describe('detectContentAreaPresence', () => {
@@ -110,6 +111,11 @@ describe('rotas', () => {
     expect(contentAreaFromPath('/prompts')).toBe('music')
     expect(contentAreaFromPath('/musica')).toBe('music')
     expect(contentAreaFromPath('/historia')).toBe('history')
+  })
+
+  it('abre a aba de prompts do usuário', () => {
+    expect(MUSIC_PROMPTS_CUSTOM_PATH).toBe('/musica/prompts?tab=custom')
+    expect(contentAreaFromPath(MUSIC_PROMPTS_CUSTOM_PATH.split('?')[0])).toBe('music')
   })
 })
 

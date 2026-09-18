@@ -53,6 +53,10 @@ export interface Project {
   scheduledDate?: string | null
   scheduledVideoStatus?: ChannelVideoStatus | null
   scheduledVideoTitle?: string | null
+  scheduledVideoDescription?: string | null
+  scheduledVideoThumbnailDataUrl?: string | null
+  /** Nome do canal da publicação vinculada. Calculado na leitura. */
+  scheduledVideoChannelName?: string | null
   createdAt: string
   updatedAt: string
 }

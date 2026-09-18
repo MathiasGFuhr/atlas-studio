@@ -151,6 +151,8 @@ export function isContentAreaEnabled(
 
 /** Biblioteca global de Prompts rápidos — pertence ao ambiente Música. */
 export const MUSIC_PROMPTS_PATH = '/musica/prompts'
+/** Aba dos prompts criados pelo usuário (chat ou cadastro manual). */
+export const MUSIC_PROMPTS_CUSTOM_PATH = `${MUSIC_PROMPTS_PATH}?tab=custom`
 
 export function contentAreaFromPath(pathname: string): ContentArea | null {
   if (pathname === '/prompts' || pathname.startsWith('/prompts/')) return 'music'

@@ -222,14 +222,15 @@ export const ATLAS_ACTION_CATALOG: ChatActionDefinition[] = [
   },
   {
     name: 'save_quick_prompt',
-    description: 'Salva um prompt (gerado no chat ou ditado) nos Prompts rápidos reais do Atlas.',
+    description:
+      'Cria um prompt na aba Prompts → Meus prompts. Use sempre que o usuário pedir para salvar/guardar um prompt. name = título curto; text = prompt completo. projectId só se o usuário pedir para limitar a um projeto.',
     category: 'quick_prompts',
     confirmationRequired: false,
     inputSchema: { name: 'string', text: 'string', category: 'string?', projectId: 'string?' },
   },
   {
     name: 'create_quick_prompt',
-    description: 'Alias de save_quick_prompt.',
+    description: 'Alias de save_quick_prompt — cria o prompt em Prompts → Meus prompts.',
     category: 'quick_prompts',
     confirmationRequired: false,
     inputSchema: { name: 'string', text: 'string', category: 'string?', projectId: 'string?' },

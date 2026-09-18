@@ -130,6 +130,58 @@ const settings: AppSettings = {
   musicExportFolder: '',
 }
 
+function emptyPublicationFields(): Pick<
+  Project,
+  | 'scheduledVideoId'
+  | 'scheduledVideoChannelId'
+  | 'scheduledDate'
+  | 'scheduledVideoStatus'
+  | 'scheduledVideoTitle'
+  | 'scheduledVideoDescription'
+  | 'scheduledVideoThumbnailDataUrl'
+  | 'scheduledVideoChannelName'
+> {
+  return {
+    scheduledVideoId: null,
+    scheduledVideoChannelId: null,
+    scheduledDate: null,
+    scheduledVideoStatus: null,
+    scheduledVideoTitle: null,
+    scheduledVideoDescription: null,
+    scheduledVideoThumbnailDataUrl: null,
+    scheduledVideoChannelName: null,
+  }
+}
+
+function applyVideoPublication(project: Project, video: ChannelVideo): Project {
+  const channel = channels.find((item) => item.id === video.channelId)
+  return {
+    ...project,
+    scheduledVideoId: video.id,
+    scheduledVideoChannelId: video.channelId,
+    scheduledDate: video.scheduledDate,
+    scheduledVideoStatus: video.status,
+    scheduledVideoTitle: video.title,
+    scheduledVideoDescription: video.description ?? '',
+    scheduledVideoThumbnailDataUrl: video.thumbnailDataUrl ?? null,
+    scheduledVideoChannelName: channel?.name ?? project.channelName ?? null,
+  }
+}
+
+function syncProjectPublication(video: ChannelVideo) {
+  if (!video.projectId) return
+  const idx = projects.findIndex((project) => project.id === video.projectId)
+  if (idx < 0) return
+  projects[idx] = applyVideoPublication(projects[idx], video)
+}
+
+function clearProjectPublication(projectId: string | null) {
+  if (!projectId) return
+  const idx = projects.findIndex((project) => project.id === projectId)
+  if (idx < 0) return
+  projects[idx] = { ...projects[idx], ...emptyPublicationFields() }
+}
+
 function emptyAgentSnapshot(provider: AgentProviderId): AgentModelSnapshot {
   return {
     provider,
@@ -185,11 +237,7 @@ export const mockApi = {
         folderExists: false,
         scriptCount: 0,
         trackCount: 0,
-        scheduledVideoId: null,
-        scheduledVideoChannelId: null,
-        scheduledDate: null,
-        scheduledVideoStatus: null,
-        scheduledVideoTitle: null,
+        ...emptyPublicationFields(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -463,17 +511,7 @@ export const mockApi = {
         updatedAt: new Date().toISOString(),
       }
       if (projectId) {
-        const idx = projects.findIndex((p) => p.id === projectId)
-        if (idx >= 0) {
-          projects[idx] = {
-            ...projects[idx],
-            scheduledVideoId: video.id,
-            scheduledVideoChannelId: video.channelId,
-            scheduledDate: video.scheduledDate,
-            scheduledVideoStatus: video.status,
-            scheduledVideoTitle: video.title,
-          }
-        }
+        syncProjectPublication(video)
       }
       videos.push(video)
       return video
@@ -482,6 +520,7 @@ export const mockApi = {
       const idx = videos.findIndex((v) => v.id === id)
       if (idx < 0) return null
       videos[idx] = { ...videos[idx], ...patch, updatedAt: new Date().toISOString() }
+      syncProjectPublication(videos[idx])
       return videos[idx]
     },
     remove: async (id: string) => {
@@ -489,19 +528,7 @@ export const mockApi = {
       if (idx < 0) return false
       const current = videos[idx]
       videos.splice(idx, 1)
-      if (current.projectId) {
-        const projectIdx = projects.findIndex((p) => p.id === current.projectId)
-        if (projectIdx >= 0) {
-          projects[projectIdx] = {
-            ...projects[projectIdx],
-            scheduledVideoId: null,
-            scheduledVideoChannelId: null,
-            scheduledDate: null,
-            scheduledVideoStatus: null,
-            scheduledVideoTitle: null,
-          }
-        }
-      }
+      clearProjectPublication(current.projectId)
       return true
     },
     setThumbnail: async (videoId: string, sourcePath: string) => {
@@ -513,6 +540,7 @@ export const mockApi = {
         thumbnailDataUrl: sourcePath,
         updatedAt: new Date().toISOString(),
       }
+      syncProjectPublication(videos[idx])
       return videos[idx]
     },
     analyzeTitle: async (_request: AnalyzeTitleRequest): Promise<AnalyzeTitleResult> => {
@@ -879,7 +907,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.16.0',
+      currentVersion: '1.17.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

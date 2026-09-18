@@ -22,6 +22,7 @@ import { Textarea } from './Textarea'
 import { ConfirmDialog, Modal } from './Modal'
 import { presetFavoriteKey } from '../lib/quickPromptOptions'
 import { getAtlasApi } from '../lib/api'
+import { notifyPromptsChanged, onPromptsChanged } from '../lib/promptEvents'
 import { useToast } from './Toast'
 import { cn } from '../lib/utils'
 
@@ -83,6 +84,7 @@ export function QuickPromptLibrary({
   onFavoritesChange,
   onCopy,
   copied,
+  embedded = false,
 }: {
   /** `null` quando aberto fora de um projeto: só os prompts globais aparecem. */
   projectId: string | null
@@ -90,6 +92,8 @@ export function QuickPromptLibrary({
   onFavoritesChange: (favorites: string[]) => void
   onCopy: (text: string, key: string, message?: string) => Promise<void>
   copied: string | null
+  /** Sem o card externo, para usar dentro da aba Meus prompts. */
+  embedded?: boolean
 }) {
   const api = getAtlasApi()
   const { push } = useToast()
@@ -107,6 +111,12 @@ export function QuickPromptLibrary({
 
   useEffect(() => {
     void load()
+  }, [load])
+
+  useEffect(() => {
+    return onPromptsChanged(() => {
+      void load()
+    })
   }, [load])
 
   const items = useMemo(() => {
@@ -175,6 +185,7 @@ export function QuickPromptLibrary({
         push('Prompt salvo.', 'success')
       }
       setFormOpen(false)
+      notifyPromptsChanged()
       await load()
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao salvar o prompt', 'error')
@@ -188,6 +199,7 @@ export function QuickPromptLibrary({
     try {
       await api.quickPrompts.remove(target.id)
       push('Prompt excluído.', 'success')
+      notifyPromptsChanged()
       await load()
       onFavoritesChange(await api.quickPrompts.listFavorites())
     } catch (error) {
@@ -195,14 +207,14 @@ export function QuickPromptLibrary({
     }
   }
 
-  return (
-    <Card padding="sm" className="space-y-3">
+  const body = (
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-2" />
           <Input
             className="pl-9"
-            placeholder="Buscar prompts salvos e presets..."
+            placeholder="Buscar meus prompts..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -218,17 +230,22 @@ export function QuickPromptLibrary({
       </div>
 
       {items.length === 0 ? (
-        <p className="py-4 text-center text-xs text-muted">
-          {query
-            ? 'Nenhum prompt ou preset encontrado para esta busca.'
-            : 'Nenhum prompt personalizado ainda. Use a busca para encontrar presets ou crie o seu.'}
-        </p>
+        <div className="flex flex-col items-center py-10 text-center">
+          <p className="text-sm font-medium text-text">
+            {query ? 'Nenhum prompt encontrado' : 'Nenhum prompt criado ainda'}
+          </p>
+          <p className="mt-1 max-w-md text-xs leading-relaxed text-muted">
+            {query
+              ? 'Nenhum prompt ou preset encontrado para esta busca.'
+              : 'Peça para a IA salvar um prompt na conversa ou clique em Adicionar prompt.'}
+          </p>
+        </div>
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
             <div
               key={item.key}
-              className="flex items-center gap-2 rounded-xl border border-border bg-card-2 px-3 py-2"
+              className="flex items-start gap-2 rounded-xl border border-border bg-card-2 px-3 py-2"
             >
               <button
                 type="button"
@@ -244,13 +261,14 @@ export function QuickPromptLibrary({
               </button>
 
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-text">{item.name}</div>
-                <div className="truncate text-xs text-muted-2">
+                <div className="truncate text-sm font-medium text-text">{item.name}</div>
+                <div className="text-xs text-muted-2">
                   {CATEGORY_LABELS[item.category] ?? item.category}
                   {item.custom?.projectId ? ' · somente este projeto' : ''}
-                  {' · '}
-                  {item.text}
                 </div>
+                <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-muted">
+                  {item.text}
+                </p>
               </div>
 
               <Button
@@ -350,6 +368,13 @@ export function QuickPromptLibrary({
         onConfirm={() => void remove()}
         onClose={() => setRemoving(null)}
       />
+    </div>
+  )
+
+  if (embedded) return body
+  return (
+    <Card padding="sm" className="space-y-3">
+      {body}
     </Card>
   )
 }

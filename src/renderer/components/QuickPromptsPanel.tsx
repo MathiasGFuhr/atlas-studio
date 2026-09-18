@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Check, Copy, Image, Layers, Sparkles, Video } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Bookmark, Check, Copy, Image, Layers, Sparkles, Video } from 'lucide-react'
 import {
   ACTIONS,
   PERFORMANCES,
@@ -44,23 +45,29 @@ import type { AnalyzeQuickPromptRequest } from '@shared/types'
 /**
  * Prompts rápidos — exclusivo dos projetos de Música.
  *
- * Duas categorias, na mesma área:
+ * Três categorias, na mesma área:
  * - "Criar imagem": gera a imagem de referência (módulos de imagem).
  * - "Animar / Lipsync": anima uma imagem existente (módulos de vídeo).
+ * - "Meus prompts": o que o usuário criou ou pediu para a IA salvar.
  *
  * Toda a composição acontece localmente a partir dos presets de
  * `@shared/quickPrompts`. Selecionar já produz o prompt final.
  * O Antigravity entra só se o usuário clicar em analisar ou limpar.
  */
 
-type QuickPromptTab = 'image' | 'animation'
+type QuickPromptTab = 'image' | 'animation' | 'custom'
 
 /** A última categoria usada é lembrada entre sessões. */
 const TAB_STORAGE_KEY = 'atlas.quickPrompts.tab'
 
+function parseTab(value: string | null | undefined): QuickPromptTab | null {
+  if (value === 'image' || value === 'animation' || value === 'custom') return value
+  return null
+}
+
 function readStoredTab(): QuickPromptTab {
   try {
-    return window.localStorage.getItem(TAB_STORAGE_KEY) === 'animation' ? 'animation' : 'image'
+    return parseTab(window.localStorage.getItem(TAB_STORAGE_KEY)) ?? 'image'
   } catch {
     return 'image'
   }
@@ -74,8 +81,11 @@ function readStoredTab(): QuickPromptTab {
 export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) {
   const api = getAtlasApi()
   const { push } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [tab, setTab] = useState<QuickPromptTab>(readStoredTab)
+  const [tab, setTab] = useState<QuickPromptTab>(
+    () => parseTab(searchParams.get('tab')) ?? readStoredTab(),
+  )
 
   const [performanceId, setPerformanceId] = useState<PerformanceId>('singer-solo')
   const [actionId, setActionId] = useState<ActionId>('standing')
@@ -99,6 +109,11 @@ export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) 
   useEffect(() => {
     void loadFavorites()
   }, [loadFavorites])
+
+  useEffect(() => {
+    const fromUrl = parseTab(searchParams.get('tab'))
+    if (fromUrl) setTab(fromUrl)
+  }, [searchParams])
 
   const performance = useMemo(
     () => PERFORMANCES.find((item) => item.id === performanceId),
@@ -206,6 +221,7 @@ export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) 
     } catch {
       /* preferência de UI: se o storage falhar, seguimos sem lembrar */
     }
+    setSearchParams(next === 'image' ? {} : { tab: next }, { replace: true })
   }
 
   function generateVariations() {
@@ -266,7 +282,9 @@ export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) 
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-text">Prompts rápidos</h2>
               <p className="text-xs text-muted">
-                Blocos combinados localmente. Sem IA, sem espera — selecione e copie.
+                {tab === 'custom'
+                  ? 'Prompts que você criou ou pediu para a IA salvar.'
+                  : 'Blocos combinados localmente. Sem IA, sem espera — selecione e copie.'}
               </p>
             </div>
           </div>
@@ -286,6 +304,13 @@ export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) 
             >
               Animar / Lipsync
             </TabButton>
+            <TabButton
+              active={tab === 'custom'}
+              icon={<Bookmark className="h-3.5 w-3.5" />}
+              onClick={() => selectTab('custom')}
+            >
+              Meus prompts
+            </TabButton>
           </div>
         </div>
 
@@ -293,6 +318,15 @@ export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) 
           <ImagePromptsForm
             favorites={favoriteSet}
             onToggleFavorite={(category, id) => void toggleFavorite(category, id)}
+            onCopy={copy}
+            copied={copied}
+          />
+        ) : tab === 'custom' ? (
+          <QuickPromptLibrary
+            embedded
+            projectId={projectId ?? null}
+            favorites={favoriteSet}
+            onFavoritesChange={setFavorites}
             onCopy={copy}
             copied={copied}
           />
@@ -499,14 +533,6 @@ export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) 
           </>
         )}
       </Card>
-
-      <QuickPromptLibrary
-        projectId={projectId ?? null}
-        favorites={favoriteSet}
-        onFavoritesChange={setFavorites}
-        onCopy={copy}
-        copied={copied}
-      />
     </div>
   )
 }
