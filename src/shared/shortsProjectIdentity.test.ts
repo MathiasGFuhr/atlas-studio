@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ShortsClip, ShortsJob } from './shorts'
+import { DEFAULT_FRAMING_SETTINGS } from './shortsFraming'
 import {
   findExistingShortsProject,
   mergeReanalysisClips,
@@ -41,6 +42,8 @@ function job(partial: Partial<ShortsJob> = {}): ShortsJob {
     requestedDuration: 30,
     durationMode: 'approximate',
     aspectMode: 'center_9_16',
+    framingTrack: [],
+    framingSettings: DEFAULT_FRAMING_SETTINGS,
     captionsEnabled: true,
     probe: { name: 'GEGEN DEN TAKT.mp4', path: '', duration: 287, width: 1920, height: 1080, fps: 30, aspectRatio: '16:9', format: 'mp4', hasAudio: true },
     clips: [],

@@ -1,4 +1,5 @@
 import type { ShortsAspectMode, ShortsClip, ShortsClipPatch, ShortsCopyFields } from '@shared/shorts'
+import type { ShortsFramingPlan } from '@shared/shortsFraming'
 import { clipDuration, formatShortsTimecode, shortsClipPreviewKey } from '@shared/shorts'
 import { formatClipLength } from '@shared/shortsDuration'
 import { Button } from '../Button'
@@ -13,10 +14,13 @@ export function ShortsResultCard({
   aspectMode,
   sourceWidth,
   sourceHeight,
+  framingPlan,
+  picking,
   playing,
   busy,
   regenerating,
   onPlayingChange,
+  onAssignPoint,
   onAdjust,
   onExport,
   onPersist,
@@ -29,10 +33,13 @@ export function ShortsResultCard({
   aspectMode: ShortsAspectMode
   sourceWidth: number
   sourceHeight: number
+  framingPlan?: ShortsFramingPlan | null
+  picking?: boolean
   playing: boolean
   busy: boolean
   regenerating: boolean
   onPlayingChange: (playing: boolean) => void
+  onAssignPoint?: (x: number, y: number, time: number) => void
   onAdjust: () => void
   onExport: () => void
   onPersist: (patch: ShortsClipPatch) => void
@@ -58,10 +65,13 @@ export function ShortsResultCard({
           aspectMode={aspectMode}
           sourceWidth={sourceWidth}
           sourceHeight={sourceHeight}
+          framingPlan={framingPlan}
+          picking={picking}
           active={playing}
           resetToken={shortsClipPreviewKey(clip)}
           posterUrl={clip.posterUrl}
           onPlayingChange={onPlayingChange}
+          onAssignPoint={onAssignPoint}
         />
       </div>
       <div className="min-w-0 flex-1 space-y-4">

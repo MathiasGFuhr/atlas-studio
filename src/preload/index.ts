@@ -250,7 +250,7 @@ const api = {
       patch: Partial<
         Pick<
           ShortsJob,
-          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled' | 'languageOverride'
+          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'framingSettings' | 'captionsEnabled' | 'languageOverride'
         >
       >,
     ) => ipcRenderer.invoke(IPC.shorts.updateSettings, jobId, patch) as Promise<ShortsJob | null>,

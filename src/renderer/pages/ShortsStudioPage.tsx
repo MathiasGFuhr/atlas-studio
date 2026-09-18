@@ -15,7 +15,6 @@ import type {
   ShortsProgressEvent,
 } from '@shared/shorts'
 import {
-  SHORTS_ASPECT_MODES,
   SHORTS_CLIP_COUNTS,
   SHORTS_PROGRESS_LABEL,
   SHORTS_ANALYSIS_MODE_LABEL,
@@ -23,6 +22,13 @@ import {
   formatShortsTimecode,
   type ShortsModelDecision,
 } from '@shared/shorts'
+import { buildClipFramingPlan } from '@shared/shortsExport'
+import {
+  DEFAULT_FRAMING_SETTINGS,
+  assignSubjectFromClick,
+  verticalFramingMode,
+  type ShortsFramingMode,
+} from '@shared/shortsFraming'
 import type { ShortsAnalysisPlan } from '@shared/shorts/analysisPlan'
 import {
   SHORTS_CONTENT_LANGUAGE_OPTIONS,
@@ -50,6 +56,7 @@ import { Card } from '../components/Card'
 import { Input } from '../components/Input'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { ShortsAdjustModal } from '../components/shorts/ShortsAdjustModal'
+import { ShortsFramingPanel } from '../components/shorts/ShortsFramingPanel'
 import { ShortsResultCard } from '../components/shorts/ShortsResultCard'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
@@ -98,7 +105,7 @@ export function ShortsStudioPage() {
   const [durationInput, setDurationInput] = useState('00:30')
   const [durationMode, setDurationMode] = useState<ShortsDurationMode>('approximate')
   const [durationWarning, setDurationWarning] = useState<string | null>(null)
-  const [aspectMode, setAspectMode] = useState<ShortsAspectMode>('center_9_16')
+  const [aspectMode, setAspectMode] = useState<ShortsAspectMode>('auto')
   const [captionsEnabled, setCaptionsEnabled] = useState(true)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<ShortsProgressEvent | null>(null)
@@ -182,6 +189,7 @@ export function ShortsStudioPage() {
       requestedDuration: number
       durationMode: ShortsDurationMode
       aspectMode: ShortsAspectMode
+      framingSettings: ShortsJob['framingSettings']
       captionsEnabled: boolean
       languageOverride: string | null
     }>,
@@ -189,6 +197,39 @@ export function ShortsStudioPage() {
     if (!job) return
     const next = await api.shorts.updateSettings(job.id, patch)
     if (next) setJob(next)
+  }
+
+  function persistFraming(patch: Partial<ShortsJob['framingSettings']>) {
+    if (!job) return
+    const framingSettings = { ...(job.framingSettings ?? DEFAULT_FRAMING_SETTINGS), ...patch }
+    setJob({ ...job, framingSettings })
+    void persistSettings({ framingSettings })
+  }
+
+  function persistFramingMode(mode: ShortsFramingMode) {
+    setAspectMode(mode)
+    void persistSettings({ aspectMode: mode })
+  }
+
+  function assignFramingPoint(clip: ShortsClip, x: number, y: number, time: number) {
+    if (!job) return
+    const current = job.framingSettings ?? DEFAULT_FRAMING_SETTINGS
+    const role = current.picking ?? 'lead'
+    const framingSettings = assignSubjectFromClick({
+      settings: current,
+      track: job.framingTrack ?? [],
+      time,
+      x,
+      y,
+      role,
+    })
+    setJob({ ...job, framingSettings })
+    void persistSettings({ framingSettings })
+  }
+
+  function clipFramingPlan(clip: ShortsClip) {
+    if (!job) return null
+    return buildClipFramingPlan(job, clip)
   }
 
   function applyRequestedDuration(seconds: number) {
@@ -665,19 +706,31 @@ export function ShortsStudioPage() {
             </div>
             <FieldSelect
               label="Formato"
-              value={aspectMode}
+              value={aspectMode === 'original' ? 'original' : 'vertical'}
               onChange={(value) => {
-                const next = value as ShortsAspectMode
-                setAspectMode(next)
-                void persistSettings({ aspectMode: next })
+                if (value === 'original') {
+                  setAspectMode('original')
+                  void persistSettings({ aspectMode: 'original' })
+                  return
+                }
+                const next = aspectMode === 'original' ? 'auto' : verticalFramingMode(aspectMode)
+                persistFramingMode(next)
               }}
             >
-              {SHORTS_ASPECT_MODES.map((mode) => (
-                <option key={mode.id} value={mode.id}>
-                  {mode.label}
-                </option>
-              ))}
+              <option value="original">Original</option>
+              <option value="vertical">9:16</option>
             </FieldSelect>
+            {aspectMode !== 'original' ? (
+              <ShortsFramingPanel
+                aspectMode={aspectMode}
+                settings={job?.framingSettings ?? DEFAULT_FRAMING_SETTINGS}
+                subjects={previewClip ? clipFramingPlan(previewClip)?.subjects ?? [] : job?.clips[0] ? clipFramingPlan(job.clips[0])?.subjects ?? [] : []}
+                usedFallback={job?.clips.some((clip) => clipFramingPlan(clip)?.usedFallback) ?? false}
+                disabled={busy}
+                onModeChange={persistFramingMode}
+                onSettingsChange={persistFraming}
+              />
+            ) : null}
             <label className="flex items-start gap-3 md:col-span-2">
               <input
                 type="checkbox"
@@ -764,10 +817,13 @@ export function ShortsStudioPage() {
                   aspectMode={aspectMode}
                   sourceWidth={probe?.width ?? 1920}
                   sourceHeight={probe?.height ?? 1080}
+                  framingPlan={clipFramingPlan(clip)}
+                  picking={Boolean(job.framingSettings?.picking)}
                   playing={playingClipId === clip.id && previewClip?.id !== clip.id}
                   busy={busy || Boolean(copyBusyId)}
                   regenerating={copyBusyId === clip.id}
                   onPlayingChange={(playing) => setPlayingClipId(playing ? clip.id : null)}
+                  onAssignPoint={(x, y, time) => assignFramingPoint(clip, x, y, time)}
                   onAdjust={() => {
                     setPlayingClipId(null)
                     setPreviewClip(clip)
@@ -837,6 +893,8 @@ export function ShortsStudioPage() {
         clip={previewClip}
         mediaUrl={mediaUrl}
         aspectMode={aspectMode}
+        framingPlan={previewClip ? clipFramingPlan(previewClip) : null}
+        picking={Boolean(job?.framingSettings?.picking)}
         playing={Boolean(previewClip && playingClipId === previewClip.id)}
         busy={busy}
         regenerating={Boolean(previewClip && copyBusyId === previewClip.id)}
@@ -847,6 +905,10 @@ export function ShortsStudioPage() {
         onPlayingChange={(playing) => {
           if (!previewClip) return
           setPlayingClipId(playing ? previewClip.id : null)
+        }}
+        onAssignPoint={(x, y, time) => {
+          if (!previewClip) return
+          assignFramingPoint(previewClip, x, y, time)
         }}
         onChange={async (patch) => {
           if (!previewClip) return

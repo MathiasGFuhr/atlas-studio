@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ShortsClip, ShortsJob } from './shorts'
+import { DEFAULT_FRAMING_SETTINGS } from './shortsFraming'
 import {
   exportedShortsCount,
   matchesShortsProjectSearch,
@@ -41,6 +42,8 @@ function job(partial: Partial<ShortsJob> = {}): ShortsJob {
     requestedDuration: 30,
     durationMode: 'approximate',
     aspectMode: 'center_9_16',
+    framingTrack: [],
+    framingSettings: DEFAULT_FRAMING_SETTINGS,
     captionsEnabled: true,
     probe: null,
     clips: [],

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ShortsClip, ShortsJob, VideoProbeInfo } from '../../../shared/shorts'
+import { DEFAULT_FRAMING_SETTINGS } from '../../../shared/shortsFraming'
 import { defaultShortsLanguageFields } from '../../../shared/shortsLanguage'
 import {
   addClipWith,
@@ -65,6 +66,8 @@ function createStore(): ShortsProjectStore & { projects: Map<string, ShortsJob> 
         requestedDuration: 30,
         durationMode: 'approximate',
         aspectMode: 'center_9_16',
+        framingTrack: [],
+        framingSettings: DEFAULT_FRAMING_SETTINGS,
         captionsEnabled: true,
         probe: input.probe ?? null,
         clips: [],

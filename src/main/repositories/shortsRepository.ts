@@ -13,6 +13,7 @@ import type {
   VideoProbeInfo,
 } from '../../shared/shorts'
 import { isShortsAnalysisMode, isShortsAspectMode, isShortsClipCount, isShortsDurationMode, isShortsProfile, normalizeShortsClip } from '../../shared/shorts'
+import { DEFAULT_FRAMING_SETTINGS, normalizeFramingSettings, normalizeFramingTrack } from '../../shared/shortsFraming'
 import type { ContentLanguageSource } from '../../shared/shortsLanguage'
 import { defaultShortsLanguageFields } from '../../shared/shortsLanguage'
 import { requestedDurationFromLegacyPreset } from '../../shared/shortsDuration'
@@ -48,6 +49,8 @@ type JobRow = {
   transcript_language: string | null
   analysis_mode: string | null
   analysis_notes: string | null
+  framing_track_json: string | null
+  framing_settings_json: string | null
   error_message: string | null
   status: string
   created_at: string
@@ -81,6 +84,8 @@ function mapJob(row: JobRow): ShortsJob {
     requestedDuration: requested,
     durationMode: isShortsDurationMode(row.duration_mode) ? row.duration_mode : 'approximate',
     aspectMode: isShortsAspectMode(row.aspect_mode) ? row.aspect_mode : 'center_9_16',
+    framingTrack: normalizeFramingTrack(parseJson(row.framing_track_json, [])),
+    framingSettings: normalizeFramingSettings(parseJson(row.framing_settings_json, DEFAULT_FRAMING_SETTINGS)),
     captionsEnabled: Boolean(row.captions_enabled),
     probe: parseJson<VideoProbeInfo | null>(row.probe_json, null),
     clips: parseJson<unknown[]>(row.clips_json, [])
@@ -147,9 +152,10 @@ export const shortsRepository = {
           id, project_id, name, source_path, source_name, profile, clip_count, duration_preset,
           requested_duration, duration_mode, aspect_mode, captions_enabled, probe_json, clips_json,
           transcript_json, transcript_source, content_language, language_source, language_confidence,
-          language_override, detected_language, transcript_language, analysis_mode, analysis_notes, error_message,
+          language_override, detected_language, transcript_language, analysis_mode, analysis_notes,
+          framing_track_json, framing_settings_json, error_message,
           status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -162,7 +168,7 @@ export const shortsRepository = {
         '30',
         30,
         'approximate',
-        'center_9_16',
+        'auto',
         1,
         input.probe ? JSON.stringify(input.probe) : null,
         '[]',
@@ -176,6 +182,8 @@ export const shortsRepository = {
         language.transcriptLanguage,
         null,
         null,
+        '[]',
+        JSON.stringify(DEFAULT_FRAMING_SETTINGS),
         null,
         'draft',
         timestamp,
@@ -196,6 +204,8 @@ export const shortsRepository = {
       requestedDuration: number
       durationMode: ShortsDurationMode
       aspectMode: ShortsAspectMode
+      framingTrack: ShortsJob['framingTrack']
+      framingSettings: ShortsJob['framingSettings']
       captionsEnabled: boolean
       probe: VideoProbeInfo | null
       clips: ShortsClip[]
@@ -229,7 +239,8 @@ export const shortsRepository = {
           captions_enabled = ?, probe_json = ?, clips_json = ?, transcript_json = ?,
           transcript_source = ?, content_language = ?, language_source = ?, language_confidence = ?,
           language_override = ?, detected_language = ?, transcript_language = ?, analysis_mode = ?,
-          analysis_notes = ?, error_message = ?, status = ?, updated_at = ?
+          analysis_notes = ?, framing_track_json = ?, framing_settings_json = ?,
+          error_message = ?, status = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -256,6 +267,8 @@ export const shortsRepository = {
         next.transcriptLanguage,
         next.analysisMode,
         next.analysisNotes,
+        JSON.stringify(next.framingTrack ?? []),
+        JSON.stringify(normalizeFramingSettings(next.framingSettings)),
         next.errorMessage,
         next.status,
         next.updatedAt,

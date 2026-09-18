@@ -65,7 +65,8 @@ import {
   updateClip as updateShortsClip,
   updateProjectSettings,
 } from '../services/shorts/ShortsProjectService'
-import { buildSrt, buildVerticalCropPlan, cuesForClip } from '../../shared/shortsExport'
+import { buildSrt, buildVerticalCropPlan, buildClipFramingPlan, cuesForClip } from '../../shared/shortsExport'
+import { buildFramingExportFilter } from '../../shared/shortsFraming'
 import { SHORTS_VIDEO_EXTENSIONS, shortsExportWindow, type ShortsAnalyzeInput, type ShortsClipPatch, type ShortsCopyFields, type ShortsJob } from '../../shared/shorts'
 import type { ShortsProjectListFilters } from '../../shared/shortsProject'
 import { taskRepository } from '../repositories/taskRepository'
@@ -641,7 +642,7 @@ export function registerIpcHandlers(deps: {
       patch: Partial<
         Pick<
           ShortsJob,
-          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled' | 'languageOverride'
+          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'framingSettings' | 'captionsEnabled' | 'languageOverride'
         >
       >,
     ) => {
@@ -670,6 +671,8 @@ export function registerIpcHandlers(deps: {
       message: 'Exportando...',
     })
 
+    const framingPlan = buildClipFramingPlan(job, clip)
+    const framingFilter = framingPlan ? buildFramingExportFilter(framingPlan, clip.start) : {}
     const crop = job.probe
       ? buildVerticalCropPlan(job.probe.width, job.probe.height, job.aspectMode)
       : null
@@ -699,7 +702,8 @@ export function registerIpcHandlers(deps: {
         outputPath: result.filePath,
         start: window.start,
         end: window.end,
-        videoFilter: crop?.filter,
+        videoFilter: framingFilter.videoFilter ?? crop?.filter,
+        filterComplex: framingFilter.filterComplex,
         subtitlePath,
       })
     } finally {

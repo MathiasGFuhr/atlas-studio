@@ -8,57 +8,51 @@ import {
   type ShortsJob,
   type TranscriptCue,
 } from './shorts'
+import {
+  buildFramingPlan,
+  buildFramingPreviewFrame,
+  maxVerticalCrop,
+  normalizeShortsAspectMode,
+  type ShortsFramingPlan,
+} from './shortsFraming'
 
 export interface VerticalCropPlan {
   filter: string
-  focusStrategy: 'center'
+  focusStrategy: 'center' | 'lead' | 'active' | 'pair' | 'split'
   cropWidth: number
   cropHeight: number
   cropX: number
   cropY: number
 }
 
-function even(value: number): number {
-  const rounded = Math.max(2, Math.floor(value))
-  return rounded % 2 === 0 ? rounded : rounded - 1
-}
-
 /**
- * Crop + scale 9:16 sem distorcer. Foco automático na V1 = centro seguro.
+ * Crop + scale 9:16 sem distorcer. Sem trilha de sujeitos, usa o recorte central seguro.
  */
 export function buildVerticalCropPlan(
   width: number,
   height: number,
   mode: ShortsAspectMode,
 ): VerticalCropPlan | null {
-  if (mode === 'original') return null
-  const srcW = Math.max(2, Math.round(width))
-  const srcH = Math.max(2, Math.round(height))
-  const targetRatio = 9 / 16
-  const srcRatio = srcW / srcH
-
-  let cropW: number
-  let cropH: number
-  if (srcRatio > targetRatio) {
-    cropH = even(srcH)
-    cropW = even(srcH * targetRatio)
-  } else {
-    cropW = even(srcW)
-    cropH = even(srcW / targetRatio)
-  }
-  cropW = Math.min(cropW, even(srcW))
-  cropH = Math.min(cropH, even(srcH))
-  const cropX = even((srcW - cropW) / 2)
-  const cropY = even((srcH - cropH) / 2)
-
+  if (normalizeShortsAspectMode(mode) === 'original') return null
+  const crop = maxVerticalCrop(width, height)
   return {
-    filter: `crop=${cropW}:${cropH}:${cropX}:${cropY},scale=${SHORTS_OUTPUT_WIDTH}:${SHORTS_OUTPUT_HEIGHT}`,
+    filter: `crop=${crop.cropWidth}:${crop.cropHeight}:${crop.cropX}:${crop.cropY},scale=${SHORTS_OUTPUT_WIDTH}:${SHORTS_OUTPUT_HEIGHT}`,
     focusStrategy: 'center',
-    cropWidth: cropW,
-    cropHeight: cropH,
-    cropX,
-    cropY,
+    ...crop,
   }
+}
+
+export function buildClipFramingPlan(job: Pick<ShortsJob, 'aspectMode' | 'probe'> & Partial<Pick<ShortsJob, 'framingTrack' | 'framingSettings'>>, clip: Pick<ShortsClip, 'start' | 'end'>): ShortsFramingPlan | null {
+  if (!job.probe || normalizeShortsAspectMode(job.aspectMode) === 'original') return null
+  return buildFramingPlan({
+    width: job.probe.width,
+    height: job.probe.height,
+    mode: job.aspectMode,
+    settings: job.framingSettings,
+    track: job.framingTrack,
+    clipStart: clip.start,
+    clipEnd: clip.end,
+  })
 }
 
 export interface ShortsPreviewFrame {
@@ -69,6 +63,9 @@ export interface ShortsPreviewFrame {
   videoLeftPct: number
   videoTopPct: number
   cropped: boolean
+  layout?: 'crop' | 'split' | 'original'
+  top?: { videoWidthPct: number; videoHeightPct: number; videoLeftPct: number; videoTopPct: number }
+  bottom?: { videoWidthPct: number; videoHeightPct: number; videoLeftPct: number; videoTopPct: number }
 }
 
 /**
@@ -79,11 +76,17 @@ export function buildShortsPreviewFrame(
   width: number,
   height: number,
   mode: ShortsAspectMode,
+  plan?: ShortsFramingPlan | null,
+  time?: number,
 ): ShortsPreviewFrame {
+  if (plan) {
+    const framed = buildFramingPreviewFrame(plan, time ?? plan.keyframes[0]?.time ?? 0)
+    return framed
+  }
   const srcW = Math.max(1, width)
   const srcH = Math.max(1, height)
-  const plan = buildVerticalCropPlan(srcW, srcH, mode)
-  if (!plan) {
+  const cropPlan = buildVerticalCropPlan(srcW, srcH, mode)
+  if (!cropPlan) {
     return {
       aspectRatio: srcW / srcH,
       videoWidthPct: 100,
@@ -91,25 +94,30 @@ export function buildShortsPreviewFrame(
       videoLeftPct: 0,
       videoTopPct: 0,
       cropped: false,
+      layout: 'original',
     }
   }
   return {
     aspectRatio: 9 / 16,
-    videoWidthPct: (srcW / plan.cropWidth) * 100,
-    videoHeightPct: (srcH / plan.cropHeight) * 100,
-    videoLeftPct: -(plan.cropX / plan.cropWidth) * 100,
-    videoTopPct: -(plan.cropY / plan.cropHeight) * 100,
+    videoWidthPct: (srcW / cropPlan.cropWidth) * 100,
+    videoHeightPct: (srcH / cropPlan.cropHeight) * 100,
+    videoLeftPct: -(cropPlan.cropX / cropPlan.cropWidth) * 100,
+    videoTopPct: -(cropPlan.cropY / cropPlan.cropHeight) * 100,
     cropped: true,
+    layout: 'crop',
   }
 }
 
 export function buildShortsEditorialRecord(
-  job: Pick<ShortsJob, 'sourcePath' | 'sourceName' | 'aspectMode' | 'probe'>,
+  job: Pick<ShortsJob, 'sourcePath' | 'sourceName' | 'aspectMode' | 'probe'> & Partial<Pick<ShortsJob, 'framingTrack' | 'framingSettings'>>,
   clip: ShortsClip,
 ): ShortsEditorialRecord {
-  const plan = job.probe
+  const framing = buildClipFramingPlan(job, clip)
+  const first = framing?.keyframes[0]
+  const fallback = job.probe
     ? buildVerticalCropPlan(job.probe.width, job.probe.height, job.aspectMode)
     : null
+  const crop = first ?? fallback
   return {
     sourceVideo: job.sourcePath,
     sourceName: job.sourceName,
@@ -123,13 +131,13 @@ export function buildShortsEditorialRecord(
     description: clip.description,
     hashtags: clip.hashtags,
     format: job.aspectMode,
-    crop: plan
+    crop: crop
       ? {
-          cropWidth: plan.cropWidth,
-          cropHeight: plan.cropHeight,
-          cropX: plan.cropX,
-          cropY: plan.cropY,
-          focusStrategy: plan.focusStrategy,
+          cropWidth: crop.cropWidth,
+          cropHeight: crop.cropHeight,
+          cropX: crop.cropX,
+          cropY: crop.cropY,
+          focusStrategy: crop.focusStrategy,
         }
       : null,
     exportPath: clip.exportedPath,

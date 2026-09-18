@@ -1,10 +1,34 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { Pause, Play } from 'lucide-react'
 import type { ShortsAspectMode } from '@shared/shorts'
 import { formatShortsTimecode, shortsClipPreviewSrc } from '@shared/shorts'
 import { formatClipLength } from '@shared/shortsDuration'
 import { buildShortsPreviewFrame } from '@shared/shortsExport'
+import {
+  clickToSourcePoint,
+  interpolateFraming,
+  maxVerticalCrop,
+  type ShortsCropWindow,
+  type ShortsFramingPlan,
+} from '@shared/shortsFraming'
 import { cn } from '../../lib/utils'
+
+function mediaStyleFrom(frame: {
+  videoWidthPct: number
+  videoHeightPct: number
+  videoLeftPct: number
+  videoTopPct: number
+}) {
+  return {
+    width: `${frame.videoWidthPct}%`,
+    height: `${frame.videoHeightPct}%`,
+    left: `${frame.videoLeftPct}%`,
+    top: `${frame.videoTopPct}%`,
+    maxWidth: 'none',
+    maxHeight: 'none',
+    objectFit: 'fill' as const,
+  }
+}
 
 export function ShortsClipPreview({
   clipId,
@@ -14,8 +38,11 @@ export function ShortsClipPreview({
   aspectMode,
   sourceWidth,
   sourceHeight,
+  framingPlan,
+  picking,
   active,
   onPlayingChange,
+  onAssignPoint,
   resetToken,
   posterUrl,
   className,
@@ -27,24 +54,37 @@ export function ShortsClipPreview({
   aspectMode: ShortsAspectMode
   sourceWidth: number
   sourceHeight: number
+  framingPlan?: ShortsFramingPlan | null
+  picking?: boolean
   active: boolean
   onPlayingChange: (playing: boolean) => void
+  onAssignPoint?: (x: number, y: number, time: number) => void
   resetToken?: string
   posterUrl?: string | null
   className?: string
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const splitRef = useRef<HTMLVideoElement | null>(null)
   const windowRef = useRef({ start, end })
   const [current, setCurrent] = useState(start)
   const [frameReady, setFrameReady] = useState(false)
   const duration = Math.max(0.1, end - start)
-  const frame = buildShortsPreviewFrame(sourceWidth || 1920, sourceHeight || 1080, aspectMode)
+  const frame = buildShortsPreviewFrame(
+    sourceWidth || 1920,
+    sourceHeight || 1080,
+    aspectMode,
+    framingPlan,
+    current,
+  )
+  const key = interpolateFraming(framingPlan ?? { mode: aspectMode, sourceWidth, sourceHeight, keyframes: [], subjects: [], usedFallback: true, confidence: 0, animated: false }, current)
+  const fallbackCrop = maxVerticalCrop(sourceWidth || 1920, sourceHeight || 1080)
   const previewKey = resetToken ?? `${clipId ?? 'clip'}:${start}:${end}`
   const clipSrc = useMemo(
     () => shortsClipPreviewSrc(src, { id: clipId ?? 'clip', start, end }),
     [src, clipId, start, end],
   )
   windowRef.current = { start, end }
+  const split = frame.layout === 'split' && frame.top && frame.bottom
 
   useEffect(() => {
     setFrameReady(false)
@@ -107,15 +147,21 @@ export function ShortsClipPreview({
 
   useEffect(() => {
     const video = videoRef.current
+    const splitVideo = splitRef.current
     if (!video) return
     if (active) {
       setFrameReady(true)
       if (video.currentTime < start || video.currentTime >= end - 0.04) video.currentTime = start
       void video.play().catch(() => undefined)
+      if (splitVideo) {
+        splitVideo.currentTime = video.currentTime
+        void splitVideo.play().catch(() => undefined)
+      }
       return
     }
     video.pause()
-  }, [active, start, end])
+    splitVideo?.pause()
+  }, [active, start, end, split])
 
   useEffect(() => {
     const video = videoRef.current
@@ -125,9 +171,14 @@ export function ShortsClipPreview({
       if (!node) return
       const window = windowRef.current
       setCurrent(node.currentTime)
+      const slave = splitRef.current
+      if (slave && Math.abs(slave.currentTime - node.currentTime) > 0.08) {
+        slave.currentTime = node.currentTime
+      }
       if (node.currentTime >= window.end - 0.04) {
         node.pause()
         node.currentTime = window.end
+        slave?.pause()
         if (active) onPlayingChange(false)
       }
     }
@@ -136,56 +187,104 @@ export function ShortsClipPreview({
   }, [active, onPlayingChange])
 
   const progress = Math.max(0, Math.min(1, (current - start) / duration))
-  const mediaStyle = {
-    width: `${frame.videoWidthPct}%`,
-    height: `${frame.videoHeightPct}%`,
-    left: `${frame.videoLeftPct}%`,
-    top: `${frame.videoTopPct}%`,
-    maxWidth: 'none',
-    maxHeight: 'none',
-    objectFit: 'fill' as const,
+  const mediaStyle = mediaStyleFrom(frame)
+
+  function assignFromClick(event: { clientX: number; clientY: number; currentTarget: EventTarget & Element }, crop: ShortsCropWindow) {
+    if (!onAssignPoint) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const point = clickToSourcePoint({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      rect,
+      sourceWidth: sourceWidth || 1920,
+      sourceHeight: sourceHeight || 1080,
+      crop,
+    })
+    onAssignPoint(point.x, point.y, current)
   }
+
+  function onPaneClick(
+    event: MouseEvent<HTMLElement>,
+    crop: ShortsCropWindow,
+  ) {
+    if (picking && onAssignPoint) {
+      event.preventDefault()
+      event.stopPropagation()
+      assignFromClick(event, crop)
+      return
+    }
+    onPlayingChange(!active)
+  }
+
+  const videoNode = (ref: typeof videoRef, style: typeof mediaStyle, extraClass?: string) =>
+    clipSrc ? (
+      <video
+        key={ref === videoRef ? previewKey : `${previewKey}-split`}
+        ref={ref}
+        src={clipSrc}
+        poster={posterUrl ?? undefined}
+        preload={active ? 'auto' : 'metadata'}
+        muted={ref !== videoRef}
+        playsInline
+        className={cn('absolute max-h-none max-w-none bg-black', extraClass)}
+        style={style}
+      />
+    ) : (
+      <div className="absolute inset-0 bg-card-2" />
+    )
 
   return (
     <div className={cn('space-y-2', className)}>
       <div
-        className="relative overflow-hidden rounded-xl bg-black"
+        className={cn('relative overflow-hidden rounded-xl bg-black', picking && 'ring-2 ring-accent')}
         style={{ aspectRatio: String(frame.aspectRatio) }}
       >
-        {clipSrc ? (
-          <video
-            key={previewKey}
-            ref={videoRef}
-            src={clipSrc}
-            poster={posterUrl ?? undefined}
-            preload={active ? 'auto' : 'metadata'}
-            playsInline
-            className="absolute max-h-none max-w-none bg-black"
-            style={mediaStyle}
-            onClick={() => onPlayingChange(!active)}
-          />
+        {split && frame.top && frame.bottom ? (
+          <div className="absolute inset-0 flex flex-col">
+            <div
+              className="relative h-1/2 overflow-hidden"
+              onClick={(event) => onPaneClick(event, key?.top ?? fallbackCrop)}
+            >
+              {videoNode(videoRef, mediaStyleFrom(frame.top))}
+              {posterUrl && !frameReady ? (
+                <img src={posterUrl} alt="" className="absolute z-[1] max-h-none max-w-none bg-black" style={mediaStyleFrom(frame.top)} />
+              ) : null}
+            </div>
+            <div
+              className="relative h-1/2 overflow-hidden border-t border-black/40"
+              onClick={(event) => onPaneClick(event, key?.bottom ?? fallbackCrop)}
+            >
+              {videoNode(splitRef, mediaStyleFrom(frame.bottom))}
+              {posterUrl && !frameReady ? (
+                <img src={posterUrl} alt="" className="absolute z-[1] max-h-none max-w-none bg-black" style={mediaStyleFrom(frame.bottom)} />
+              ) : null}
+            </div>
+          </div>
         ) : (
-          <div className="absolute inset-0 bg-card-2" />
+          <div className="absolute inset-0 overflow-hidden" onClick={(event) => onPaneClick(event, key ?? fallbackCrop)}>
+            {videoNode(videoRef, mediaStyle)}
+            {posterUrl && !frameReady ? (
+              <img src={posterUrl} alt="" className="absolute z-[1] max-h-none max-w-none bg-black" style={mediaStyle} />
+            ) : null}
+          </div>
         )}
-        {posterUrl && !frameReady ? (
-          <img
-            src={posterUrl}
-            alt=""
-            className="absolute z-[1] max-h-none max-w-none bg-black"
-            style={mediaStyle}
-          />
-        ) : null}
         <button
           type="button"
           className={cn(
             'absolute z-10 flex items-center justify-center rounded-full bg-black/55 p-2.5 text-white',
             active ? 'bottom-2 left-2' : 'left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2',
+            picking && 'pointer-events-none opacity-0',
           )}
           onClick={() => onPlayingChange(!active)}
           aria-label={active ? 'Pausar' : 'Assistir'}
         >
           {active ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
         </button>
+        {picking ? (
+          <p className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-white">
+            Clique na pessoa para definir o foco
+          </p>
+        ) : null}
       </div>
       <input
         type="range"
@@ -200,6 +299,7 @@ export function ShortsClipPreview({
           if (!video) return
           const next = start + Number(event.target.value) * duration
           video.currentTime = next
+          if (splitRef.current) splitRef.current.currentTime = next
           setCurrent(next)
         }}
       />

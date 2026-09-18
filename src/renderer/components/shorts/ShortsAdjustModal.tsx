@@ -1,5 +1,6 @@
 import { Pause, Play } from 'lucide-react'
 import type { ShortsAspectMode, ShortsClip, ShortsClipPatch, ShortsJob } from '@shared/shorts'
+import type { ShortsFramingPlan } from '@shared/shortsFraming'
 import { clipDuration, formatShortsTimecode, shortsClipPreviewKey } from '@shared/shorts'
 import { formatClipLength } from '@shared/shortsDuration'
 import { Button } from '../Button'
@@ -14,11 +15,14 @@ export function ShortsAdjustModal({
   clip,
   mediaUrl,
   aspectMode,
+  framingPlan,
+  picking,
   playing,
   busy,
   regenerating,
   onClose,
   onPlayingChange,
+  onAssignPoint,
   onChange,
   onCopy,
   onRegenerate,
@@ -30,11 +34,14 @@ export function ShortsAdjustModal({
   clip: ShortsClip | null
   mediaUrl: string | null
   aspectMode: ShortsAspectMode
+  framingPlan?: ShortsFramingPlan | null
+  picking?: boolean
   playing: boolean
   busy: boolean
   regenerating: boolean
   onClose: () => void
   onPlayingChange: (playing: boolean) => void
+  onAssignPoint?: (x: number, y: number, time: number) => void
   onChange: (patch: ShortsClipPatch) => Promise<void>
   onCopy: (part: 'title' | 'description' | 'all') => void
   onRegenerate: (fields: 'title' | 'description' | 'all') => void
@@ -80,10 +87,13 @@ export function ShortsAdjustModal({
                 aspectMode={aspectMode}
                 sourceWidth={sourceWidth}
                 sourceHeight={sourceHeight}
+                framingPlan={framingPlan}
+                picking={picking}
                 active={playing}
                 resetToken={shortsClipPreviewKey({ id: clip.id, start, end })}
                 posterUrl={clip.posterUrl}
                 onPlayingChange={onPlayingChange}
+                onAssignPoint={onAssignPoint}
               />
               <div className="mt-3 flex items-center gap-2">
                 <Button

@@ -5,6 +5,7 @@ import {
 } from './shorts'
 import {
   buildSrt,
+  buildClipFramingPlan,
   buildShortsEditorialRecord,
   buildShortsPreviewFrame,
   buildVerticalCropPlan,
@@ -58,6 +59,47 @@ describe('shortsExport', () => {
     expect(buildShortsPreviewFrame(1920, 1080, 'auto_focus_9_16')).toEqual(
       buildShortsPreviewFrame(1920, 1080, 'center_9_16'),
     )
+  })
+
+  it('preview com plano de cantor principal desloca o crop para o sujeito', () => {
+    const plan = buildClipFramingPlan(
+      {
+        aspectMode: 'lead_singer',
+        probe: {
+          name: 'show.mp4',
+          path: '',
+          duration: 10,
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          aspectRatio: '16:9',
+          format: 'mp4',
+          hasAudio: true,
+        },
+        framingTrack: [
+          {
+            time: 1,
+            subjects: [{ id: 'lead', x: 0.22, y: 0.4, width: 0.12, height: 0.22, confidence: 0.9, vocalActivity: 0.8 }],
+          },
+        ],
+        framingSettings: {
+          lockLead: true,
+          preferSplit: false,
+          preventFocusSwitch: true,
+          leadSubjectId: 'lead',
+          subject1Id: null,
+          subject2Id: null,
+          manualAnchors: [],
+          picking: null,
+        },
+      },
+      { start: 0, end: 4 },
+    )
+    const center = buildShortsPreviewFrame(1920, 1080, 'lead_singer')
+    const framed = buildShortsPreviewFrame(1920, 1080, 'lead_singer', plan, 1)
+    expect(framed.cropped).toBe(true)
+    expect(framed.layout).toBe('crop')
+    expect(framed.videoLeftPct).not.toBe(center.videoLeftPct)
   })
 
   it('empacota metadados editoriais com crop e formato para uso futuro', () => {

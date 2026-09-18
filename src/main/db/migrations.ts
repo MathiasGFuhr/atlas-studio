@@ -19,7 +19,7 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 11
+export const CURRENT_SCHEMA_VERSION = 12
 
 type SchemaStepResult = {
   historyCreated: number
@@ -108,6 +108,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'shorts-audiovisual-analysis-mode',
     backup: false,
     up: applyShortsAnalysisMode,
+  },
+  {
+    version: 12,
+    name: 'shorts-vertical-framing',
+    backup: false,
+    up: applyShortsVerticalFraming,
   },
 ]
 
@@ -210,6 +216,12 @@ function readBackupEnabled(database: AppDatabase): boolean {
 
 function applyShortsAnalysisMode(database: AppDatabase): SchemaStepResult {
   ensureColumn(database, 'shorts_jobs', 'analysis_mode', 'TEXT')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyShortsVerticalFraming(database: AppDatabase): SchemaStepResult {
+  ensureColumn(database, 'shorts_jobs', 'framing_track_json', "TEXT NOT NULL DEFAULT '[]'")
+  ensureColumn(database, 'shorts_jobs', 'framing_settings_json', "TEXT NOT NULL DEFAULT '{}'")
   return { historyCreated: 0, musicCreated: 0 }
 }
 

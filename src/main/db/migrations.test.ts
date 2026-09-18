@@ -333,6 +333,7 @@ describe('migração para projetos de História e Música', () => {
       expect.objectContaining({ version: 9 }),
       expect.objectContaining({ version: 10 }),
       expect.objectContaining({ version: 11 }),
+      expect.objectContaining({ version: 12 }),
     ])
   })
 
@@ -368,6 +369,8 @@ describe('migração para projetos de História e Música', () => {
       | undefined
     expect(shorts?.name).toBe('shorts_jobs')
     const shortsCols = db.prepare('PRAGMA table_info(shorts_jobs)').all() as Array<{ name: string }>
+    expect(shortsCols.some((col) => col.name === 'framing_track_json')).toBe(true)
+    expect(shortsCols.some((col) => col.name === 'framing_settings_json')).toBe(true)
     expect(shortsCols.some((col) => col.name === 'requested_duration')).toBe(true)
     expect(shortsCols.some((col) => col.name === 'duration_mode')).toBe(true)
     expect(shortsCols.some((col) => col.name === 'name')).toBe(true)

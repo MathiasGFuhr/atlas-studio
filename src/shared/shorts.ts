@@ -1,13 +1,23 @@
 import type { ProjectType } from './types'
 import type { ContentLanguageSource } from './shortsLanguage'
+import type { ShortsFramingSample, ShortsFramingSettings } from './shortsFraming'
 
 export type ShortsProfile = ProjectType
 export type ShortsClipCount = 3 | 5 | 10
 export type ShortsDurationMode = 'approximate' | 'exact'
 export type ShortsDurationShortcut = 15 | 30 | 45 | 60
-export type ShortsAspectMode = 'original' | 'center_9_16' | 'auto_focus_9_16'
+export type ShortsAspectMode =
+  | 'original'
+  | 'center_9_16'
+  | 'auto_focus_9_16'
+  | 'auto'
+  | 'lead_singer'
+  | 'active_subject'
+  | 'wide_stage'
+  | 'two_subjects'
+  | 'split_screen'
 export type ShortsJobStatus = 'draft' | 'analyzing' | 'ready' | 'error'
-export type ShortsFocusStrategy = 'center'
+export type ShortsFocusStrategy = 'center' | 'lead' | 'active' | 'pair' | 'split'
 export type ShortsTranscriptSource = 'whisper' | 'silence' | 'none'
 export type ShortsCopyFields = 'title' | 'description' | 'all'
 export type ShortsProgressStage =
@@ -34,8 +44,7 @@ export const SHORTS_CLIP_COUNTS: ShortsClipCount[] = [3, 5, 10]
 
 export const SHORTS_ASPECT_MODES: Array<{ id: ShortsAspectMode; label: string; hint: string }> = [
   { id: 'original', label: 'Original', hint: 'Mantém a proporção do arquivo. Sem crop.' },
-  { id: 'center_9_16', label: '9:16 centro', hint: 'Crop central seguro + scale 1080×1920.' },
-  { id: 'auto_focus_9_16', label: '9:16 foco automático', hint: 'Na V1 usa o mesmo crop central. Tracking vem depois.' },
+  { id: 'wide_stage', label: '9:16', hint: 'Recorte vertical. O enquadramento inteligente define o foco.' },
 ]
 
 export const SHORTS_OUTPUT_WIDTH = 1080
@@ -178,6 +187,8 @@ export interface ShortsJob {
   requestedDuration: number
   durationMode: ShortsDurationMode
   aspectMode: ShortsAspectMode
+  framingTrack: ShortsFramingSample[]
+  framingSettings: ShortsFramingSettings
   captionsEnabled: boolean
   probe: VideoProbeInfo | null
   clips: ShortsClip[]
@@ -241,7 +252,17 @@ export function isShortsDurationMode(value: unknown): value is ShortsDurationMod
 }
 
 export function isShortsAspectMode(value: unknown): value is ShortsAspectMode {
-  return value === 'original' || value === 'center_9_16' || value === 'auto_focus_9_16'
+  return (
+    value === 'original' ||
+    value === 'center_9_16' ||
+    value === 'auto_focus_9_16' ||
+    value === 'auto' ||
+    value === 'lead_singer' ||
+    value === 'active_subject' ||
+    value === 'wide_stage' ||
+    value === 'two_subjects' ||
+    value === 'split_screen'
+  )
 }
 
 export function isShortsProfile(value: unknown): value is ShortsProfile {
@@ -377,8 +398,12 @@ export function normalizeShortsClip(value: unknown, fallbackIndex = 1): ShortsCl
     hashtags: normalizeHashtags(record.hashtags),
     accepted: Boolean(record.accepted),
     exportedPath: record.exportedPath ? asText(record.exportedPath) : null,
-    focusStrategy: 'center',
+    focusStrategy: isShortsFocusStrategy(record.focusStrategy) ? record.focusStrategy : 'center',
   }
+}
+
+function isShortsFocusStrategy(value: unknown): value is ShortsFocusStrategy {
+  return value === 'center' || value === 'lead' || value === 'active' || value === 'pair' || value === 'split'
 }
 
 function gcd(a: number, b: number): number {

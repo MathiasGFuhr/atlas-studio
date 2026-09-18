@@ -205,6 +205,7 @@ export function updateProjectSettings(
       | 'requestedDuration'
       | 'durationMode'
       | 'aspectMode'
+      | 'framingSettings'
       | 'captionsEnabled'
       | 'languageOverride'
     >
@@ -235,7 +236,7 @@ export function updateProjectSettingsWith(
   patch: Partial<
     Pick<
       ShortsJob,
-      'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'captionsEnabled' | 'languageOverride'
+      'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'framingSettings' | 'captionsEnabled' | 'languageOverride'
     >
   >,
 ): ShortsJob | null {
@@ -347,6 +348,7 @@ export type ShortsProjectSettingsPatch = Partial<{
   requestedDuration: number
   durationMode: ShortsDurationMode
   aspectMode: ShortsAspectMode
+  framingSettings: ShortsJob['framingSettings']
   captionsEnabled: boolean
   languageOverride: string | null
 }>

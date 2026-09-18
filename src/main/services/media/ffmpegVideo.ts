@@ -75,16 +75,15 @@ export async function exportVideoClip(input: {
   start: number
   end: number
   videoFilter?: string
+  filterComplex?: string
   subtitlePath?: string | null
 }): Promise<void> {
   const duration = Math.max(0.4, input.end - input.start)
   fs.mkdirSync(path.dirname(input.outputPath), { recursive: true })
-  const filters: string[] = []
-  if (input.videoFilter) filters.push(input.videoFilter)
-  if (input.subtitlePath && fs.existsSync(input.subtitlePath)) {
-    const escaped = input.subtitlePath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'")
-    filters.push(`subtitles='${escaped}':force_style='FontName=Arial,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BackColour=&H80000000,BorderStyle=3,Outline=1,Shadow=0,Alignment=2,MarginV=80'`)
-  }
+  const subtitleFilter =
+    input.subtitlePath && fs.existsSync(input.subtitlePath)
+      ? `subtitles='${input.subtitlePath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BackColour=&H80000000,BorderStyle=3,Outline=1,Shadow=0,Alignment=2,MarginV=80'`
+      : null
   const args = [
     '-y',
     '-ss',
@@ -94,8 +93,19 @@ export async function exportVideoClip(input: {
     '-t',
     duration.toFixed(3),
   ]
-  if (filters.length > 0) {
-    args.push('-vf', filters.join(','))
+  if (input.filterComplex) {
+    let graph = input.filterComplex
+    let videoMap = '[vout]'
+    if (subtitleFilter) {
+      graph = `${graph};[vout]${subtitleFilter}[vsub]`
+      videoMap = '[vsub]'
+    }
+    args.push('-filter_complex', graph, '-map', videoMap, '-map', '0:a?')
+  } else {
+    const filters: string[] = []
+    if (input.videoFilter) filters.push(input.videoFilter)
+    if (subtitleFilter) filters.push(subtitleFilter)
+    if (filters.length > 0) args.push('-vf', filters.join(','))
   }
   args.push(
     '-c:v',
@@ -121,9 +131,59 @@ export async function exportVideoClip(input: {
       failMessage: 'Falha ao exportar o Short.',
     })
   } catch (error) {
-    if (!input.subtitlePath) throw error
-    await exportVideoClip({ ...input, subtitlePath: null })
+    if (input.subtitlePath) {
+      await exportVideoClip({ ...input, subtitlePath: null })
+      return
+    }
+    if (input.filterComplex && input.videoFilter) {
+      await exportVideoClip({ ...input, filterComplex: undefined })
+      return
+    }
+    throw error
   }
+}
+
+export const FRAMING_RGB_WIDTH = 160
+export const FRAMING_RGB_HEIGHT = 90
+
+/** Sequência RGB compacta para detectar sujeitos sem ML. */
+export async function extractRgbSequence(input: {
+  sourcePath: string
+  outputPath: string
+  duration: number
+  interval: number
+}): Promise<{ times: number[]; buffer: Buffer; frameSize: number }> {
+  const resolved = path.resolve(input.sourcePath)
+  if (!fs.existsSync(resolved)) throw new Error('Arquivo de vídeo não encontrado.')
+  fs.mkdirSync(path.dirname(input.outputPath), { recursive: true })
+  const interval = Math.max(0.75, input.interval)
+  const fps = 1 / interval
+  const timeoutMs = Math.min(12 * 60_000, Math.max(45_000, Math.round(input.duration * 800)))
+  await runFfmpegResult(
+    [
+      '-y',
+      '-i',
+      resolved,
+      '-an',
+      '-vf',
+      `fps=${fps.toFixed(4)},scale=${FRAMING_RGB_WIDTH}:${FRAMING_RGB_HEIGHT}`,
+      '-pix_fmt',
+      'rgb24',
+      '-f',
+      'rawvideo',
+      input.outputPath,
+    ],
+    {
+      timeoutMs,
+      timeoutMessage: 'O FFmpeg demorou demais para amostrar o enquadramento.',
+      failMessage: 'Falha ao amostrar frames para o enquadramento.',
+    },
+  )
+  const buffer = fs.readFileSync(input.outputPath)
+  const frameSize = FRAMING_RGB_WIDTH * FRAMING_RGB_HEIGHT * 3
+  const count = Math.floor(buffer.length / frameSize)
+  const times = Array.from({ length: count }, (_, index) => Math.round(index * interval * 100) / 100)
+  return { times, buffer, frameSize }
 }
 
 /** Frame estático pequeno para cards. Não usa o vídeo inteiro. */

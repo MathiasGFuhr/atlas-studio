@@ -25,6 +25,7 @@ import { loadShortsAnalysisPlan } from './ShortsAnalysisPlanner'
 import { resolveAnalysisRuntime } from '../../../shared/shorts/analysisPlan'
 import { AudioAnalysisService, audioWorkPath } from './AudioAnalysisService'
 import { SceneAnalysisService } from './SceneAnalysisService'
+import { FramingAnalysisService } from './FramingAnalysisService'
 import { TranscriptService } from './TranscriptService'
 import { VideoProxyService } from './VideoProxyService'
 import { VideoUnderstandingService } from './VideoUnderstandingService'
@@ -176,6 +177,15 @@ export async function analyzeShortsJob(input: {
 
     send('analyzing_visual', 'Analisando conteúdo visual...')
     const sceneTimes = await scenes.detect(originalPath)
+    const framing = new FramingAnalysisService()
+    send('analyzing_visual', 'Detectando enquadramento...')
+    const framingTrack = await framing.analyze({
+      sourcePath: originalPath,
+      dir,
+      duration: probe.duration,
+      audio: audioAnalysis,
+    })
+    shortsRepository.update(job.id, { framingTrack })
     const durationCap = capRequestedDuration(input.request.requestedDuration, probe.duration)
     const requestedDuration = durationCap.requested
     const durationMode = input.request.durationMode
@@ -385,6 +395,7 @@ export async function analyzeShortsJob(input: {
       ...languageFields,
       analysisMode,
       analysisNotes: notes,
+      framingTrack,
       errorMessage: null,
       status: mergedClips.length > 0 ? 'ready' : 'error',
     })!
