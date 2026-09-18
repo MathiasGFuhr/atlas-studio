@@ -32,7 +32,9 @@ import type {
   TaskWriteInput,
   VideoListFilters,
 } from '../shared/types'
-import type { MusicCutMode, MusicSegment, MusicTrack } from '../shared/musicAnalysis'
+import type { AutoCutPreset, MusicCutMode, MusicSegment, MusicTrack } from '../shared/musicAnalysis'
+import type { MusicAdviseRequest, MusicAdviseResult } from '../shared/audio/audioCutAdvisor'
+import type { AudioExportFormat, Mp3Bitrate } from '../shared/audio/audioExport'
 import type {
   ShortsAnalyzeInput,
   ShortsClipPatch,
@@ -195,12 +197,36 @@ const api = {
       ipcRenderer.invoke(IPC.music.import, projectId) as Promise<MusicTrack | null>,
     update: (
       id: string,
-      patch: Partial<{ name: string; duration: number; cutMode: MusicCutMode; cuts: MusicSegment[] }>,
+      patch: Partial<{
+        name: string
+        duration: number
+        cutMode: MusicCutMode
+        cuts: MusicSegment[]
+        selectedId: string | null
+        appliedPreset: AutoCutPreset | null
+      }>,
     ) => ipcRenderer.invoke(IPC.music.update, id, patch) as Promise<MusicTrack | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.music.remove, id) as Promise<boolean>,
     preview: (id: string) => ipcRenderer.invoke(IPC.music.preview, id) as Promise<Uint8Array>,
-    export: (payload: { id: string; start: number; end: number; filename?: string }) =>
-      ipcRenderer.invoke(IPC.music.export, payload) as Promise<string | null>,
+    export: (payload: {
+      id: string
+      start: number
+      end: number
+      filename?: string
+      format?: AudioExportFormat
+      bitrate?: Mp3Bitrate
+      directory?: string
+    }) => ipcRenderer.invoke(IPC.music.export, payload) as Promise<string | null>,
+    exportAll: (payload: {
+      id: string
+      format?: AudioExportFormat
+      bitrate?: Mp3Bitrate
+      directory?: string
+      cuts?: Array<{ start: number; end: number; label: string }>
+    }) => ipcRenderer.invoke(IPC.music.exportAll, payload) as Promise<string[] | null>,
+    chooseExportFolder: () => ipcRenderer.invoke(IPC.music.chooseExportFolder) as Promise<string | null>,
+    adviseCuts: (request: MusicAdviseRequest) =>
+      ipcRenderer.invoke(IPC.music.adviseCuts, request) as Promise<MusicAdviseResult>,
   },
   shorts: {
     list: (filters?: ShortsProjectListFilters) =>

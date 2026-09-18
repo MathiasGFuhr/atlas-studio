@@ -214,6 +214,53 @@ function makeSegment(
   }
 }
 
+export function detectEdgeTrim(analysis: MusicAnalysis): { start: number; end: number } {
+  const energy = analysis.energy
+  if (energy.length === 0) return { start: 0, end: analysis.duration }
+  const sorted = [...energy].sort((a, b) => a - b)
+  const median = percentile(sorted, 0.5)
+  const floor = percentile(sorted, 0.06)
+  const threshold = Math.max(0.01, Math.min(median * 0.14, floor * 2.2 + 0.01))
+  const minRun = Math.max(2, Math.round(0.12 / analysis.frameDuration))
+
+  let startIdx = 0
+  while (startIdx < energy.length && (energy[startIdx] ?? 0) <= threshold) startIdx += 1
+  let audibleRun = 0
+  let confirmedStart = startIdx
+  for (let i = startIdx; i < energy.length; i += 1) {
+    if ((energy[i] ?? 0) > threshold) {
+      audibleRun += 1
+      if (audibleRun >= minRun) {
+        confirmedStart = i - audibleRun + 1
+        break
+      }
+    } else {
+      audibleRun = 0
+    }
+  }
+
+  let endIdx = energy.length - 1
+  while (endIdx > confirmedStart && (energy[endIdx] ?? 0) <= threshold) endIdx -= 1
+  audibleRun = 0
+  let confirmedEnd = endIdx
+  for (let i = endIdx; i >= confirmedStart; i -= 1) {
+    if ((energy[i] ?? 0) > threshold) {
+      audibleRun += 1
+      if (audibleRun >= minRun) {
+        confirmedEnd = i + audibleRun - 1
+        break
+      }
+    } else {
+      audibleRun = 0
+    }
+  }
+
+  return {
+    start: roundTime(Math.max(0, confirmedStart * analysis.frameDuration)),
+    end: roundTime(Math.min(analysis.duration, (confirmedEnd + 1) * analysis.frameDuration)),
+  }
+}
+
 function highestEnergyWindow(analysis: MusicAnalysis, windowSec: number): MusicSegment {
   const windowFrames = Math.max(1, Math.round(windowSec / analysis.frameDuration))
   let bestStart = 0
@@ -276,10 +323,10 @@ export function autoCutMusic(analysis: MusicAnalysis, preset: AutoCutPreset = 'c
   }
 
   if (preset === 'silencio') {
-    const start = snapToOnset(audible[0].start, analysis.onsets)
-    const end = audible[audible.length - 1].end
+    const edges = detectEdgeTrim(analysis)
+    const start = snapToOnset(edges.start, analysis.onsets)
     return [
-      makeSegment(start, Math.min(analysis.duration, end), 1, 'auto', {
+      makeSegment(start, Math.min(analysis.duration, Math.max(start + 0.05, edges.end)), 1, 'auto', {
         label: 'Faixa (sem pontas)',
         reason: 'Remove silêncio/fade das extremidades',
       }),

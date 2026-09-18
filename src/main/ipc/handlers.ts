@@ -71,7 +71,11 @@ import type { ShortsProjectListFilters } from '../../shared/shortsProject'
 import { taskRepository } from '../repositories/taskRepository'
 import { logger } from '../services/logging/logger'
 import type { AntigravityService } from '../services/antigravity/AntigravityService'
-import type { MusicSegment, MusicCutMode } from '../../shared/musicAnalysis'
+import type { AutoCutPreset, MusicSegment, MusicCutMode } from '../../shared/musicAnalysis'
+import type { MusicAdviseRequest } from '../../shared/audio/audioCutAdvisor'
+import type { AudioExportFormat, Mp3Bitrate } from '../../shared/audio/audioExport'
+import { adviseMusicCutsWithCodex } from '../services/audio/CodexAudioCutAdvisor'
+import { exportMusicSegment, exportMusicSegments } from '../services/audio/AudioExportService'
 import type { ChatSendMessageRequest } from '../../shared/chat/types'
 import type { AgentProviderId } from '../../shared/agents/types'
 import { ChatService } from '../services/chat/ChatService'
@@ -390,7 +394,14 @@ export function registerIpcHandlers(deps: {
     (
       _e,
       id: string,
-      patch: Partial<{ name: string; duration: number; cutMode: MusicCutMode; cuts: MusicSegment[] }>,
+      patch: Partial<{
+        name: string
+        duration: number
+        cutMode: MusicCutMode
+        cuts: MusicSegment[]
+        selectedId: string | null
+        appliedPreset: AutoCutPreset | null
+      }>,
     ) => musicRepository.update(id, patch),
   )
   ipcMain.handle(IPC.music.remove, (_e, id: string) => musicRepository.remove(id))
@@ -401,22 +412,116 @@ export function registerIpcHandlers(deps: {
     }
     return fs.readFileSync(track.previewPath)
   })
+  ipcMain.handle(IPC.music.chooseExportFolder, async () => {
+    const win = getMainWindow()
+    const current = settingsRepository.get().musicExportFolder
+    const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: 'Pasta de saída dos cortes',
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: current || undefined,
+    })
+    if (result.canceled || !result.filePaths[0]) return current || null
+    const folder = result.filePaths[0]
+    settingsRepository.update({ musicExportFolder: folder })
+    return folder
+  })
   ipcMain.handle(
     IPC.music.export,
-    async (_e, payload: { id: string; start: number; end: number; filename?: string }) => {
+    async (
+      _e,
+      payload: {
+        id: string
+        start: number
+        end: number
+        filename?: string
+        format?: AudioExportFormat
+        bitrate?: Mp3Bitrate
+        directory?: string
+      },
+    ) => {
       const track = musicRepository.get(payload.id)
       if (!track) throw new Error('Música não encontrada')
-      const win = getMainWindow()
-      const suggested = payload.filename || `${track.name}-corte.mp3`
-      const result = await dialog.showSaveDialog(win ?? undefined!, {
-        title: 'Exportar corte',
-        defaultPath: suggested,
-        filters: [{ name: 'MP3', extensions: ['mp3'] }],
+      const format: AudioExportFormat = payload.format === 'wav' ? 'wav' : payload.format === 'flac' ? 'flac' : 'mp3'
+      const bitrate = payload.bitrate === 192 || payload.bitrate === 256 ? payload.bitrate : 320
+      const ext = format
+      const suggested = payload.filename?.trim()
+        ? payload.filename.endsWith(`.${ext}`)
+          ? payload.filename
+          : `${payload.filename}.${ext}`
+        : `${track.name}-corte.${ext}`
+      const lastFolder = settingsRepository.get().musicExportFolder
+      let targetPath: string | null = null
+      if (payload.directory) {
+        targetPath = path.join(payload.directory, path.basename(suggested))
+      } else {
+        const win = getMainWindow()
+        const result = await dialog.showSaveDialog(win ?? undefined!, {
+          title: 'Exportar corte',
+          defaultPath: lastFolder ? path.join(lastFolder, path.basename(suggested)) : suggested,
+          filters:
+            format === 'wav'
+              ? [{ name: 'WAV', extensions: ['wav'] }]
+              : format === 'flac'
+                ? [{ name: 'FLAC', extensions: ['flac'] }]
+                : [{ name: 'MP3', extensions: ['mp3'] }],
+        })
+        if (result.canceled || !result.filePath) return null
+        targetPath = result.filePath
+      }
+      const saved = await exportMusicSegment({
+        id: payload.id,
+        start: payload.start,
+        end: payload.end,
+        targetPath,
+        format,
+        bitrate,
       })
-      if (result.canceled || !result.filePath) return null
-      return musicRepository.exportSegment(payload.id, payload.start, payload.end, result.filePath)
+      settingsRepository.update({ musicExportFolder: path.dirname(saved) })
+      return saved
     },
   )
+  ipcMain.handle(
+    IPC.music.exportAll,
+    async (
+      _e,
+      payload: {
+        id: string
+        format?: AudioExportFormat
+        bitrate?: Mp3Bitrate
+        directory?: string
+        cuts?: Array<{ start: number; end: number; label: string }>
+      },
+    ) => {
+      const track = musicRepository.get(payload.id)
+      if (!track) throw new Error('Música não encontrada')
+      const format: AudioExportFormat = payload.format === 'wav' ? 'wav' : 'mp3'
+      const bitrate = payload.bitrate === 192 || payload.bitrate === 256 ? payload.bitrate : 320
+      let directory = payload.directory || settingsRepository.get().musicExportFolder
+      if (!directory) {
+        const win = getMainWindow()
+        const result = await dialog.showOpenDialog(win ?? undefined!, {
+          title: 'Exportar todos os cortes',
+          properties: ['openDirectory', 'createDirectory'],
+        })
+        if (result.canceled || !result.filePaths[0]) return null
+        directory = result.filePaths[0]
+      }
+      settingsRepository.update({ musicExportFolder: directory })
+      const cuts = payload.cuts?.length
+        ? payload.cuts
+        : track.cuts.map((cut) => ({ start: cut.start, end: cut.end, label: cut.label }))
+      return exportMusicSegments({
+        id: payload.id,
+        directory,
+        format,
+        bitrate,
+        cuts,
+      })
+    },
+  )
+  ipcMain.handle(IPC.music.adviseCuts, async (_e, request: MusicAdviseRequest) => {
+    return adviseMusicCutsWithCodex(request, codexService)
+  })
 
   ipcMain.handle(IPC.shorts.list, (_e, filters?: ShortsProjectListFilters) =>
     shortsRepository.list(filters).map(presentShortsJob),

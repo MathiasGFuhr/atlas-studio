@@ -59,6 +59,7 @@ const DEFAULTS: AppSettings = {
   contentAreasMusicEnabled: true,
   chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
   chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
+  musicExportFolder: '',
 }
 
 export const settingsRepository = {

@@ -31,6 +31,7 @@ import type {
 } from '../src/shared/types'
 import { MUSIC_PROJECT_HAS_PUBLICATION_ERROR } from '../src/shared/types'
 import type { MusicTrack } from '../src/shared/musicAnalysis'
+import { adviseCutsLocally, type MusicAdviseRequest } from '../src/shared/audio/audioCutAdvisor'
 import type { ShortsAnalyzeInput, ShortsJob, ShortsProgressEvent } from '../src/shared/shorts'
 import { TEXT_ONLY_CAPABILITIES } from '../src/shared/agents/capabilities'
 import type { ShortsImportResult } from '../src/shared/shortsProjectIdentity'
@@ -126,6 +127,7 @@ const settings: AppSettings = {
   contentAreasMusicEnabled: true,
   chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
   chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
+  musicExportFolder: '',
 }
 
 function emptyAgentSnapshot(provider: AgentProviderId): AgentModelSnapshot {
@@ -673,6 +675,9 @@ export const mockApi = {
       throw new Error('Prévia indisponível no modo mock. Use o Electron.')
     },
     export: async () => null,
+    exportAll: async () => null,
+    chooseExportFolder: async () => settings.musicExportFolder || null,
+    adviseCuts: async (request: MusicAdviseRequest) => adviseCutsLocally(request),
   },
   shorts: {
     list: async () => [] as ShortsJob[],
@@ -874,7 +879,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.10.0',
+      currentVersion: '1.11.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

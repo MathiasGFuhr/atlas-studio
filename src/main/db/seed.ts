@@ -57,6 +57,7 @@ export function seedIfEmpty(db: AppDatabase, workspaceRoot: string) {
     contentAreasMusicEnabled: true,
     chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
     chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
+    musicExportFolder: '',
   }
 
   const upsert = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')

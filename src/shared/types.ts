@@ -487,6 +487,8 @@ export interface AppSettings {
   chatPanelWidth: number
   /** Altura persistida do painel flutuante de Chat (px). */
   chatPanelHeight: number
+  /** Última pasta usada para exportar cortes de música. */
+  musicExportFolder: string
 }
 
 export type CodexAuthState =
@@ -762,6 +764,9 @@ export const IPC = {
     remove: 'music:remove',
     preview: 'music:preview',
     export: 'music:export',
+    exportAll: 'music:exportAll',
+    chooseExportFolder: 'music:chooseExportFolder',
+    adviseCuts: 'music:adviseCuts',
   },
   shorts: {
     list: 'shorts:list',

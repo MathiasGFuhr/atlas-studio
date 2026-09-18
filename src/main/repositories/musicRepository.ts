@@ -3,8 +3,10 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db/database'
 import { getUserDataPath } from '../paths'
-import type { MusicCutMode, MusicSegment, MusicTrack } from '../../shared/musicAnalysis'
+import type { MusicTrack } from '../../shared/musicAnalysis'
+import { parseMusicCutsJson, serializeMusicCutsJson } from '../../shared/audio/persist'
 import { runFfmpeg } from '../services/audio/ffmpeg'
+import { buildFfmpegExportArgs, type AudioExportFormat, type Mp3Bitrate } from '../../shared/audio/audioExport'
 
 type TrackRow = {
   id: string
@@ -19,16 +21,12 @@ type TrackRow = {
   updated_at: string
 }
 
-function parseCuts(value: string): MusicSegment[] {
-  try {
-    const parsed = JSON.parse(value) as MusicSegment[]
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
+function parseCuts(value: string) {
+  return parseMusicCutsJson(value)
 }
 
 function mapTrack(row: TrackRow): MusicTrack {
+  const parsed = parseCuts(row.cuts_json ?? '[]')
   return {
     id: row.id,
     projectId: row.project_id ?? null,
@@ -37,7 +35,9 @@ function mapTrack(row: TrackRow): MusicTrack {
     previewPath: row.preview_path,
     duration: Number(row.duration) || 0,
     cutMode: row.cut_mode === 'manual' ? 'manual' : 'automatico',
-    cuts: parseCuts(row.cuts_json ?? '[]'),
+    cuts: parsed.cuts,
+    selectedId: parsed.selectedId,
+    appliedPreset: parsed.appliedPreset,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -110,7 +110,7 @@ export const musicRepository = {
 
   update(
     id: string,
-    patch: Partial<Pick<MusicTrack, 'name' | 'duration' | 'cutMode' | 'cuts'>>,
+    patch: Partial<Pick<MusicTrack, 'name' | 'duration' | 'cutMode' | 'cuts' | 'selectedId' | 'appliedPreset'>>,
   ): MusicTrack | null {
     const current = this.get(id)
     if (!current) return null
@@ -127,7 +127,11 @@ export const musicRepository = {
         next.name,
         next.duration,
         next.cutMode,
-        JSON.stringify(next.cuts ?? []),
+        serializeMusicCutsJson({
+          cuts: next.cuts ?? [],
+          selectedId: next.selectedId ?? null,
+          appliedPreset: next.appliedPreset ?? null,
+        }),
         next.updatedAt,
         id,
       )
@@ -143,27 +147,26 @@ export const musicRepository = {
     return true
   },
 
-  async exportSegment(id: string, start: number, end: number, targetPath: string): Promise<string> {
+  async exportSegment(
+    id: string,
+    start: number,
+    end: number,
+    targetPath: string,
+    format: AudioExportFormat = 'mp3',
+    bitrate: Mp3Bitrate = 320,
+  ): Promise<string> {
     const track = this.get(id)
     if (!track) throw new Error('Música não encontrada')
-    const duration = Math.max(0.05, end - start)
-    const fadeOutStart = Math.max(0, duration - 0.05)
-    await runFfmpeg([
-      '-y',
-      '-ss',
-      start.toFixed(3),
-      '-to',
-      end.toFixed(3),
-      '-i',
-      track.originalPath,
-      '-af',
-      `afade=t=in:st=0:d=0.02,afade=t=out:st=${fadeOutStart.toFixed(3)}:d=0.04`,
-      '-c:a',
-      'libmp3lame',
-      '-q:a',
-      '2',
-      targetPath,
-    ])
+    await runFfmpeg(
+      buildFfmpegExportArgs({
+        sourcePath: track.originalPath,
+        targetPath,
+        start,
+        end,
+        format,
+        bitrate,
+      }),
+    )
     return targetPath
   },
 }
