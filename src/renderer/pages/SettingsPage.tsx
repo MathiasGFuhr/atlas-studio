@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Database, Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid } from 'lucide-react'
+import { Database, Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid, ExternalLink } from 'lucide-react'
 import type { AntigravityStatus, AppSettings } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
@@ -110,14 +110,18 @@ export function SettingsPage({
       if (status.connected) {
         push('Antigravity pronto para analisar títulos.', 'success')
       } else if (status.authState === 'not_found') {
-        push('Antigravity CLI (`agy`) não encontrado.', 'error')
+        push('Antigravity CLI (`agy`) não encontrado. Instale o CLI ou selecione o agy.exe.', 'error')
       } else if (status.authState === 'not_authenticated') {
-        push('CLI encontrado. Faça login no terminal com `agy`.', 'default')
+        push('CLI encontrado. Toque em Entrar com o Google.', 'default')
+      } else if (status.authState === 'error') {
+        push(status.message || 'O CLI encontrou um erro. Reinstale o agy.exe.', 'error')
       } else {
         push(status.message || 'Não foi possível conectar.', 'error')
       }
+      return status
     } catch {
       push('Não foi possível testar o Antigravity.', 'error')
+      return null
     } finally {
       setTestingAgy(false)
       void agentModels.refresh('antigravity')
@@ -134,7 +138,8 @@ export function SettingsPage({
     setSettings(saved)
     onSettingsSaved?.(saved)
     push('Caminho do Antigravity salvo.', 'success')
-    await handleTestAntigravity()
+    const status = await handleTestAntigravity()
+    if (status && status.authState === 'not_authenticated') setAgyLinkOpen(true)
   }
 
   async function handleAntigravityLogout() {
@@ -511,9 +516,27 @@ export function SettingsPage({
             />
           </div>
           <p className="text-xs leading-relaxed text-muted">
-            Entre com sua conta Google no Antigravity para analisar a força dos títulos no
-            calendário do canal.
+            {antigravity?.authState === 'not_found'
+              ? 'O Atlas precisa do Antigravity CLI (`agy.exe`), não do aplicativo Antigravity. Instale o CLI e depois toque em Entrar com o Google.'
+              : antigravity?.authState === 'error'
+                ? 'O arquivo agy.exe foi encontrado, mas está danificado. Apague-o e instale o CLI de novo no PowerShell.'
+                : 'Entre com sua conta Google no Antigravity para analisar a força dos títulos no calendário do canal.'}
           </p>
+          {antigravity?.authState === 'not_found' || antigravity?.authState === 'error' ? (
+            <p className="text-xs leading-relaxed text-muted-2">
+              {antigravity.authState === 'error' ? (
+                <>
+                  No PowerShell:{' '}
+                  <span className="font-mono text-text">
+                    Remove-Item "$env:LOCALAPPDATA\agy\bin\agy.exe" -Force
+                  </span>
+                  <br />
+                </>
+              ) : null}
+              Depois:{' '}
+              <span className="font-mono text-text">irm https://antigravity.google/cli/install.ps1 | iex</span>
+            </p>
+          ) : null}
           <Row
             label="Executável"
             control={
@@ -540,11 +563,20 @@ export function SettingsPage({
               >
                 Desvincular Google
               </Button>
-            ) : antigravity?.authState === 'not_found' ? null : (
+            ) : (
               <Button icon={<LogIn className="h-4 w-4" />} onClick={() => setAgyLinkOpen(true)}>
                 Entrar com o Google
               </Button>
             )}
+            {antigravity?.authState === 'not_found' || antigravity?.authState === 'error' ? (
+              <Button
+                variant="secondary"
+                icon={<ExternalLink className="h-4 w-4" />}
+                onClick={() => void api.system.openPath('https://antigravity.google/docs/cli/install/')}
+              >
+                Como instalar o CLI
+              </Button>
+            ) : null}
             <Button
               variant="secondary"
               icon={<RefreshCw className={`h-4 w-4 ${testingAgy ? 'animate-spin' : ''}`} />}

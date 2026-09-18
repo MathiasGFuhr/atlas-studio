@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { Check, ChevronLeft, ChevronRight, Copy, FolderOpen, FolderSearch, ImagePlus, Music2, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, FolderOpen, FolderSearch, ImagePlus, Music2, Plus, Sparkles, Trash2 } from 'lucide-react'
 import type { Channel, ChannelVideo, ChannelVideoStatus, TitleStrengthAnalysis } from '@shared/types'
-import { channelVideoPath, toDateKey, todayDateKey } from '@shared/channelVideos'
+import { channelCalendarPath, channelVideoPath, sortPublishedChannelVideos, toDateKey, todayDateKey } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
@@ -30,16 +30,71 @@ function monthLabel(year: number, month: number): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
+function ChannelVideoSummaryCard({
+  video,
+  channelType,
+  onEdit,
+  onOpenProject,
+}: {
+  video: ChannelVideo
+  channelType: Channel['channelType']
+  onEdit: () => void
+  onOpenProject?: () => void
+}) {
+  return (
+    <Card className="flex gap-3" padding="sm">
+      <div className="h-20 w-[142px] shrink-0 overflow-hidden rounded-lg border border-border-soft bg-card-2">
+        {video.thumbnailDataUrl ? (
+          <img src={video.thumbnailDataUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-muted-2">
+            <ImagePlus className="h-5 w-5" />
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-text">{video.title}</p>
+        <p className="mt-1 text-xs text-muted">
+          {new Date(`${video.scheduledDate}T00:00:00`).toLocaleDateString('pt-BR')}
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <StatusBadge status={video.status} />
+          <TitleScoreBadge score={video.titleScore} />
+          {video.projectFolderPath ? (
+            <span className="inline-flex items-center gap-1 text-[10px] text-muted-2">
+              <FolderOpen className="h-3 w-3" />
+              Pasta
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-col gap-2">
+        <Button variant="secondary" className="h-9 px-3 text-xs" onClick={onEdit}>
+          Editar
+        </Button>
+        {video.projectId && channelType === 'music' && onOpenProject ? (
+          <Button variant="ghost" className="h-9 px-3 text-xs" onClick={onOpenProject}>
+            Abrir projeto
+          </Button>
+        ) : null}
+      </div>
+    </Card>
+  )
+}
+
 export function ChannelCalendarPage() {
   const { id, videoId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const api = getAtlasApi()
   const navigate = useNavigate()
   const { push } = useToast()
   const now = new Date()
   const openedFromRoute = useRef<string | null>(null)
+  const publishedTab = searchParams.get('aba') === 'publicados'
   const [channel, setChannel] = useState<Channel | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [videos, setVideos] = useState<ChannelVideo[]>([])
+  const [publishedVideos, setPublishedVideos] = useState<ChannelVideo[]>([])
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
   const [modalOpen, setModalOpen] = useState(false)
@@ -68,13 +123,22 @@ export function ChannelCalendarPage() {
 
   async function load() {
     if (!id) return
-    const [found, list] = await Promise.all([
+    const [found, list, published] = await Promise.all([
       api.channels.get(id),
-      api.videos.list({ channelId: id, from, to }),
+      api.videos.list({ channelId: id, from, to, excludeStatus: 'publicado' }),
+      api.videos.list({ channelId: id, status: 'publicado' }),
     ])
     setChannel(found)
     setVideos(list)
+    setPublishedVideos(sortPublishedChannelVideos(published))
     setLoaded(true)
+  }
+
+  function setPublishedTab(open: boolean) {
+    const next = new URLSearchParams(searchParams)
+    if (open) next.set('aba', 'publicados')
+    else next.delete('aba')
+    setSearchParams(next, { replace: true })
   }
 
   useEffect(() => {
@@ -170,21 +234,26 @@ export function ChannelCalendarPage() {
     setModalOpen(true)
   }
 
-  function closeModal() {
+  function closeModal(options?: { publishedTab?: boolean }) {
+    const showPublished = options?.publishedTab ?? publishedTab
     setModalOpen(false)
     openedFromRoute.current = null
     if (id && videoId) {
-      navigate(`/canais/${id}`, { replace: true })
+      navigate(channelCalendarPath(id, showPublished ? 'publicados' : undefined), { replace: true })
+      return
     }
+    setPublishedTab(showPublished)
   }
 
   function openExistingVideo(video: ChannelVideo) {
     if (!id) return
+    const tab = video.status === 'publicado' ? 'publicados' : undefined
     if (videoId === video.id) {
+      if (tab === 'publicados' && !publishedTab) setPublishedTab(true)
       openEdit(video)
       return
     }
-    navigate(channelVideoPath(id, video.id))
+    navigate(channelVideoPath(id, video.id, tab ? { tab } : undefined))
   }
 
   useEffect(() => {
@@ -202,12 +271,27 @@ export function ChannelCalendarPage() {
         navigate(`/canais/${id}`, { replace: true })
         return
       }
-      const parsed = video.scheduledDate.split('-').map(Number)
-      const nextYear = parsed[0]
-      const nextMonth = (parsed[1] ?? 1) - 1
-      if (nextYear !== year || nextMonth !== month) {
-        setYear(nextYear)
-        setMonth(nextMonth)
+      if (video.status === 'publicado') {
+        setSearchParams((prev) => {
+          if (prev.get('aba') === 'publicados') return prev
+          const next = new URLSearchParams(prev)
+          next.set('aba', 'publicados')
+          return next
+        }, { replace: true })
+      } else {
+        const parsed = video.scheduledDate.split('-').map(Number)
+        const nextYear = parsed[0]
+        const nextMonth = (parsed[1] ?? 1) - 1
+        if (nextYear !== year || nextMonth !== month) {
+          setYear(nextYear)
+          setMonth(nextMonth)
+        }
+        setSearchParams((prev) => {
+          if (!prev.has('aba')) return prev
+          const next = new URLSearchParams(prev)
+          next.delete('aba')
+          return next
+        }, { replace: true })
       }
       openEdit(video)
       openedFromRoute.current = videoId
@@ -287,7 +371,7 @@ export function ChannelCalendarPage() {
         songTitle: form.songTitle.trim() || undefined,
         artistName: form.artistName.trim() || undefined,
         eventName: form.eventName.trim() || undefined,
-        recentChannelTitles: videos
+        recentChannelTitles: [...videos, ...publishedVideos]
           .filter((item) => item.id !== editing?.id)
           .map((item) => item.title)
           .filter(Boolean),
@@ -334,7 +418,12 @@ export function ChannelCalendarPage() {
         })
         if (!updated) throw new Error('Vídeo não encontrado')
         saved = updated
-        push('Vídeo atualizado.', 'success')
+        push(
+          form.status === 'publicado'
+            ? 'Vídeo publicado. Ele saiu do calendário e da agenda.'
+            : 'Vídeo atualizado.',
+          'success',
+        )
       } else {
         saved = await api.videos.create({
           channelId: id,
@@ -348,12 +437,13 @@ export function ChannelCalendarPage() {
           songTitle: form.songTitle.trim() || null,
         })
         push(
-          channel?.channelType === 'music'
-            ? 'Vídeo adicionado e vinculado ao projeto de Música.'
-            : 'Vídeo adicionado ao calendário.',
+          form.status === 'publicado'
+            ? 'Vídeo publicado. Ele aparece só em vídeos publicados.'
+            : channel?.channelType === 'music'
+              ? 'Vídeo adicionado e vinculado ao projeto de Música.'
+              : 'Vídeo adicionado ao calendário.',
           'success',
         )
-        if (channel?.channelType === 'music') notifyProjectsChanged()
       }
       if (pendingThumb) {
         const withThumb = await api.videos.setThumbnail(saved.id, pendingThumb)
@@ -367,7 +457,8 @@ export function ChannelCalendarPage() {
         })
       }
       notifyVideosChanged()
-      closeModal()
+      if (channel?.channelType === 'music') notifyProjectsChanged()
+      closeModal({ publishedTab: form.status === 'publicado' })
       await load()
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao salvar vídeo', 'error')
@@ -429,22 +520,88 @@ export function ChannelCalendarPage() {
       />
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" className="h-10 w-10 px-0" onClick={() => shiftMonth(-1)} aria-label="Mês anterior">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="min-w-[180px] text-center text-sm font-semibold text-text">
-            {monthLabel(year, month)}
-          </div>
-          <Button variant="secondary" className="h-10 w-10 px-0" onClick={() => shiftMonth(1)} aria-label="Próximo mês">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+        <div
+          role="tablist"
+          aria-label="Visão do canal"
+          className="inline-flex rounded-xl border border-border bg-card-2 p-1"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!publishedTab}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+              !publishedTab ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+            )}
+            onClick={() => setPublishedTab(false)}
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Calendário
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={publishedTab}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+              publishedTab ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+            )}
+            onClick={() => setPublishedTab(true)}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Vídeos publicados
+            {publishedVideos.length > 0 ? (
+              <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                {publishedVideos.length}
+              </span>
+            ) : null}
+          </button>
         </div>
-        <Button icon={<Plus className="h-4 w-4" />} onClick={() => openCreate()}>
-          Novo vídeo
-        </Button>
+        {publishedTab ? null : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" className="h-10 w-10 px-0" onClick={() => shiftMonth(-1)} aria-label="Mês anterior">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="min-w-[180px] text-center text-sm font-semibold text-text">
+              {monthLabel(year, month)}
+            </div>
+            <Button variant="secondary" className="h-10 w-10 px-0" onClick={() => shiftMonth(1)} aria-label="Próximo mês">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button icon={<Plus className="h-4 w-4" />} onClick={() => openCreate()}>
+              Novo vídeo
+            </Button>
+          </div>
+        )}
       </div>
 
+      {publishedTab ? (
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-text">Vídeos publicados</h2>
+          {publishedVideos.length === 0 ? (
+            <p className="text-sm text-muted">
+              Nenhum vídeo publicado neste canal. Ao marcar um vídeo como Publicado, ele sai do calendário e da agenda e aparece aqui.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {publishedVideos.map((video) => (
+                <ChannelVideoSummaryCard
+                  key={video.id}
+                  video={video}
+                  channelType={channel.channelType}
+                  onEdit={() => openExistingVideo(video)}
+                  onOpenProject={
+                    video.projectId && channel.channelType === 'music'
+                      ? () => navigate(projectPath('music', video.projectId!))
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       <Card padding="sm" className="overflow-x-auto">
         <div className="min-w-[720px]">
         <div className="grid grid-cols-7 border-b border-border-soft">
@@ -523,51 +680,23 @@ export function ChannelCalendarPage() {
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {videos.map((video) => (
-              <Card key={video.id} className="flex gap-3" padding="sm">
-                <div className="h-20 w-[142px] shrink-0 overflow-hidden rounded-lg border border-border-soft bg-card-2">
-                  {video.thumbnailDataUrl ? (
-                    <img src={video.thumbnailDataUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-muted-2">
-                      <ImagePlus className="h-5 w-5" />
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-text">{video.title}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {new Date(`${video.scheduledDate}T00:00:00`).toLocaleDateString('pt-BR')}
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <StatusBadge status={video.status} />
-                    <TitleScoreBadge score={video.titleScore} />
-                    {video.projectFolderPath ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-2">
-                        <FolderOpen className="h-3 w-3" />
-                        Pasta
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="flex shrink-0 flex-col gap-2">
-                  <Button variant="secondary" className="h-9 px-3 text-xs" onClick={() => openExistingVideo(video)}>
-                    Editar
-                  </Button>
-                  {video.projectId && channel.channelType === 'music' ? (
-                    <Button
-                      variant="ghost"
-                      className="h-9 px-3 text-xs"
-                      onClick={() => navigate(projectPath('music', video.projectId!))}
-                    >
-                      Abrir projeto
-                    </Button>
-                  ) : null}
-                </div>
-              </Card>
+              <ChannelVideoSummaryCard
+                key={video.id}
+                video={video}
+                channelType={channel.channelType}
+                onEdit={() => openExistingVideo(video)}
+                onOpenProject={
+                  video.projectId && channel.channelType === 'music'
+                    ? () => navigate(projectPath('music', video.projectId!))
+                    : undefined
+                }
+              />
             ))}
           </div>
         )}
       </div>
+        </>
+      )}
 
       <Modal
         open={modalOpen}
@@ -595,7 +724,7 @@ export function ChannelCalendarPage() {
                 Abrir projeto
               </Button>
             ) : null}
-            <Button variant="secondary" onClick={closeModal}>
+            <Button variant="secondary" onClick={() => closeModal()}>
               Cancelar
             </Button>
             <Button onClick={() => void save()}>Salvar</Button>

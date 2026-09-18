@@ -16,6 +16,7 @@ import { NichesPage } from './pages/NichesPage'
 import { ChannelsPage } from './pages/ChannelsPage'
 import { ChannelCalendarPage } from './pages/ChannelCalendarPage'
 import { ChannelAgendaPage } from './pages/ChannelAgendaPage'
+import { ChannelPublishedVideosPage } from './pages/ChannelPublishedVideosPage'
 import { PromptsPage } from './pages/PromptsPage'
 import { ScriptsPage } from './pages/ScriptsPage'
 import { ScriptDetailPage } from './pages/ScriptDetailPage'
@@ -182,6 +183,7 @@ export default function App() {
                 {/* Áreas compartilhadas */}
                 <Route path="/canais" element={<ChannelsPage />} />
                 <Route path="/canais/agenda" element={<ChannelAgendaPage />} />
+                <Route path="/canais/publicados" element={<ChannelPublishedVideosPage />} />
                 <Route path="/canais/:id/videos/:videoId" element={<ChannelCalendarPage />} />
                 <Route path="/canais/:id" element={<ChannelCalendarPage />} />
                 <Route path="/shorts" element={<ShortsProjectsPage />} />

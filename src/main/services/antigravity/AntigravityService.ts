@@ -89,6 +89,8 @@ export class AntigravityService {
   private loginPollTimer: ReturnType<typeof setInterval> | null = null
   private loginTimeout: ReturnType<typeof setTimeout> | null = null
   private currentLoginId: string | null = null
+  private locatedBinary: string | null | undefined
+  private authProbeInflight = false
   private readonly titleCache = new Map<string, AnalyzeTitleResult['analysis']>()
   private readonly getWindow: () => BrowserWindow | null
 
@@ -133,6 +135,7 @@ export class AntigravityService {
   }
 
   async initialize(): Promise<AntigravityStatus> {
+    this.locatedBinary = undefined
     const binary = await this.locateBinary()
     if (!binary) {
       this.setStatus({
@@ -142,43 +145,52 @@ export class AntigravityService {
       return this.status
     }
 
-    const version = await this.readVersion(binary)
+    this.rememberBinaryPath(binary)
     if (this.hasStoredToken()) {
       this.setStatus({
         authState: 'connected',
         authenticated: true,
         connected: true,
-        version,
         runtimePath: binary,
         message: 'Sessão Google encontrada',
       })
     } else {
       this.setStatus({
         authState: 'not_authenticated',
-        version,
         runtimePath: binary,
         message: 'CLI encontrado. Entre com o Google para analisar títulos.',
       })
     }
-    logger.info('antigravity.found', { binary, version, hasToken: this.hasStoredToken() })
+    logger.info('antigravity.found', { binary, hasToken: this.hasStoredToken() })
     return this.status
   }
 
   async healthCheck(): Promise<AntigravityStatus> {
+    this.locatedBinary = undefined
     const binary = await this.locateBinary()
     if (!binary) {
       this.setStatus({
         authState: 'not_found',
-        message: 'Não instalado',
+        message: 'Não instalado. Instale o CLI com o comando da página oficial e informe o agy.exe.',
       })
       return this.status
     }
 
+    this.rememberBinaryPath(binary)
     const version = await this.readVersion(binary)
     const probe = await this.runAgy(binary, ['-p', 'Responda exatamente: ok', '--output-format', 'json', '--effort', 'low', '--print-timeout', '45s'], 50_000)
 
     const combined = `${probe.stdout}\n${probe.stderr}`
-    if (/authentication required/i.test(combined)) {
+    if (this.isCrashExit(probe.code)) {
+      this.setStatus({
+        authState: 'error',
+        version,
+        runtimePath: binary,
+        message: 'O agy.exe está danificado. Apague o arquivo e instale o CLI de novo.',
+      })
+      return this.status
+    }
+    if (this.isAuthRequired(combined)) {
       this.setStatus({
         authState: 'not_authenticated',
         version,
@@ -255,10 +267,8 @@ export class AntigravityService {
 
     this.loginPollTimer = setInterval(() => {
       if (this.currentLoginId !== loginId) return
-      if (this.hasStoredToken()) {
-        void this.finishLogin(loginId, binary)
-      }
-    }, 2000)
+      void this.pollLogin(loginId, binary)
+    }, 2500)
 
     this.loginTimeout = setTimeout(() => {
       if (this.currentLoginId !== loginId) return
@@ -301,8 +311,8 @@ export class AntigravityService {
   async loginConfirm(): Promise<AntigravityStatus> {
     this.clearLoginTimers()
     this.currentLoginId = null
-    if (this.hasStoredToken()) {
-      const binary = this.status.runtimePath || (await this.locateBinary())
+    const binary = this.status.runtimePath || (await this.locateBinary())
+    if (binary && (await this.probeLoggedIn(binary))) {
       this.setStatus({
         authState: 'connected',
         authenticated: true,
@@ -585,7 +595,7 @@ export class AntigravityService {
 
     const result = await this.runAgy(binary, args, opts.timeoutMs ?? 200_000)
     const combined = `${result.stdout}\n${result.stderr}`
-    if (/authentication required/i.test(combined)) {
+    if (this.isAuthRequired(combined)) {
       this.setStatus({
         authState: 'not_authenticated',
         runtimePath: binary,
@@ -632,6 +642,18 @@ export class AntigravityService {
     logger.info('antigravity.login.success', { loginId })
   }
 
+  private async pollLogin(loginId: string, binary: string) {
+    if (this.currentLoginId !== loginId || this.authProbeInflight) return
+    this.authProbeInflight = true
+    try {
+      if (await this.probeLoggedIn(binary)) {
+        await this.finishLogin(loginId, binary)
+      }
+    } finally {
+      this.authProbeInflight = false
+    }
+  }
+
   private writeLoginScript(binary: string): string {
     const dir = path.join(getUserDataPath(), 'antigravity')
     mkdirSync(dir, { recursive: true })
@@ -642,14 +664,10 @@ export class AntigravityService {
       'title Antigravity - Login Google',
       'echo.',
       'echo  Atlas Studio — login Google no Antigravity',
-      'echo  1. Escolha "Google OAuth"',
-      'echo  2. Entre com sua conta Google no navegador',
-      'echo  3. Se pedir um codigo, cole nesta janela',
-      'echo  4. Depois feche esta janela e volte ao Atlas',
+      'echo  O navegador deve abrir sozinho. Entre com sua conta Google.',
+      'echo  Se pedir um codigo, cole nesta janela.',
+      'echo  Depois volte ao Atlas e toque em "Ja entrei com o Google".',
       'echo.',
-      'set SSH_CONNECTION=127.0.0.1 22 127.0.0.1 43210',
-      'set SSH_CLIENT=127.0.0.1 43210 22',
-      'set SSH_TTY=atlas-studio',
       'set GEMINI_FORCE_FILE_STORAGE=true',
       `cd /d "${os.homedir()}"`,
       `"${binary}"`,
@@ -661,7 +679,31 @@ export class AntigravityService {
   }
 
   private hasStoredToken(): boolean {
-    return existsSync(this.tokenFilePath())
+    if (existsSync(this.tokenFilePath())) return true
+    const dir = path.join(os.homedir(), '.gemini', 'antigravity-cli')
+    if (!existsSync(dir)) return false
+    try {
+      return readdirSync(dir).some((name) => /oauth-token|oauth_token|credentials/i.test(name))
+    } catch {
+      return false
+    }
+  }
+
+  private isAuthRequired(text: string): boolean {
+    return /authentication required|not authenticated|sign in|login required/i.test(text)
+  }
+
+  private async probeLoggedIn(binary: string, quick = false): Promise<boolean> {
+    if (this.hasStoredToken()) return true
+    const result = await this.runAgy(binary, ['models', '--json'], quick ? 8_000 : 12_000)
+    const combined = `${result.stdout}\n${result.stderr}`
+    if (this.isAuthRequired(combined)) return false
+    if (result.code === 0) return true
+    if (quick) return false
+    const fallback = await this.runAgy(binary, ['models'], 12_000)
+    const fallbackText = `${fallback.stdout}\n${fallback.stderr}`
+    if (this.isAuthRequired(fallbackText)) return false
+    return fallback.code === 0 && /[a-z0-9._-]{3,}/i.test(fallback.stdout)
   }
 
   private resolveAntigravityRun(override?: { model?: string | null; effort?: string | null }) {
@@ -679,13 +721,12 @@ export class AntigravityService {
   }
 
   private agyEnv(): NodeJS.ProcessEnv {
-    return {
-      ...process.env,
-      SSH_CONNECTION: process.env.SSH_CONNECTION || '127.0.0.1 22 127.0.0.1 43210',
-      SSH_CLIENT: process.env.SSH_CLIENT || '127.0.0.1 43210 22',
-      SSH_TTY: process.env.SSH_TTY || 'atlas-studio',
-      GEMINI_FORCE_FILE_STORAGE: process.env.GEMINI_FORCE_FILE_STORAGE || 'true',
-    }
+    const env = { ...process.env }
+    delete env.SSH_CONNECTION
+    delete env.SSH_CLIENT
+    delete env.SSH_TTY
+    env.GEMINI_FORCE_FILE_STORAGE = process.env.GEMINI_FORCE_FILE_STORAGE || 'true'
+    return env
   }
 
   private clearLoginTimers() {
@@ -712,23 +753,55 @@ export class AntigravityService {
   }
 
   private async locateBinary(): Promise<string | null> {
+    if (this.locatedBinary !== undefined) return this.locatedBinary
+
+    this.prependWindowsAgyPath()
     const settings = settingsRepository.get()
     const saved = settings.antigravityBinaryPath?.trim()
     const fromPath = await this.findInPath()
     const candidates = [
-      fromPath,
+      saved,
       process.env.AGY_PATH,
       process.env.ANTIGRAVITY_PATH,
-      saved,
       ...this.knownInstallPaths(),
-    ].filter((item): item is string => Boolean(item))
+      fromPath,
+    ].filter((item, index, list): item is string => Boolean(item) && list.indexOf(item) === index)
 
     for (const candidate of candidates) {
-      if (!existsSync(candidate)) continue
-      const version = await this.readVersion(candidate)
-      if (version) return candidate
+      if (!existsSync(candidate) || !this.looksLikeAgy(candidate)) continue
+      this.locatedBinary = candidate
+      return candidate
     }
+    this.locatedBinary = null
     return null
+  }
+
+  private looksLikeAgy(candidate: string): boolean {
+    const base = path.basename(candidate).toLowerCase()
+    return base === 'agy.exe' || base === 'agy' || base === 'agy.cmd' || base === 'agy.bat'
+  }
+
+  private rememberBinaryPath(binary: string) {
+    try {
+      const current = settingsRepository.get().antigravityBinaryPath?.trim()
+      if (!current) settingsRepository.update({ antigravityBinaryPath: binary })
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private isCrashExit(code: number | null): boolean {
+    if (code == null) return false
+    return code === -1073741819 || code === 3221225477
+  }
+
+  private prependWindowsAgyPath() {
+    if (process.platform !== 'win32') return
+    const localAgy = path.join(process.env.LOCALAPPDATA ?? '', 'agy', 'bin')
+    const current = process.env.PATH ?? ''
+    if (localAgy && existsSync(localAgy) && !current.toLowerCase().includes(localAgy.toLowerCase())) {
+      process.env.PATH = `${localAgy};${current}`
+    }
   }
 
   private knownInstallPaths(): string[] {

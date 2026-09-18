@@ -392,6 +392,10 @@ export interface VideoListFilters {
   from?: string
   to?: string
   limit?: number
+  /** Só vídeos com este status editorial. */
+  status?: ChannelVideoStatus
+  /** Exclui vídeos com este status (ex.: tirar `publicado` da agenda). */
+  excludeStatus?: ChannelVideoStatus
 }
 
 export interface ChannelPrompt {

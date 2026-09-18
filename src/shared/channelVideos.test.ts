@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { ChannelVideo } from './types'
 import {
+  channelCalendarPath,
+  channelPublishedPath,
   channelVideoPath,
   formatMusicProjectPublicationLine,
   formatScheduledDateLabel,
   pickUpcomingChannelVideos,
+  sortPublishedChannelVideos,
   todayDateKey,
 } from './channelVideos'
 
@@ -61,8 +64,39 @@ describe('channelVideos', () => {
     expect(pickUpcomingChannelVideos(videos, '2026-09-17', 5)).toHaveLength(5)
   })
 
+  it('ignora vídeos publicados mesmo com data futura', () => {
+    const picked = pickUpcomingChannelVideos(
+      [
+        video({ id: 'live', title: 'Na agenda', scheduledDate: '2026-09-18' }),
+        video({
+          id: 'done',
+          title: 'Já no ar',
+          scheduledDate: '2026-09-18',
+          status: 'publicado',
+        }),
+      ],
+      '2026-09-17',
+      5,
+    )
+    expect(picked.map((item) => item.id)).toEqual(['live'])
+  })
+
   it('abre o registro do vídeo no calendário do canal', () => {
     expect(channelVideoPath('abc', 'xyz')).toBe('/canais/abc/videos/xyz')
+    expect(channelVideoPath('abc', 'xyz', { tab: 'publicados' })).toBe(
+      '/canais/abc/videos/xyz?aba=publicados',
+    )
+    expect(channelCalendarPath('abc', 'publicados')).toBe('/canais/abc?aba=publicados')
+    expect(channelPublishedPath()).toBe('/canais/publicados')
+  })
+
+  it('ordena publicados da data mais recente para a mais antiga', () => {
+    const sorted = sortPublishedChannelVideos([
+      video({ id: 'a', title: 'A', scheduledDate: '2026-09-10', status: 'publicado' }),
+      video({ id: 'b', title: 'B', scheduledDate: '2026-09-21', status: 'publicado' }),
+      video({ id: 'c', title: 'C', scheduledDate: '2026-09-18', status: 'publicado' }),
+    ])
+    expect(sorted.map((item) => item.id)).toEqual(['b', 'c', 'a'])
   })
 
   it('monta o resumo da publicação do projeto de Música', () => {

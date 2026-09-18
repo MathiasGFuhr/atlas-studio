@@ -264,6 +264,14 @@ export const channelRepository = {
       sql += ' AND v.scheduled_date <= ?'
       params.push(filters.to)
     }
+    if (filters.status && VIDEO_STATUSES.includes(filters.status)) {
+      sql += ' AND v.status = ?'
+      params.push(filters.status)
+    }
+    if (filters.excludeStatus && VIDEO_STATUSES.includes(filters.excludeStatus)) {
+      sql += ' AND v.status != ?'
+      params.push(filters.excludeStatus)
+    }
     sql += ' ORDER BY v.scheduled_date ASC, v.created_at ASC'
     if (filters.limit != null) {
       sql += ' LIMIT ?'

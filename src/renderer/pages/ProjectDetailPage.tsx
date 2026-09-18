@@ -314,10 +314,16 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
                 className="h-9 text-xs"
                 icon={<CalendarDays className="h-3.5 w-3.5" />}
                 onClick={() =>
-                  navigate(channelVideoPath(project.scheduledVideoChannelId!, project.scheduledVideoId!))
+                  navigate(
+                    channelVideoPath(
+                      project.scheduledVideoChannelId!,
+                      project.scheduledVideoId!,
+                      project.scheduledVideoStatus === 'publicado' ? { tab: 'publicados' } : undefined,
+                    ),
+                  )
                 }
               >
-                Abrir no calendário
+                {project.scheduledVideoStatus === 'publicado' ? 'Abrir em vídeos publicados' : 'Abrir no calendário'}
               </Button>
             </Card>
           ) : null}
@@ -372,7 +378,7 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
         title="Excluir projeto?"
         message={
           project.scheduledVideoId
-            ? 'Este projeto possui uma publicação no calendário. Excluir o projeto também remove o agendamento. Os arquivos físicos não serão apagados.'
+            ? 'Este projeto possui um vídeo no canal. Excluir o projeto também remove esse registro. Os arquivos físicos não serão apagados.'
             : 'O projeto será removido do Atlas. Os arquivos da pasta do projeto não serão apagados.'
         }
         confirmLabel={project.scheduledVideoId ? 'Excluir projeto e publicação' : 'Excluir projeto'}

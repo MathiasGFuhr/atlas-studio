@@ -9,6 +9,7 @@ import { buildHomeModuleStats } from '@shared/homeStats'
 import {
   HOME_UPCOMING_VIDEO_LIMIT,
   channelAgendaPath,
+  channelPublishedPath,
   channelVideoPath,
   todayDateKey,
 } from '@shared/channelVideos'
@@ -80,7 +81,7 @@ export function HomePage() {
       api.channels.list(),
       api.scripts.list(),
       api.music.list(),
-      api.videos.list({ from: todayDateKey(), limit: HOME_UPCOMING_VIDEO_LIMIT }),
+      api.videos.list({ from: todayDateKey(), limit: HOME_UPCOMING_VIDEO_LIMIT, excludeStatus: 'publicado' }),
       api.settings.get(),
     ])
     setProjects([...history, ...music])
@@ -302,13 +303,22 @@ export function HomePage() {
             title="Agenda"
             count={upcomingVideos.length}
             action={
-              <button
-                type="button"
-                onClick={() => navigate(channelAgendaPath())}
-                className="text-[13px] font-medium text-muted transition-colors hover:text-text"
-              >
-                Ver todos
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate(channelPublishedPath())}
+                  className="text-[13px] font-medium text-muted transition-colors hover:text-text"
+                >
+                  Publicados
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(channelAgendaPath())}
+                  className="text-[13px] font-medium text-muted transition-colors hover:text-text"
+                >
+                  Ver todos
+                </button>
+              </div>
             }
           >
             {upcomingVideos.length === 0 ? (

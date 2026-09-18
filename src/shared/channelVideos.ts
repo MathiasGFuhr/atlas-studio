@@ -43,13 +43,17 @@ export function formatScheduledDateLabel(dateKey: string, now = new Date()): str
   return `${date.getDate()} ${MONTHS_SHORT_PT[date.getMonth()]}`
 }
 
+export function isPublishedChannelVideo(video: ChannelVideo): boolean {
+  return video.status === 'publicado'
+}
+
 export function pickUpcomingChannelVideos(
   videos: ChannelVideo[],
   today = todayDateKey(),
   limit = HOME_UPCOMING_VIDEO_LIMIT,
 ): ChannelVideo[] {
   return videos
-    .filter((video) => video.scheduledDate >= today)
+    .filter((video) => video.scheduledDate >= today && !isPublishedChannelVideo(video))
     .sort((a, b) => {
       const byDate = a.scheduledDate.localeCompare(b.scheduledDate)
       if (byDate !== 0) return byDate
@@ -58,8 +62,29 @@ export function pickUpcomingChannelVideos(
     .slice(0, limit)
 }
 
-export function channelVideoPath(channelId: string, videoId: string): string {
-  return `/canais/${channelId}/videos/${videoId}`
+export function sortPublishedChannelVideos(videos: ChannelVideo[]): ChannelVideo[] {
+  return [...videos].sort((a, b) => {
+    const byDate = b.scheduledDate.localeCompare(a.scheduledDate)
+    if (byDate !== 0) return byDate
+    return b.createdAt.localeCompare(a.createdAt)
+  })
+}
+
+export function channelVideoPath(
+  channelId: string,
+  videoId: string,
+  options?: { tab?: 'publicados' },
+): string {
+  const path = `/canais/${channelId}/videos/${videoId}`
+  return options?.tab === 'publicados' ? `${path}?aba=publicados` : path
+}
+
+export function channelCalendarPath(channelId: string, tab?: 'publicados'): string {
+  return tab === 'publicados' ? `/canais/${channelId}?aba=publicados` : `/canais/${channelId}`
+}
+
+export function channelPublishedPath(): string {
+  return '/canais/publicados'
 }
 
 /** Linha discreta na lista de Música quando o projeto já tem publicação. */

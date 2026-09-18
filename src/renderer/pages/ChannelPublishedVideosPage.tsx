@@ -2,10 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ChannelVideo } from '@shared/types'
 import {
-  AGENDA_UPCOMING_VIDEO_LIMIT,
-  channelPublishedPath,
+  channelAgendaPath,
   channelVideoPath,
-  todayDateKey,
+  sortPublishedChannelVideos,
 } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
@@ -15,7 +14,7 @@ import { onVideosChanged } from '../lib/videoEvents'
 import { useToast } from '../components/Toast'
 import { projectPath } from '../lib/environments'
 
-export function ChannelAgendaPage() {
+export function ChannelPublishedVideosPage() {
   const api = getAtlasApi()
   const navigate = useNavigate()
   const { push } = useToast()
@@ -23,12 +22,8 @@ export function ChannelAgendaPage() {
   const [loaded, setLoaded] = useState(false)
 
   const load = useCallback(async () => {
-    const list = await api.videos.list({
-      from: todayDateKey(),
-      limit: AGENDA_UPCOMING_VIDEO_LIMIT,
-      excludeStatus: 'publicado',
-    })
-    setVideos(list)
+    const list = await api.videos.list({ status: 'publicado' })
+    setVideos(sortPublishedChannelVideos(list))
     setLoaded(true)
   }, [api])
 
@@ -67,30 +62,23 @@ export function ChannelAgendaPage() {
   return (
     <PageShell>
       <PageHeader
-        breadcrumb="Atlas / Canais / Agenda"
-        title="Vídeos agendados"
-        subtitle="Próximos cadastros do calendário de todos os canais."
-        hint="Vídeos publicados saem desta lista e ficam em Vídeos publicados."
+        breadcrumb="Atlas / Canais / Publicados"
+        title="Vídeos publicados"
+        subtitle="Vídeos já publicados de todos os canais. Eles não aparecem mais no calendário nem na agenda."
+        hint="Para voltar um vídeo para o calendário, abra o registro e mude o status."
       />
 
       {!loaded ? (
-        <p className="text-sm text-muted">Carregando agenda…</p>
+        <p className="text-sm text-muted">Carregando publicados…</p>
       ) : videos.length === 0 ? (
         <div className="rounded-2xl border border-border-soft bg-card px-4 py-4">
-          <p className="text-sm text-muted">Nenhum vídeo agendado.</p>
+          <p className="text-sm text-muted">Nenhum vídeo publicado ainda.</p>
           <button
             type="button"
-            onClick={() => navigate('/canais')}
-            className="mt-2 mr-3 text-xs font-medium text-accent hover:underline"
-          >
-            Abrir canais
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate(channelPublishedPath())}
+            onClick={() => navigate(channelAgendaPath())}
             className="mt-2 text-xs font-medium text-accent hover:underline"
           >
-            Ver publicados
+            Abrir agenda
           </button>
         </div>
       ) : (
@@ -99,7 +87,7 @@ export function ChannelAgendaPage() {
             <HomeScheduledVideoCard
               key={video.id}
               video={video}
-              onOpen={() => navigate(channelVideoPath(video.channelId, video.id))}
+              onOpen={() => navigate(channelVideoPath(video.channelId, video.id, { tab: 'publicados' }))}
               onOpenProject={
                 video.channelType === 'music' && video.projectId
                   ? () => navigate(projectPath('music', video.projectId!))

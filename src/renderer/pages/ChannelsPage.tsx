@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarDays, MessageSquareText, Plus, Search, Trash2, Tv } from 'lucide-react'
+import { CalendarDays, CheckCircle2, MessageSquareText, Plus, Search, Trash2, Tv } from 'lucide-react'
 import type { Channel, Niche } from '@shared/types'
 import { PROJECT_TYPE_LABEL } from '@shared/types'
+import { channelAgendaPath, channelPublishedPath } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
@@ -159,6 +160,16 @@ export function ChannelsPage() {
           />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
+          <Button variant="secondary" onClick={() => navigate(channelAgendaPath())}>
+            Agenda
+          </Button>
+          <Button
+            variant="secondary"
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            onClick={() => navigate(channelPublishedPath())}
+          >
+            Publicados
+          </Button>
           {capabilities.musicEnabled ? (
             <Button
               variant="secondary"

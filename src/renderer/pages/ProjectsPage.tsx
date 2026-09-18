@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FolderOpen, Files, Pencil, Plus, Scissors, Search, Tag, Trash2 } from 'lucide-react'
+import { CheckCircle2, FolderKanban, FolderOpen, Files, Pencil, Plus, Scissors, Search, Tag, Trash2 } from 'lucide-react'
 import type { Channel, Project, ProjectType } from '@shared/types'
 import { formatMusicProjectPublicationLine } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
@@ -17,9 +17,11 @@ import { notifyProjectsChanged, onProjectsChanged } from '../lib/projectEvents'
 import { onVideosChanged } from '../lib/videoEvents'
 import { useToast } from '../components/Toast'
 import { ENVIRONMENTS, environmentBreadcrumb, projectPath } from '../lib/environments'
-import { formatRelativeDate } from '../lib/utils'
+import { cn, formatRelativeDate } from '../lib/utils'
 
 const EMPTY_FORM: ProjectFormValues = { name: '', description: '', channelId: '' }
+
+type ProjectListTab = 'active' | 'published'
 
 /**
  * Lista de projetos de um ambiente. A mesma tela serve História e Música —
@@ -34,6 +36,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [channels, setChannels] = useState<Channel[]>([])
   const [query, setQuery] = useState('')
+  const [tab, setTab] = useState<ProjectListTab>('active')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Project | null>(null)
   const [deleting, setDeleting] = useState<Project | null>(null)
@@ -64,6 +67,20 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
       stopVideos()
     }
   }, [load])
+
+  const publishedProjects = useMemo(
+    () => projects.filter((project) => project.scheduledVideoStatus === 'publicado'),
+    [projects],
+  )
+  const activeProjects = useMemo(
+    () => projects.filter((project) => project.scheduledVideoStatus !== 'publicado'),
+    [projects],
+  )
+  const visibleProjects = tab === 'published' ? publishedProjects : activeProjects
+
+  useEffect(() => {
+    setTab('active')
+  }, [projectType])
 
   function openCreate() {
     setEditing(null)
@@ -193,14 +210,66 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
         </Button>
       </div>
 
-      {projects.length === 0 ? (
+      <div
+        role="tablist"
+        aria-label="Lista de projetos"
+        className="mb-5 inline-flex rounded-xl border border-border bg-card-2 p-1"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'active'}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+            tab === 'active' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+          )}
+          style={tab === 'active' ? { backgroundColor: `${env.color}1f`, color: env.color } : undefined}
+          onClick={() => setTab('active')}
+        >
+          <FolderKanban className="h-3.5 w-3.5" />
+          Projetos
+          {activeProjects.length > 0 ? (
+            <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+              {activeProjects.length}
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'published'}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+            tab === 'published' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+          )}
+          onClick={() => setTab('published')}
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Publicados
+          {publishedProjects.length > 0 ? (
+            <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+              {publishedProjects.length}
+            </span>
+          ) : null}
+        </button>
+      </div>
+
+      {visibleProjects.length === 0 ? (
         <Card className="flex flex-col items-center py-14 text-center">
           <env.icon className="h-8 w-8 text-muted-2" />
           <p className="mt-3 text-sm font-medium text-text">
-            {query ? 'Nenhum projeto encontrado' : `Nenhum projeto de ${env.label} ainda`}
+            {query
+              ? 'Nenhum projeto encontrado'
+              : tab === 'published'
+                ? 'Nenhum projeto publicado'
+                : `Nenhum projeto de ${env.label} ainda`}
           </p>
-          <p className="mt-1 max-w-md text-xs leading-relaxed text-muted">{env.description}</p>
-          {!query ? (
+          <p className="mt-1 max-w-md text-xs leading-relaxed text-muted">
+            {tab === 'published'
+              ? 'Quando o vídeo do projeto for marcado como Publicado, ele sai do calendário e da agenda e o projeto aparece aqui.'
+              : env.description}
+          </p>
+          {!query && tab !== 'published' ? (
             <Button
               className="mt-5"
               icon={<Plus className="h-4 w-4" />}
@@ -213,7 +282,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {projects.map((project) => (
+          {visibleProjects.map((project) => (
             <Card
               key={project.id}
               className="flex cursor-pointer flex-col gap-3 transition-colors hover:border-[#334049]"
@@ -312,7 +381,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
         title="Excluir projeto?"
         message={
           deleting?.scheduledVideoId
-            ? 'Este projeto possui uma publicação no calendário. Excluir o projeto também remove o agendamento. Os arquivos físicos não serão apagados.'
+            ? 'Este projeto possui um vídeo no canal. Excluir o projeto também remove esse registro. Os arquivos físicos não serão apagados.'
             : 'O projeto será removido do Atlas. Os arquivos da pasta do projeto não serão apagados.'
         }
         confirmLabel={deleting?.scheduledVideoId ? 'Excluir projeto e publicação' : 'Excluir projeto'}

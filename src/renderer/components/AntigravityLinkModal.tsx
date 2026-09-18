@@ -93,8 +93,11 @@ export function AntigravityLinkModal({
       {status?.authState === 'not_found' ? (
         <div className="space-y-4 text-center">
           <p className="text-sm leading-relaxed text-muted">
-            O Atlas não encontrou o Antigravity CLI (`agy`) neste computador. Instale o CLI e
-            informe o caminho em Configurações.
+            O Atlas não encontrou o Antigravity CLI (`agy.exe`) neste computador. Instale o CLI e
+            volte aqui, ou informe o caminho em Executável.
+          </p>
+          <p className="rounded-xl border border-border-soft bg-card-2 px-3 py-2 text-left font-mono text-[11px] leading-relaxed text-text">
+            irm https://antigravity.google/cli/install.ps1 | iex
           </p>
           <Button
             fullWidth
@@ -102,7 +105,7 @@ export function AntigravityLinkModal({
             onClick={() => void api.system.openPath('https://antigravity.google/docs/cli/install/')}
           >
             <ExternalLink className="h-4 w-4" />
-            Como instalar o Antigravity
+            Como instalar o Antigravity CLI
           </Button>
         </div>
       ) : linking ? (
@@ -111,20 +114,19 @@ export function AntigravityLinkModal({
             <Loader2 className="h-7 w-7 animate-spin text-accent" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-text">Janela do Antigravity aberta</h3>
+            <h3 className="text-base font-semibold text-text">Entre com o Google no navegador</h3>
             <p className="mt-2 text-sm leading-relaxed text-muted">
-              Essa tela preta do CLI não é a conta Google. Faça um destes caminhos:
+              Uma janela do Antigravity abriu e o navegador deve pedir sua conta Google. Depois de
+              concluir, volte aqui.
             </p>
             <ul className="mt-3 space-y-2 text-left text-sm leading-relaxed text-muted">
               <li>
-                Se aparecer <strong className="text-text">Select login method</strong>, escolha{' '}
-                <strong className="text-text">1. Google OAuth</strong>, entre no navegador e cole o
-                código no terminal se pedir.
+                Se o navegador não abrir, na janela preta escolha{' '}
+                <strong className="text-text">Google OAuth</strong> e cole o código se pedir.
               </li>
               <li>
-                Se já aparecer um prompt tipo <strong className="text-text">you:</strong> ou{' '}
-                <strong className="text-text">&gt;</strong>, o Antigravity já está logado. Volte aqui e
-                toque em <strong className="text-text">Já entrei com o Google</strong>.
+                Se já aparecer um prompt tipo <strong className="text-text">you:</strong>, o login
+                concluiu. Toque em <strong className="text-text">Já entrei com o Google</strong>.
               </li>
             </ul>
           </div>
