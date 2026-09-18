@@ -33,6 +33,45 @@ export type ShortsRankedWindow = ShortsTimeWindow & {
   reason: string
   hook?: string
   source?: ShortsLocalCandidate['source'] | 'ai'
+  title?: string
+  description?: string
+  language?: string
+}
+
+export type ShortsNarrativeRole = 'opening' | 'build' | 'development' | 'climax' | 'ending'
+export type ShortsHookType = 'vocal' | 'instrumental' | 'crowd' | 'speech' | 'visual' | 'unknown'
+
+export type ShortsDistinctMetadata = {
+  id: string
+  start: number
+  end: number
+  duration: number
+  centerTime: number
+  overlapRatio: number
+  dominantSceneRange: ShortsTimeWindow
+  visualSignature: string
+  audioSignature: string
+  narrativeRole: ShortsNarrativeRole
+  hookType: ShortsHookType
+  mainMomentLabel: string
+  coreMomentId: string
+  language: string
+  confidence: number
+  distinctnessScore: number
+}
+
+export type ShortsPairDistinctness = {
+  distinctness: number
+  sameCore: boolean
+  tooSimilar: boolean
+  overlapRatio: number
+  centerDelta: number
+  coreOverlap: number
+  sameNarrativeRole: boolean
+  sameMainMoment: boolean
+  similarPreview: boolean
+  similarCopy: boolean
+  reasons: string[]
 }
 
 export type ShortsDiscardedWindow = {
@@ -244,15 +283,27 @@ export function windowsConflict(
   return false
 }
 
-export function formatInsufficientShortsNote(found: number, requested: number): string {
+export function formatInsufficientShortsNote(
+  found: number,
+  requested: number,
+  opts?: { shortVideo?: boolean },
+): string {
   if (found >= requested) return ''
   if (found <= 0) return 'Não encontramos trechos com qualidade suficiente para este vídeo.'
-  const noun = found === 1 ? 'trecho' : 'trechos'
-  return `Encontramos ${found} ${noun} ${found === 1 ? 'possível' : 'possíveis'} para este vídeo.`
+  if (opts?.shortVideo) {
+    const noun = found === 1 ? 'Short realmente distinto' : 'Shorts realmente distintos'
+    return `Este vídeo permite ${found} ${noun} nesta duração. Para gerar mais, reduza a duração desejada ou aceite maior repetição.`
+  }
+  const label = found === 1 ? '1 Short realmente distinto' : `${found} Shorts realmente distintos`
+  return `Encontramos apenas ${label} para este vídeo. Para evitar cortes repetidos ou muito parecidos, o Atlas não completou os ${requested} solicitados.`
+}
+
+export function formatDistinctCountSummary(found: number, requested: number): string {
+  return `${requested} solicitados · ${found} realmente distintos encontrados`
 }
 
 const COUNT_CLAIM_NOTE =
-  /selecionad|melhores trechos|trecho(?:s)? (?:realmente )?distint|encontramos \d+/i
+  /selecionad|melhores trechos|trecho(?:s)? (?:realmente )?distint|encontramos(?: apenas)? \d+|este vídeo permite \d+/i
 
 /** Evita a IA contradizer o resultado local da diversidade. */
 export function sanitizeProposedShortsNotes(
@@ -269,6 +320,350 @@ export function sanitizeProposedShortsNotes(
 export function composeShortsAnalysisNotes(parts: Array<string | null | undefined>): string | null {
   const text = parts.map((item) => String(item ?? '').trim()).filter(Boolean).join('\n')
   return text || null
+}
+
+export const DISTINCTNESS_THRESHOLD = 0.4
+const CORE_TRIM = 0.2
+const MAX_OVERLAP_FOR_COEXISTENCE = 0.5
+const MAX_CORE_OVERLAP = 0.48
+const MAX_IOU_FOR_COEXISTENCE = 0.45
+const MIN_CENTER_SEPARATION = 0.25
+const PREVIEW_SIMILAR_SECONDS = 2.25
+const GENERIC_COPY =
+  /janela deslizante|janela distribuída|janela encurtada|janela no piso|motivo c\d|trecho falado contínuo|pico de energia/i
+
+const NARRATIVE_ROLES: ShortsNarrativeRole[] = ['opening', 'build', 'development', 'climax', 'ending']
+
+export function centerTime(window: ShortsTimeWindow): number {
+  return (window.start + window.end) / 2
+}
+
+export function coreWindow(window: ShortsTimeWindow): ShortsTimeWindow {
+  const duration = windowDuration(window)
+  const pad = duration * CORE_TRIM
+  return { start: window.start + pad, end: window.end - pad }
+}
+
+export function previewSeekSeconds(window: ShortsTimeWindow): number {
+  const duration = windowDuration(window)
+  if (duration <= 0) return Math.max(0, window.start)
+  return window.start + Math.min(1.5, Math.max(0.15, duration * 0.18))
+}
+
+export function coreMomentId(window: ShortsTimeWindow, typicalDuration: number): string {
+  const bucket = Math.max(6, typicalDuration * 0.28)
+  return `m${Math.round(centerTime(coreWindow(window)) / bucket)}`
+}
+
+export function inferNarrativeRole(window: ShortsTimeWindow, videoDuration: number): ShortsNarrativeRole {
+  const video = Math.max(0.5, videoDuration)
+  if (window.start <= video * 0.08) return 'opening'
+  if (window.end >= video * 0.92) return 'ending'
+  const t = centerTime(window) / video
+  if (t < 0.38) return 'build'
+  if (t < 0.62) return 'development'
+  if (t < 0.82) return 'climax'
+  return 'ending'
+}
+
+export function inferHookType(text: string): ShortsHookType {
+  const value = text.toLowerCase()
+  if (/plateia|p[uú]blico|crowd|applause|rea[cç][aã]o/.test(value)) return 'crowd'
+  if (/solo|instrument|banda|drop|explos/.test(value)) return 'instrumental'
+  if (/vocal|refr[aã]o|letra|[ií]ntimo|canta/.test(value)) return 'vocal'
+  if (/fala|narrat|revela|pergunta|hist[oó]ria/.test(value)) return 'speech'
+  if (/cena|visual|luz|frame/.test(value)) return 'visual'
+  return 'unknown'
+}
+
+export function inferMainMomentLabel(
+  role: ShortsNarrativeRole,
+  hookType: ShortsHookType,
+  reason: string,
+): string {
+  const text = reason.toLowerCase()
+  if (/refr[aã]o/.test(text)) return 'refrao'
+  if (/solo/.test(text)) return 'solo'
+  if (/plateia|p[uú]blico/.test(text)) return 'reacao-plateia'
+  if (/entrada/.test(text)) return 'entrada-vocal'
+  if (/final|encerr/.test(text)) return 'encerramento'
+  if (/cl[ií]max/.test(text)) return 'climax'
+  if (hookType === 'crowd') return 'reacao-plateia'
+  if (hookType === 'instrumental') return 'explosao-instrumental'
+  if (hookType === 'vocal') return 'trecho-intimo'
+  if (role === 'opening') return 'abertura'
+  if (role === 'build' || role === 'development') return 'desenvolvimento'
+  if (role === 'climax') return 'climax'
+  return 'encerramento'
+}
+
+function editorialTokens(candidate: ShortsRankedWindow): Set<string> {
+  const raw = `${candidate.reason} ${candidate.hook ?? ''} ${candidate.title ?? ''} ${candidate.description ?? ''}`
+  if (GENERIC_COPY.test(raw)) return new Set()
+  return new Set(
+    raw
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length > 2),
+  )
+}
+
+function copySimilarity(a: ShortsRankedWindow, b: ShortsRankedWindow): number {
+  const left = editorialTokens(a)
+  const right = editorialTokens(b)
+  if (left.size === 0 || right.size === 0) return 0
+  let shared = 0
+  for (const token of left) if (right.has(token)) shared += 1
+  return shared / Math.min(left.size, right.size)
+}
+
+export function buildDistinctMetadata(
+  candidate: ShortsRankedWindow,
+  videoDuration: number,
+  typicalDuration: number,
+): ShortsDistinctMetadata {
+  const duration = windowDuration(candidate)
+  const core = coreWindow(candidate)
+  const role = inferNarrativeRole(candidate, videoDuration)
+  const hookType = inferHookType(`${candidate.reason} ${candidate.hook ?? ''} ${candidate.title ?? ''}`)
+  const poster = previewSeekSeconds(candidate)
+  return {
+    id: candidate.id,
+    start: candidate.start,
+    end: candidate.end,
+    duration,
+    centerTime: centerTime(candidate),
+    overlapRatio: 0,
+    dominantSceneRange: core,
+    visualSignature: `v${Math.round(poster / 2)}`,
+    audioSignature: `a${Math.round(centerTime(core) / 4)}`,
+    narrativeRole: role,
+    hookType,
+    mainMomentLabel: inferMainMomentLabel(role, hookType, candidate.reason),
+    coreMomentId: coreMomentId(candidate, typicalDuration),
+    language: candidate.language ?? '',
+    confidence: clamp(candidate.score / 100, 0.2, 1),
+    distinctnessScore: 1,
+  }
+}
+
+export function pairDistinctness(
+  a: ShortsRankedWindow,
+  b: ShortsRankedWindow,
+  videoDuration: number,
+  typicalDuration?: number,
+): ShortsPairDistinctness {
+  const typical = typicalDuration ?? (windowDuration(a) + windowDuration(b)) / 2
+  const metaA = buildDistinctMetadata(a, videoDuration, typical)
+  const metaB = buildDistinctMetadata(b, videoDuration, typical)
+  const ratio = overlapRatio(a, b)
+  const iou = temporalIoU(a, b)
+  const coreOverlap = overlapRatio(metaA.dominantSceneRange, metaB.dominantSceneRange)
+  const avgDur = Math.max(1, (metaA.duration + metaB.duration) / 2)
+  const centerDelta = Math.abs(metaA.centerTime - metaB.centerTime)
+  const similarPreview = Math.abs(previewSeekSeconds(a) - previewSeekSeconds(b)) < PREVIEW_SIMILAR_SECONDS
+  const similarCopy = copySimilarity(a, b) >= 0.75
+  const sameNarrativeRole = metaA.narrativeRole === metaB.narrativeRole
+  const sameMainMoment = metaA.mainMomentLabel === metaB.mainMomentLabel
+  const sameCoreId = metaA.coreMomentId === metaB.coreMomentId
+  const sameCore = coreOverlap >= MAX_CORE_OVERLAP || (sameCoreId && ratio >= 0.28)
+  const temporal = 1 - ratio
+  const center = Math.min(1, centerDelta / (avgDur * 0.5))
+  const scene = 1 - coreOverlap
+  const energy = metaA.audioSignature === metaB.audioSignature ? 0.25 : 1
+  const roleScore = sameNarrativeRole ? 0.2 : 1
+  const momentScore = sameCoreId || sameMainMoment ? 0.15 : 1
+  const previewScore = similarPreview ? 0.15 : 1
+  const distinctness =
+    0.22 * temporal +
+    0.18 * center +
+    0.22 * scene +
+    0.1 * energy +
+    0.1 * roleScore +
+    0.12 * momentScore +
+    0.06 * previewScore
+
+  const reasons: string[] = []
+  if (sameTimestamps(a, b)) reasons.push('timestamps iguais')
+  if (ratio >= MAX_OVERLAP_FOR_COEXISTENCE) reasons.push('overlap excessivo')
+  if (coreOverlap >= MAX_CORE_OVERLAP) reasons.push('mesmo núcleo')
+  if (iou > MAX_IOU_FOR_COEXISTENCE) reasons.push('IoU alto')
+  if (centerDelta < avgDur * MIN_CENTER_SEPARATION && ratio >= 0.32) reasons.push('centro temporal próximo')
+  if (sameCoreId && ratio >= 0.28) reasons.push('mesmo core moment')
+  if (sameNarrativeRole && sameMainMoment && ratio >= 0.22) reasons.push('mesmo papel narrativo')
+  if (similarPreview && ratio >= 0.25) reasons.push('preview semelhante')
+  if (similarCopy && ratio >= 0.2) reasons.push('texto editorial reciclado')
+  if (distinctness < DISTINCTNESS_THRESHOLD) reasons.push('distinctness baixa')
+
+  const tooSimilar =
+    reasons.length > 0 ||
+    sameTimestamps(a, b) ||
+    ratio >= MAX_OVERLAP_FOR_COEXISTENCE ||
+    coreOverlap >= MAX_CORE_OVERLAP ||
+    iou > MAX_IOU_FOR_COEXISTENCE ||
+    distinctness < DISTINCTNESS_THRESHOLD
+
+  return {
+    distinctness,
+    sameCore,
+    tooSimilar,
+    overlapRatio: ratio,
+    centerDelta,
+    coreOverlap,
+    sameNarrativeRole,
+    sameMainMoment,
+    similarPreview,
+    similarCopy,
+    reasons,
+  }
+}
+
+function regionIndex(center: number, videoDuration: number): number {
+  return Math.min(4, Math.floor((center / Math.max(videoDuration, 1)) * 5))
+}
+
+function coveragePickScore(
+  candidate: ShortsRankedWindow,
+  selected: ShortsRankedWindow[],
+  videoDuration: number,
+  meta: Map<string, ShortsDistinctMetadata>,
+): number {
+  if (selected.length === 0) return candidate.score
+  const current = meta.get(candidate.id)
+  const unusedRole = current && selected.every((item) => meta.get(item.id)?.narrativeRole !== current.narrativeRole) ? 14 : 0
+  const unusedRegion =
+    current && selected.every((item) => regionIndex(meta.get(item.id)?.centerTime ?? 0, videoDuration) !== regionIndex(current.centerTime, videoDuration))
+      ? 12
+      : 0
+  const minDist = Math.min(
+    ...selected.map((item) => Math.abs((current?.centerTime ?? centerTime(candidate)) - (meta.get(item.id)?.centerTime ?? centerTime(item)))),
+  )
+  const spread = Math.min(16, (minDist / Math.max(1, videoDuration)) * 40)
+  return candidate.score + unusedRole + unusedRegion + spread
+}
+
+function discardSimilar(
+  candidate: ShortsRankedWindow,
+  conflict: ShortsRankedWindow,
+  pair: ShortsPairDistinctness,
+): ShortsDiscardedWindow {
+  return {
+    id: candidate.id,
+    reason: pair.reasons[0] ?? 'quase duplicado',
+    overlapWith: conflict.id,
+    overlapPct: Math.round(pair.overlapRatio * 100),
+  }
+}
+
+/**
+ * Etapa obrigatória após o pool: elimina pares com o mesmo núcleo editorial.
+ * selected.length só chega a requestedCount se todos forem realmente distintos.
+ */
+export function validateDistinctShorts(
+  candidates: ShortsRankedWindow[],
+  requestedCount: number,
+  options: { videoDuration: number; requestedDuration?: number },
+): ShortsDiversityResult & { metadata: ShortsDistinctMetadata[]; groups: number } {
+  const wanted = Math.max(0, requestedCount)
+  const discarded: ShortsDiscardedWindow[] = []
+  const unique = collectUniqueCandidates(candidates, discarded)
+  const typical = options.requestedDuration ?? typicalClipDuration(unique)
+  const meta = new Map<string, ShortsDistinctMetadata>()
+  for (const item of unique) meta.set(item.id, buildDistinctMetadata(item, options.videoDuration, typical))
+
+  const groups = new Map<string, ShortsRankedWindow[]>()
+  for (const item of unique) {
+    const key = meta.get(item.id)?.coreMomentId ?? item.id
+    const list = groups.get(key) ?? []
+    list.push(item)
+    groups.set(key, list)
+  }
+
+  const representatives: ShortsRankedWindow[] = []
+  for (const [, cluster] of groups) {
+    const ranked = [...cluster].sort((a, b) => b.score - a.score || a.start - b.start)
+    const winner = ranked[0]
+    if (!winner) continue
+    representatives.push(winner)
+    for (const loser of ranked.slice(1)) {
+      const pair = pairDistinctness(winner, loser, options.videoDuration, typical)
+      discarded.push(discardSimilar(loser, winner, { ...pair, reasons: ['mesmo core moment'] }))
+    }
+  }
+
+  for (const item of representatives) {
+    const others = representatives.filter((other) => other.id !== item.id)
+    const current = meta.get(item.id)
+    if (!current) continue
+    current.distinctnessScore =
+      others.length === 0
+        ? 1
+        : others.reduce((sum, other) => sum + pairDistinctness(item, other, options.videoDuration, typical).distinctness, 0) /
+          others.length
+  }
+
+  const selected: ShortsRankedWindow[] = []
+  const remaining = [...representatives]
+
+  const takeIfDistinct = (candidate: ShortsRankedWindow | undefined) => {
+    if (!candidate || selected.length >= wanted) return false
+    if (selected.some((item) => item.id === candidate.id)) return false
+    const conflict = selected.find((item) => pairDistinctness(item, candidate, options.videoDuration, typical).tooSimilar)
+    if (conflict) {
+      discarded.push(discardSimilar(candidate, conflict, pairDistinctness(conflict, candidate, options.videoDuration, typical)))
+      return false
+    }
+    selected.push(candidate)
+    return true
+  }
+
+  for (const role of NARRATIVE_ROLES) {
+    if (selected.length >= wanted) break
+    const pool = remaining
+      .filter((item) => meta.get(item.id)?.narrativeRole === role)
+      .sort((a, b) => b.score - a.score || a.start - b.start)
+    takeIfDistinct(pool[0])
+  }
+
+  while (selected.length < wanted && remaining.length > 0) {
+    remaining.sort(
+      (a, b) =>
+        coveragePickScore(b, selected, options.videoDuration, meta) -
+          coveragePickScore(a, selected, options.videoDuration, meta) || b.score - a.score,
+    )
+    const next = remaining.find((item) => !selected.some((pick) => pick.id === item.id))
+    if (!next) break
+    remaining.splice(remaining.indexOf(next), 1)
+    if (selected.length === 0) {
+      selected.push(next)
+      continue
+    }
+    const conflict = selected.find((item) => pairDistinctness(item, next, options.videoDuration, typical).tooSimilar)
+    if (conflict) {
+      discarded.push(discardSimilar(next, conflict, pairDistinctness(conflict, next, options.videoDuration, typical)))
+      continue
+    }
+    selected.push(next)
+  }
+
+  for (const item of selected) {
+    const current = meta.get(item.id)
+    if (!current) continue
+    current.overlapRatio = selected
+      .filter((other) => other.id !== item.id)
+      .reduce((max, other) => Math.max(max, overlapRatio(item, other)), 0)
+  }
+
+  selected.sort((a, b) => a.start - b.start || b.score - a.score)
+  return {
+    selected: selected.slice(0, wanted),
+    discarded,
+    pass: 1,
+    metadata: [...meta.values()],
+    groups: groups.size,
+  }
 }
 
 function midpoint(window: ShortsTimeWindow): number {
@@ -386,65 +781,25 @@ export function selectDiverseClips(input: {
     }
   }
 
-  const selected: ShortsRankedWindow[] = []
-  const useProgressive = role === 'final' && input.overlapLimit == null
+  const useDistinctness = role === 'final' && input.overlapLimit == null
 
-  if (!useProgressive) {
-    const policy = resolveOverlapPolicy(input.overlapLimit, fallback)
-    const leftover = pickWithPolicy(selected, pool, wanted, policy, input.videoDuration)
-    for (const next of leftover) {
-      const conflict = selected.find((item) => windowsConflict(item, next, policy))
-      if (conflict) {
-        discarded.push({
-          id: next.id,
-          reason: 'overlap excessivo',
-          overlapWith: conflict.id,
-          overlapPct: Math.round(overlapRatio(conflict, next) * 100),
-        })
-      }
+  if (useDistinctness) {
+    const distinct = validateDistinctShorts(pool, wanted, {
+      videoDuration: input.videoDuration,
+      requestedDuration: typical,
+    })
+    return {
+      selected: distinct.selected,
+      discarded: [...discarded, ...distinct.discarded],
+      pass: 1,
     }
-    selected.sort((a, b) => a.start - b.start || b.score - a.score)
-    return { selected, discarded, pass: policy.pass }
   }
 
-  let remaining = [...pool]
-  let lastPass = 1
-  const lastPolicy: ShortsOverlapPolicy = {
-    ...fallback,
-    role: 'final',
-    maxOverlapRatio: 0.99,
-    maxIoU: 0.99,
-    maxOverlapSeconds: Number.POSITIVE_INFINITY,
-    nearDuplicateOnly: false,
-    relaxNearDuplicate: true,
-    exactTimestampsOnly: true,
-    pass: 5,
-  }
-
-  for (const pass of SHORTS_OVERLAP_PASSES) {
-    if (selected.length >= wanted) break
-    const policy = overlapPassPolicy(pass, fallback)
-    remaining = pickWithPolicy(selected, remaining, wanted, policy, input.videoDuration)
-    lastPass = pass.id
-  }
-
-  if (selected.length < wanted) {
-    remaining = pickWithPolicy(selected, remaining, wanted, lastPolicy, input.videoDuration)
-    lastPass = 5
-  }
-
-  if (selected.length < wanted) {
-    const extra = unique.filter((item) => !selected.some((pick) => pick.id === item.id))
-    remaining = pickWithPolicy(selected, extra, wanted, lastPolicy, input.videoDuration)
-    lastPass = 5
-  }
-
-  for (const next of remaining) {
-    const conflict = selected.find((item) => sameTimestamps(item, next) || windowsConflict(item, next, {
-      ...fallback,
-      exactTimestampsOnly: true,
-      pass: 5,
-    }))
+  const selected: ShortsRankedWindow[] = []
+  const policy = resolveOverlapPolicy(input.overlapLimit, fallback)
+  const leftover = pickWithPolicy(selected, pool, wanted, policy, input.videoDuration)
+  for (const next of leftover) {
+    const conflict = selected.find((item) => windowsConflict(item, next, policy))
     if (conflict) {
       discarded.push({
         id: next.id,
@@ -454,9 +809,8 @@ export function selectDiverseClips(input: {
       })
     }
   }
-
   selected.sort((a, b) => a.start - b.start || b.score - a.score)
-  return { selected, discarded, pass: lastPass }
+  return { selected, discarded, pass: policy.pass }
 }
 
 export function withCandidateIds<T extends object>(candidates: T[]): Array<T & { id: string }> {

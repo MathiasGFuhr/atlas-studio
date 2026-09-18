@@ -11,8 +11,6 @@ import {
   constrainClipWindow,
   durationBounds,
   evaluateShortsFeasibility,
-  formatShortsOverlapResultNote,
-  shortsOverlapRequired,
   type DurationBoundLevel,
 } from './shortsDuration'
 import { snapClipToCues } from './shortsMoments'
@@ -165,25 +163,12 @@ function selectionNote(input: {
   durationMode: ShortsDurationMode
   possibleCount: number
 }): string {
-  if (input.clips.length >= input.requested) {
-    if (
-      shortsOverlapRequired(input.videoDuration, input.requested, input.requestedDuration)
-    ) {
-      return formatShortsOverlapResultNote({
-        requestedCount: input.requested,
-        requestedDuration: input.requestedDuration,
-        durationMode: input.durationMode,
-      })
-    }
-    return ''
-  }
-  if (input.possibleCount < input.requested) {
-    return formatInsufficientShortsNote(input.clips.length, input.requested)
-  }
-  return formatInsufficientShortsNote(input.clips.length, input.requested)
+  if (input.clips.length >= input.requested) return ''
+  const shortVideo = input.possibleCount < input.requested
+  return formatInsufficientShortsNote(input.clips.length, input.requested, { shortVideo })
 }
 
-/** Garante selected.length === requestedCount quando o vídeo permite janelas distintas. */
+/** Tenta chegar a requestedCount sem nunca inserir duplicados ou quase duplicados. */
 export function validateAndFill(input: FinalizeShortsSelectionInput): FinalizeShortsSelectionResult {
   const feasibility = evaluateShortsFeasibility({
     videoDuration: input.videoDuration,
@@ -213,11 +198,7 @@ export function validateAndFill(input: FinalizeShortsSelectionInput): FinalizeSh
     role: 'final',
   })
 
-  if (
-    diversity.selected.length < input.clipCount &&
-    input.durationMode === 'approximate' &&
-    feasibility.possibleCount >= input.clipCount
-  ) {
+  if (diversity.selected.length < input.clipCount && input.durationMode === 'approximate') {
     const fillBounds = durationBounds(input.requestedDuration, input.videoDuration, 'approximate', 'fill')
     const fillMin = autoMinClipDuration(input.requestedDuration, input.videoDuration)
     if (fillBounds.min + 0.05 < bounds.min) {

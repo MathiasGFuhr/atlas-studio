@@ -36,6 +36,7 @@ import {
   isDurationShortcut,
   parseDurationInput,
 } from '@shared/shortsDuration'
+import { formatDistinctCountSummary } from '@shared/shortsDiversity'
 import { isProtectedShortsClip } from '@shared/shortsProjectIdentity'
 import {
   exportedShortsCount,
@@ -751,6 +752,10 @@ export function ShortsStudioPage() {
 
           {job?.clips.length ? (
             <div className="grid gap-5">
+              <p className="text-xs leading-relaxed text-muted">
+                {formatDistinctCountSummary(job.clips.length, job.clipCount)}
+                {job.clips.length < job.clipCount ? ' · geramos menos para evitar repetições.' : ''}
+              </p>
               {job.clips.map((clip) => (
                 <ShortsResultCard
                   key={clip.id}

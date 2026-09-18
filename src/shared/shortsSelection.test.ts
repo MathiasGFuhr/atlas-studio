@@ -129,7 +129,7 @@ describe('finalizeShortsSelection', () => {
     expect(starts[1] - starts[0]).toBeGreaterThan(10)
   })
 
-  it('vídeo 56.6s / 3 / ~45s devolve 3 clips válidos e temporalmente diferentes', () => {
+  it('vídeo 56.6s / 3 / ~45s entrega menos que 3 para não repetir o mesmo núcleo', () => {
     const result = validateAndFill({
       ranked: [clip('ai1', 5, 50, 94)],
       fallback: [clip('c1', 0, 45, 70)],
@@ -139,21 +139,26 @@ describe('finalizeShortsSelection', () => {
       durationMode: 'approximate',
       profile: 'history',
     })
-    expect(result.clips).toHaveLength(3)
-    expect(result.insufficient).toBe(false)
-    expect(uniqueWindows(result.clips).size).toBe(3)
-    expect(new Set(result.clips.map((item) => item.start.toFixed(1))).size).toBe(3)
-    for (const item of result.clips) {
-      expect(item.start).toBeGreaterThanOrEqual(0)
-      expect(item.end).toBeLessThanOrEqual(56.6 + 0.04)
-      expect(item.end).toBeGreaterThan(item.start)
-      expect(item.end - item.start).toBeGreaterThanOrEqual(27)
+    expect(result.clips.length).toBeGreaterThanOrEqual(1)
+    expect(result.clips.length).toBeLessThanOrEqual(3)
+    expect(result.insufficient).toBe(result.clips.length < 3)
+    expect(uniqueWindows(result.clips).size).toBe(result.clips.length)
+    for (let i = 0; i < result.clips.length; i += 1) {
+      for (let j = i + 1; j < result.clips.length; j += 1) {
+        const overlap = Math.max(0, Math.min(result.clips[i].end, result.clips[j].end) - Math.max(result.clips[i].start, result.clips[j].start))
+        const shorter = Math.min(result.clips[i].end - result.clips[i].start, result.clips[j].end - result.clips[j].start)
+        expect(shorter <= 0 ? 0 : overlap / shorter).toBeLessThan(0.5)
+      }
     }
-    expect(result.note).toContain('compartilham partes da apresentação')
+    if (result.clips.length < 3) {
+      expect(result.note).toMatch(/realmente distint/)
+    } else {
+      expect(result.note).toBe('')
+    }
     expect(result.diagnostics.slidingWindows).toBeGreaterThanOrEqual(3)
   })
 
-  it('vídeo 56.6s / 3 / 45s exact devolve 3 clips de 45s com starts diferentes', () => {
+  it('vídeo 56.6s / 3 / 45s exact não inventa 3 cortes quase iguais', () => {
     const result = validateAndFill({
       ranked: [clip('ai1', 0, 45, 90)],
       fallback: [],
@@ -163,14 +168,15 @@ describe('finalizeShortsSelection', () => {
       durationMode: 'exact',
       profile: 'history',
     })
-    expect(result.clips).toHaveLength(3)
-    expect(result.insufficient).toBe(false)
+    expect(result.clips.length).toBeGreaterThanOrEqual(1)
+    expect(result.clips.length).toBeLessThan(3)
+    expect(result.insufficient).toBe(true)
     for (const item of result.clips) {
       expect(item.end - item.start).toBeCloseTo(45, 1)
       expect(item.end).toBeLessThanOrEqual(56.6 + 0.04)
     }
-    expect(new Set(result.clips.map((item) => item.start.toFixed(1))).size).toBe(3)
-    expect(uniqueWindows(result.clips).size).toBe(3)
+    expect(uniqueWindows(result.clips).size).toBe(result.clips.length)
+    expect(result.note).toMatch(/realmente distint/)
   })
 
   it('vídeo 300s / 5 / 30s devolve 5 clips com baixa sobreposição', () => {

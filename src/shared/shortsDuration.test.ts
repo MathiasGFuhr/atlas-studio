@@ -51,7 +51,7 @@ describe('shortsDuration', () => {
     expect(exact.max).toBe(45)
   })
 
-  it('sinaliza overlap em 56.6s / 3 / 45s sem bloquear, e limita vídeo de 12s', () => {
+  it('em 56.6s / 3 / 45s avisa que não há diversidade editorial suficiente, e limita vídeo de 12s', () => {
     const feasible = evaluateShortsFeasibility({
       videoDuration: 56.6,
       requestedCount: 3,
@@ -59,10 +59,11 @@ describe('shortsDuration', () => {
       durationMode: 'approximate',
     })
     expect(feasible.durationCapped).toBe(false)
-    expect(feasible.possibleCount).toBeGreaterThanOrEqual(3)
+    expect(feasible.possibleCount).toBeLessThan(3)
+    expect(feasible.possibleCount).toBeGreaterThanOrEqual(1)
     expect(feasible.overlapRequired).toBe(true)
-    expect(feasible.overlapHint).toContain('terão sobreposição')
-    expect(feasible.countHint).toBeNull()
+    expect(feasible.overlapHint).toBeNull()
+    expect(feasible.countHint).toMatch(/realmente distint/)
 
     const short = evaluateShortsFeasibility({
       videoDuration: 12,
@@ -75,7 +76,7 @@ describe('shortsDuration', () => {
     expect(short.possibleCount).toBe(1)
     expect(short.durationMessage).toContain('O vídeo possui apenas')
     expect(short.overlapHint).toBeNull()
-    expect(short.countHint).toContain('só é possível gerar 1 corte')
+    expect(short.countHint).toContain('1 Short realmente distinto')
   })
 
   it('no modo exato trava a duração e não ultrapassa o vídeo', () => {

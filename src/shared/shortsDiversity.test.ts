@@ -53,7 +53,7 @@ describe('shortsDiversity', () => {
       requestedDuration: 30,
     })
     expect(result.selected).toHaveLength(2)
-    expect(formatInsufficientShortsNote(result.selected.length, 5)).toContain('Encontramos 2')
+    expect(formatInsufficientShortsNote(result.selected.length, 5)).toContain('Encontramos apenas 2')
   })
 
   it('não duplica o mesmo timestamp para preencher a cota', () => {
@@ -127,15 +127,15 @@ describe('shortsDiversity', () => {
     expect(result.selected.map((item) => item.id)).not.toContain('B')
   })
 
-  it('se só restam 05–35 e 07–37 e a cota é 2, mantém os dois em vez de desistir', () => {
+  it('se só restam 05–35 e 07–37 e a cota é 2, entrega 1 em vez de repetir', () => {
     const result = selectDiverseClips({
       candidates: [clip('A', 5, 35, 90), clip('B', 7, 37, 88)],
       count: 2,
       videoDuration: 56.6,
       requestedDuration: 30,
     })
-    expect(result.selected).toHaveLength(2)
-    expect(new Set(result.selected.map((item) => `${item.start}-${item.end}`)).size).toBe(2)
+    expect(result.selected).toHaveLength(1)
+    expect(result.selected[0].id).toBe('A')
   })
 
   it('faz backfill: se C2 conflita com C1, testa C3', () => {
@@ -156,7 +156,7 @@ describe('shortsDiversity', () => {
     expect(result.selected).toHaveLength(2)
   })
 
-  it('se pede 5 em vídeo de 56.6s / 30s, preenche a cota com starts diferentes', () => {
+  it('se pede 5 em vídeo de 56.6s / 30s, não preenche a cota com quase duplicados', () => {
     const result = selectDiverseClips({
       candidates: [
         clip('A', 0, 30, 90),
@@ -171,8 +171,11 @@ describe('shortsDiversity', () => {
       videoDuration: 56.6,
       requestedDuration: 30,
     })
-    expect(result.selected).toHaveLength(5)
-    expect(new Set(result.selected.map((item) => `${item.start}-${item.end}`)).size).toBe(5)
+    expect(result.selected.length).toBeGreaterThanOrEqual(2)
+    expect(result.selected.length).toBeLessThan(5)
+    expect(new Set(result.selected.map((item) => `${item.start}-${item.end}`)).size).toBe(result.selected.length)
+    const sorted = [...result.selected].sort((a, b) => a.start - b.start)
+    expect(sorted[sorted.length - 1].start - sorted[0].start).toBeGreaterThan(10)
   })
 
   it('no pool mantém a janela complementar para backfill', () => {
@@ -202,7 +205,7 @@ describe('shortsDiversity', () => {
     ).toBeNull()
   })
 
-  it('em 56.6s / 3 / 45s escolhe 3 janelas temporalmente diferentes', () => {
+  it('em 56.6s / 3 / 45s não entrega 3 janelas do mesmo núcleo', () => {
     const result = selectDiverseClips({
       candidates: [
         clip('A', 0, 45, 90),
@@ -213,8 +216,8 @@ describe('shortsDiversity', () => {
       videoDuration: 56.6,
       requestedDuration: 45,
     })
-    expect(result.selected).toHaveLength(3)
-    expect(new Set(result.selected.map((item) => item.start.toFixed(1))).size).toBe(3)
-    expect(new Set(result.selected.map((item) => `${item.start}-${item.end}`)).size).toBe(3)
+    expect(result.selected.length).toBeLessThan(3)
+    expect(result.selected.length).toBeGreaterThanOrEqual(1)
+    expect(new Set(result.selected.map((item) => `${item.start}-${item.end}`)).size).toBe(result.selected.length)
   })
 })

@@ -174,12 +174,21 @@ export function durationBounds(
 }
 
 export function maxDistinctWindowCount(videoDuration: number, clipDuration: number): number {
+  return maxEditorialDistinctCount(videoDuration, clipDuration)
+}
+
+/** Quantos recortes com núcleos realmente diferentes cabem nesta duração. */
+export function maxEditorialDistinctCount(videoDuration: number, clipDuration: number): number {
   const video = Math.max(0, videoDuration)
   const length = Math.min(Math.max(0, clipDuration), video)
   if (video < 0.8 || length < 0.8) return 0
-  const spare = Math.max(0, video - length)
-  if (spare < SHORTS_MIN_START_DELTA) return 1
-  return Math.floor(spare / SHORTS_MIN_START_DELTA) + 1
+  const core = length * 0.6
+  if (core >= video * 0.82) return 1
+  const minCenterDelta = length * 0.42
+  const first = length / 2
+  const last = video - length / 2
+  if (last - first < minCenterDelta - 0.05) return 1
+  return Math.floor((last - first) / minCenterDelta) + 1
 }
 
 export function shortsOverlapRequired(
@@ -221,18 +230,13 @@ export function evaluateShortsFeasibility(input: {
 }): ShortsFeasibility {
   const cap = capRequestedDuration(input.requestedDuration, input.videoDuration)
   const video = Math.max(0, input.videoDuration)
-  const fillMin =
-    input.durationMode === 'exact' ? cap.requested : autoMinClipDuration(cap.requested, video)
-  const possibleCount = Math.max(
-    maxDistinctWindowCount(video, cap.requested),
-    input.durationMode === 'approximate' ? maxDistinctWindowCount(video, fillMin) : 0,
-  )
+  const possibleCount = maxEditorialDistinctCount(video, cap.requested)
   const overlapRequired = shortsOverlapRequired(video, input.requestedCount, cap.requested)
   const countHint =
     possibleCount < input.requestedCount && possibleCount > 0
       ? possibleCount === 1
-        ? `Com ${formatDurationInput(video)} de vídeo, só é possível gerar 1 corte neste comprimento.`
-        : `Com ${formatDurationInput(video)} de vídeo, só é possível gerar ${possibleCount} cortes neste comprimento.`
+        ? 'Este vídeo permite 1 Short realmente distinto nesta duração. Para gerar mais, reduza a duração desejada ou aceite maior repetição.'
+        : `Este vídeo permite ${possibleCount} Shorts realmente distintos nesta duração. Para gerar mais, reduza a duração desejada ou aceite maior repetição.`
       : possibleCount <= 0
         ? videoDurationMessage(video)
         : null
