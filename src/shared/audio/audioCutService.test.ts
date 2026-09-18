@@ -7,6 +7,8 @@ import {
   splitAtPlayhead,
   updateCutBounds,
   getCutMarkers,
+  fitCutsToExactDuration,
+  isCoveringPartition,
 } from './audioCutService'
 
 function track(duration = 310) {
@@ -65,5 +67,24 @@ describe('audioCutService', () => {
     expect(next.cuts[0].start).toBe(12.5)
     expect(next.cuts[0].end).toBeGreaterThan(12.5)
     expect(next.selectedId).toBe(next.cuts[0].id)
+  })
+
+  it('não estica o último corte só para fechar a faixa', () => {
+    const cuts = fitCutsToExactDuration(
+      [makeSegment(0, 20, 1, 'auto'), makeSegment(20, 80, 2, 'auto')],
+      120,
+    )
+    expect(cuts[0].start).toBe(0)
+    expect(cuts[cuts.length - 1].end).toBe(80)
+    expect(isCoveringPartition(cuts, 120)).toBe(false)
+  })
+
+  it('não cria corte além da duração da música', () => {
+    const cuts = fitCutsToExactDuration(
+      [makeSegment(0, 50, 1, 'auto'), makeSegment(50, 140, 2, 'auto')],
+      100,
+    )
+    expect(cuts[cuts.length - 1].end).toBe(100)
+    expect(cuts.every((cut) => cut.start >= 0 && cut.end <= 100)).toBe(true)
   })
 })

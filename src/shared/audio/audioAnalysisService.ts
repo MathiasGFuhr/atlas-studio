@@ -1,5 +1,5 @@
 import type { MusicAnalysis, MusicSilenceRegion } from '../musicAnalysis'
-import { detectEdgeTrim } from '../musicAnalysis'
+import { detectEdgeTrim, detectMusicEnd } from '../musicAnalysis'
 import { enrichAudioAnalysis, type AudioFeatureAnalysis } from '../shorts/audioFeatures'
 import { roundTime } from './time'
 
@@ -66,6 +66,48 @@ export function detectEnergyChanges(analysis: MusicAnalysis, limit = 80): Energy
     if (changes.length >= limit) break
   }
   return changes
+}
+
+export function detectSectionBoundaries(
+  analysis: MusicAnalysis,
+  limit = 20,
+): Array<{ time: number; score: number; reason: string; kind: 'rise' | 'fall' }> {
+  const energy = analysis.energy
+  const frame = analysis.frameDuration || 0.046
+  const win = Math.max(6, Math.round(1.8 / frame))
+  const step = Math.max(1, Math.round(0.32 / frame))
+  const sigma = stddev(energy)
+  const threshold = Math.max(0.014, sigma * 0.9)
+  const out: Array<{ time: number; score: number; reason: string; kind: 'rise' | 'fall'; delta: number }> = []
+  for (let i = win; i < energy.length - win; i += step) {
+    const before = mean(energy.slice(i - win, i))
+    const after = mean(energy.slice(i, i + win))
+    const delta = after - before
+    if (Math.abs(delta) < threshold) continue
+    const time = roundTime(i * frame)
+    const last = out[out.length - 1]
+    if (last && time - last.time < 3.4) {
+      if (Math.abs(delta) > Math.abs(last.delta)) {
+        out[out.length - 1] = {
+          time,
+          delta,
+          kind: delta >= 0 ? 'rise' : 'fall',
+          score: Math.min(0.9, 0.66 + Math.min(0.22, Math.abs(delta) * 4)),
+          reason: delta >= 0 ? 'Entrada de seção mais forte' : 'Queda de dinâmica da seção',
+        }
+      }
+      continue
+    }
+    out.push({
+      time,
+      delta,
+      kind: delta >= 0 ? 'rise' : 'fall',
+      score: Math.min(0.9, 0.66 + Math.min(0.22, Math.abs(delta) * 4)),
+      reason: delta >= 0 ? 'Entrada de seção mais forte' : 'Queda de dinâmica da seção',
+    })
+    if (out.length >= limit) break
+  }
+  return out.map(({ time, score, reason, kind }) => ({ time, score, reason, kind }))
 }
 
 export function detectSectionCandidates(enriched: AudioFeatureAnalysis): SectionCandidate[] {
@@ -223,31 +265,52 @@ export function candidateSplits(
 ): CutCandidate[] {
   const points: Array<{ time: number; score: number; reason: string }> = []
   const push = (time: number, score: number, reason: string) => {
-    if (time <= 0.25 || time >= analysis.duration - 0.25) return
+    if (time <= 0.45 || time >= analysis.duration - 0.45) return
     points.push({ time: roundTime(time), score, reason })
   }
 
   for (const gap of analysis.silence) {
-    push(gap.start, 0.78, 'Término de frase / pausa')
-    push(gap.end, 0.86, 'Retomada após silêncio')
+    const duration = gap.end - gap.start
+    if (duration < 0.32) continue
+    const restart = snapToNearbyOnset(gap.end, analysis.onsets, 0.22)
+    push(
+      restart,
+      Math.min(0.98, 0.8 + Math.min(duration, 1.6) * 0.08),
+      duration >= 0.9 ? 'Retomada após pausa musical' : 'Fim de frase musical',
+    )
   }
-  for (const change of detectEnergyChanges(analysis, 48)) {
-    push(change.time, change.kind === 'rise' ? 0.72 : 0.7, change.kind === 'rise' ? 'Subida de energia' : 'Queda de dinâmica')
-  }
+
   for (const section of detectSectionCandidates(enriched)) {
-    push(section.time, Math.max(0.68, section.score), `Mudança de seção (${section.kind})`)
+    const strong = section.kind === 'drop' || section.kind === 'peak' || section.kind === 'vocal_entry' || section.kind === 'build'
+    push(
+      section.time,
+      Math.min(0.94, Math.max(0.7, section.score) + (strong ? 0.08 : 0)),
+      `Mudança de seção (${section.kind})`,
+    )
   }
+
+  for (const boundary of detectSectionBoundaries(analysis)) {
+    push(boundary.time, boundary.score, boundary.reason)
+  }
+
   if (mode === 'completo') {
     for (const onset of analysis.onsets) {
-      if (analysis.silence.some((gap) => Math.abs(gap.end - onset) < 0.2)) {
-        push(onset, 0.8, 'Onset após pausa')
-      }
+      const gap = analysis.silence.find((item) => Math.abs(item.end - onset) < 0.22 && item.end - item.start >= 0.32)
+      if (!gap) continue
+      push(onset, 0.88, 'Ataque após pausa')
     }
+  }
+
+  const probeStep = mode === 'estrutura' ? 14 : 11
+  for (let time = probeStep; time < analysis.duration - probeStep * 0.4; time += probeStep) {
+    const covered = points.some((point) => Math.abs(point.time - time) < probeStep * 0.42)
+    if (covered) continue
+    push(snapToNearbyOnset(time, analysis.onsets, 0.9), 0.63, 'Transição no decorrer da faixa')
   }
 
   points.sort((a, b) => a.time - b.time || b.score - a.score)
   const unique: typeof points = []
-  const minGap = mode === 'estrutura' ? 4.5 : 1.6
+  const minGap = mode === 'estrutura' ? 5.5 : 4
   for (const point of points) {
     const prev = unique[unique.length - 1]
     if (prev && Math.abs(prev.time - point.time) < minGap) {
@@ -256,13 +319,43 @@ export function candidateSplits(
     }
     unique.push(point)
   }
-  return unique.slice(0, 24).map((point, index) => ({
+  const limit = Math.min(36, Math.max(16, Math.ceil(analysis.duration / 8)))
+  return keepSpreadPoints(unique, analysis.duration, minGap, limit).map((point, index) => ({
     id: `C${index + 1}`,
     time: point.time,
     score: point.score,
     kind: 'split' as const,
     reason: point.reason,
   }))
+}
+
+function keepSpreadPoints<T extends { time: number; score: number }>(
+  points: T[],
+  duration: number,
+  minGap: number,
+  limit: number,
+): T[] {
+  if (points.length <= limit) return points
+  const buckets = Math.max(6, Math.min(limit, Math.ceil(duration / Math.max(minGap, 8))))
+  const width = duration / buckets
+  const chosen: T[] = []
+  for (let i = 0; i < buckets; i += 1) {
+    const lo = i * width
+    const hi = (i + 1) * width
+    const inBucket = points.filter((point) => point.time >= lo && point.time < hi)
+    if (inBucket.length === 0) continue
+    inBucket.sort((a, b) => b.score - a.score)
+    chosen.push(inBucket[0])
+  }
+  const leftover = points
+    .filter((point) => !chosen.some((item) => item.time === point.time))
+    .sort((a, b) => b.score - a.score)
+  for (const point of leftover) {
+    if (chosen.length >= limit) break
+    if (chosen.some((item) => Math.abs(item.time - point.time) < minGap)) continue
+    chosen.push(point)
+  }
+  return chosen.sort((a, b) => a.time - b.time).slice(0, limit)
 }
 
 export function candidateEdgeTrims(analysis: MusicAnalysis): CutCandidate[] {
@@ -300,7 +393,7 @@ export function firstAudible(analysis: MusicAnalysis): number {
 }
 
 export function lastAudible(analysis: MusicAnalysis): number {
-  return detectEdgeTrim(analysis).end
+  return detectMusicEnd(analysis)
 }
 
 function uniqueTimes(values: number[], minGap: number): number[] {

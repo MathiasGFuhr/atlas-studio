@@ -261,6 +261,61 @@ export function detectEdgeTrim(analysis: MusicAnalysis): { start: number; end: n
   }
 }
 
+export function detectMusicEnd(analysis: MusicAnalysis): number {
+  const energy = analysis.energy
+  if (energy.length === 0) return analysis.duration
+  const sorted = [...energy].sort((a, b) => a - b)
+  const median = percentile(sorted, 0.5)
+  const p75 = percentile(sorted, 0.75)
+  const loud = Math.max(0.03, Math.min(median * 0.5, p75 * 0.42))
+  const minRun = Math.max(3, Math.round(0.22 / analysis.frameDuration))
+  let run = 0
+  let lastLoud = -1
+  for (let i = 0; i < energy.length; i += 1) {
+    if ((energy[i] ?? 0) >= loud) {
+      run += 1
+      if (run >= minRun) lastLoud = i
+    } else {
+      run = 0
+    }
+  }
+  const trimEnd = detectEdgeTrim(analysis).end
+  if (lastLoud < 0) return trimEnd
+  const decay = Math.round(0.35 / analysis.frameDuration)
+  const fromLoud = roundTime(Math.min(analysis.duration, (lastLoud + 1 + decay) * analysis.frameDuration))
+  return roundTime(Math.min(trimEnd, fromLoud))
+}
+
+export function clipAnalysisToAudible(analysis: MusicAnalysis, endTime?: number): MusicAnalysis {
+  const end = Math.max(0.05, Math.min(analysis.duration, endTime ?? detectMusicEnd(analysis)))
+  if (end >= analysis.duration - 0.08) return { ...analysis, duration: roundTime(Math.min(analysis.duration, end)) }
+  const frames = Math.max(1, Math.ceil(end / analysis.frameDuration))
+  return {
+    ...analysis,
+    duration: roundTime(end),
+    energy: analysis.energy.slice(0, frames),
+    silence: analysis.silence
+      .filter((gap) => gap.start < end)
+      .map((gap) => ({ start: gap.start, end: Math.min(gap.end, end) })),
+    onsets: analysis.onsets.filter((time) => time < end - 0.02),
+  }
+}
+
+export function sliceSamplesToDuration(samples: Float32Array, sampleRate: number, duration: number): Float32Array {
+  const end = Math.max(1, Math.min(samples.length, Math.round(duration * sampleRate)))
+  return end < samples.length ? samples.subarray(0, end) : samples
+}
+
+export function tailIsAudible(analysis: MusicAnalysis, fromTime: number): boolean {
+  const start = Math.max(0, Math.min(analysis.energy.length, Math.floor(fromTime / analysis.frameDuration)))
+  const slice = analysis.energy.slice(start)
+  if (slice.length === 0) return false
+  const sorted = [...analysis.energy].sort((a, b) => a - b)
+  const loud = Math.max(0.03, percentile(sorted, 0.5) * 0.45)
+  const loudFrames = slice.filter((value) => value >= loud).length
+  return loudFrames >= Math.max(3, Math.round(0.35 / analysis.frameDuration))
+}
+
 function highestEnergyWindow(analysis: MusicAnalysis, windowSec: number): MusicSegment {
   const windowFrames = Math.max(1, Math.round(windowSec / analysis.frameDuration))
   let bestStart = 0
@@ -296,16 +351,19 @@ function structureCuts(analysis: MusicAnalysis): MusicSegment[] {
     const snapped = snapToOnset(time, analysis.onsets, 0.18)
     times.push(snapped)
   }
-  const points = [0, ...times, analysis.duration]
+  const points = [0, ...times.filter((time) => time > 0.05 && time < analysis.duration - 0.05), analysis.duration]
   const segments: MusicSegment[] = []
   for (let i = 0; i < points.length - 1; i += 1) {
-    if (points[i + 1] - points[i] < 0.8) continue
     segments.push(
       makeSegment(points[i], points[i + 1], segments.length + 1, 'auto', {
         label: `Bloco ${segments.length + 1}`,
         reason: 'Mudança local de dinâmica/seção',
       }),
     )
+  }
+  if (segments.length > 0) {
+    segments[0].start = 0
+    segments[segments.length - 1].end = roundTime(Math.min(analysis.duration, segments[segments.length - 1].end))
   }
   return segments.length > 0 ? segments : [makeSegment(0, analysis.duration, 1, 'auto')]
 }
@@ -317,7 +375,12 @@ export function autoCutMusic(analysis: MusicAnalysis, preset: AutoCutPreset = 'c
   if (preset === 'gancho30') return [highestEnergyWindow(analysis, Math.min(30, analysis.duration))]
   if (preset === 'estrutura') return structureCuts(analysis)
 
-  const audible = mergeShortGaps(invertSilence(analysis.duration, analysis.silence))
+  const longTrack = analysis.duration > 45
+  const audible = mergeShortGaps(
+    invertSilence(analysis.duration, analysis.silence),
+    longTrack ? 0.95 : 0.22,
+    longTrack ? 6 : 1.6,
+  )
   if (audible.length === 0) {
     return [makeSegment(0, analysis.duration, 1, 'auto')]
   }
@@ -333,11 +396,12 @@ export function autoCutMusic(analysis: MusicAnalysis, preset: AutoCutPreset = 'c
     ]
   }
 
-  return audible.map((region, index) => {
+  const cuts = audible.map((region, index) => {
     const start = snapToOnset(region.start, analysis.onsets)
     const end = Math.min(analysis.duration, region.end)
     return makeSegment(start, end, index + 1, 'auto')
   })
+  return cuts
 }
 
 export function formatTimecode(seconds: number) {

@@ -10,6 +10,7 @@ import {
 } from './audioAnalysisService'
 import {
   adviseCutsLocally,
+  buildCodexCutPrompt,
   buildMusicAdviseRequest,
   cutsFromAdvice,
   localSelectCandidates,
@@ -93,6 +94,26 @@ describe('análise e Codex advisor', () => {
     expect(local.usedCodex).toBe(false)
     expect(local.message).toMatch(/não está conectado/i)
     expect(local.cuts.length).toBeGreaterThan(0)
+    expect(local.cuts.every((cut) => cut.end - cut.start >= 6.5)).toBe(true)
+    for (let i = 1; i < local.cuts.length; i += 1) {
+      expect(local.cuts[i].start).toBeGreaterThanOrEqual(local.cuts[i - 1].end - 0.05)
+    }
+    const prompt = buildCodexCutPrompt(request)
+    expect(prompt).toMatch(/fim de frase/i)
+    expect(prompt).toMatch(/minSegmentSec/)
+  })
+
+  it('não empilha cortes próximos mesmo se o Codex escolher demais', () => {
+    const candidates = candidateSplits(analysis, enriched, 'completo')
+    const request = buildMusicAdviseRequest(summary, candidates, 'completo')
+    const flood = parseCodexCutAdvice(
+      JSON.stringify({ cuts: candidates.map((candidate) => ({ id: candidate.id, confidence: 0.9 })) }),
+      candidates,
+    )
+    const cuts = cutsFromAdvice(request, flood, 'codex')
+    expect(cuts.length).toBeGreaterThan(0)
+    expect(cuts.length).toBeLessThanOrEqual(8)
+    expect(cuts.every((cut) => cut.end - cut.start >= 6.5)).toBe(true)
   })
 
   it('Codex indisponível cai na heurística local', () => {
@@ -110,5 +131,36 @@ describe('análise e Codex advisor', () => {
     const request = buildMusicAdviseRequest(summary, candidates, 'estrutura')
     const result = adviseCutsLocally(request)
     expect(result.cuts.length).toBeGreaterThan(0)
+    expect(result.cuts.length).toBeLessThanOrEqual(8)
+    expect(result.cuts.every((cut) => cut.end - cut.start >= 8)).toBe(true)
+  })
+
+  it('completa os cortes até o fim da faixa longa', () => {
+    const parts: Float32Array[] = []
+    for (let i = 0; i < 8; i += 1) {
+      parts.push(tone(sampleRate, 10, 180 + i * 30, 0.32))
+      parts.push(tone(sampleRate, 0.7, 0, 0))
+    }
+    const longAnalysis = analyzeMusic(concat(parts), sampleRate)
+    const long = summarizeMusicAnalysis(longAnalysis, concat(parts))
+    const candidates = candidateSplits(longAnalysis, long.enriched, 'completo')
+    expect(candidates.some((candidate) => candidate.time > longAnalysis.duration * 0.55)).toBe(true)
+    const request = buildMusicAdviseRequest(long.summary, candidates, 'completo')
+    const onlyStart = parseCodexCutAdvice(
+      JSON.stringify({
+        cuts: candidates
+          .filter((candidate) => candidate.time < 40)
+          .map((candidate) => ({ id: candidate.id, confidence: 0.95 })),
+      }),
+      candidates,
+    )
+    const cuts = cutsFromAdvice(request, onlyStart, 'codex')
+    const last = cuts[cuts.length - 1]
+    expect(last.end).toBeCloseTo(longAnalysis.duration, 2)
+    expect(cuts[0].start).toBe(0)
+    expect(last.end - last.start).toBeLessThan(40)
+    for (let i = 1; i < cuts.length; i += 1) {
+      expect(Math.abs(cuts[i].start - cuts[i - 1].end)).toBeLessThan(0.05)
+    }
   })
 })

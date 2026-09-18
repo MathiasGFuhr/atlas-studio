@@ -5,6 +5,18 @@ import { getCutMarkers, type CutMarker } from '@shared/audio/audioCutService'
 import { timeFromClientX } from '@shared/audio/playback'
 import { cn } from '../lib/utils'
 
+function downsamplePeaks(peaks: number[], maxBars: number): number[] {
+  if (peaks.length <= maxBars) return peaks
+  const out = new Array(maxBars).fill(0)
+  const step = peaks.length / maxBars
+  for (let i = 0; i < peaks.length; i += 1) {
+    const idx = Math.min(maxBars - 1, Math.floor(i / step))
+    const value = peaks[i] ?? 0
+    if (value > out[idx]) out[idx] = value
+  }
+  return out
+}
+
 export function Waveform({
   peaks,
   duration,
@@ -40,8 +52,9 @@ export function Waveform({
   const canvasWrap = useRef<HTMLDivElement>(null)
   const [dragTip, setDragTip] = useState<{ time: number; x: number } | null>(null)
   const bars = useMemo(() => {
-    const max = Math.max(0.0001, ...peaks)
-    return peaks.map((value) => value / max)
+    const sampled = downsamplePeaks(peaks, 640)
+    const max = Math.max(0.0001, ...sampled)
+    return sampled.map((value) => value / max)
   }, [peaks])
   const markers = useMemo(() => getCutMarkers(cuts, duration), [cuts, duration])
 
@@ -137,7 +150,7 @@ export function Waveform({
     >
       <div
         ref={canvasWrap}
-        className="relative h-full min-w-full"
+        className="relative h-full min-w-full overflow-hidden"
         style={{ width: `${Math.max(100, zoom * 100)}%` }}
         onPointerDown={(event) => {
           if (event.button !== 0) return
@@ -147,12 +160,17 @@ export function Waveform({
           onSeek(time)
         }}
       >
-        <div className="absolute inset-0 flex items-center gap-px px-1">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {bars.map((value, index) => (
             <div
               key={index}
-              className="min-w-px flex-1 rounded-full bg-accent/55"
-              style={{ height: `${Math.max(6, value * 88)}%` }}
+              className="absolute top-1/2 rounded-[1px] bg-accent/55"
+              style={{
+                left: `${(index / bars.length) * 100}%`,
+                width: `${100 / bars.length}%`,
+                height: `${value < 0.045 ? Math.max(2, value * 40) : Math.max(8, value * 88)}%`,
+                transform: 'translateY(-50%)',
+              }}
             />
           ))}
         </div>

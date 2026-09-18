@@ -87,6 +87,32 @@ export function isCoveringPartition(cuts: MusicSegment[], duration: number): boo
   return true
 }
 
+export function fitCutsToExactDuration(cuts: MusicSegment[], duration: number): MusicSegment[] {
+  const safeDuration = roundTime(Math.max(MIN_SEGMENT, duration))
+  const clamped = sortCuts(cuts)
+    .map((cut) => {
+      const start = clampTime(cut.start, 0, safeDuration)
+      const end = clampTime(cut.end, start + MIN_SEGMENT, safeDuration)
+      if (end - start < MIN_SEGMENT || start >= safeDuration) return null
+      return { ...cut, start: roundTime(start), end: roundTime(end) }
+    })
+    .filter((cut): cut is MusicSegment => Boolean(cut))
+
+  if (clamped.length === 0) return []
+
+  const next = clamped.map((cut) => ({ ...cut }))
+  for (let i = 1; i < next.length; i += 1) {
+    if (next[i].start < next[i - 1].end) {
+      next[i] = { ...next[i], start: next[i - 1].end }
+    }
+    if (next[i].end - next[i].start < MIN_SEGMENT || next[i].start >= safeDuration) {
+      next.splice(i, 1)
+      i -= 1
+    }
+  }
+  return next.filter((cut) => cut.end <= safeDuration && cut.end - cut.start >= MIN_SEGMENT)
+}
+
 export function segmentsFromTimes(
   times: number[],
   duration: number,

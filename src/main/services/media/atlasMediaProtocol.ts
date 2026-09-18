@@ -19,6 +19,12 @@ const MEDIA_TYPES: Record<string, string> = {
   '.mpeg': 'video/mpeg',
   '.mpg': 'video/mpeg',
   '.wmv': 'video/x-ms-wmv',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.flac': 'audio/flac',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
@@ -45,11 +51,19 @@ function shortsRoot() {
   return path.join(getUserDataPath(), 'shorts')
 }
 
+function musicRoot() {
+  return path.join(getUserDataPath(), 'music')
+}
+
+function isInsideRoot(filePath: string, root: string): boolean {
+  const resolvedRoot = path.resolve(root).toLowerCase() + path.sep
+  return path.resolve(filePath).toLowerCase().startsWith(resolvedRoot)
+}
+
 function isAllowedMediaPath(filePath: string): boolean {
   const resolved = path.resolve(filePath)
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return false
-  const root = path.resolve(shortsRoot())
-  if (resolved.toLowerCase().startsWith(root.toLowerCase() + path.sep)) return true
+  if (isInsideRoot(resolved, shortsRoot()) || isInsideRoot(resolved, musicRoot())) return true
   return shortsRepository.list().some((job) => path.resolve(job.sourcePath).toLowerCase() === resolved.toLowerCase())
 }
 

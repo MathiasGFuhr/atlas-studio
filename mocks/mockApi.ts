@@ -702,6 +702,9 @@ export const mockApi = {
     preview: async () => {
       throw new Error('Prévia indisponível no modo mock. Use o Electron.')
     },
+    previewUrl: async () => {
+      throw new Error('Prévia indisponível no modo mock. Use o Electron.')
+    },
     export: async () => null,
     exportAll: async () => null,
     chooseExportFolder: async () => settings.musicExportFolder || null,
@@ -907,7 +910,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.17.0',
+      currentVersion: '1.18.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

@@ -413,6 +413,13 @@ export function registerIpcHandlers(deps: {
     }
     return fs.readFileSync(track.previewPath)
   })
+  ipcMain.handle(IPC.music.previewUrl, (_e, id: string) => {
+    const track = musicRepository.get(id)
+    if (!track?.previewPath || !fs.existsSync(track.previewPath)) {
+      throw new Error('Prévia da música não encontrada')
+    }
+    return toAtlasMediaUrl(track.previewPath)
+  })
   ipcMain.handle(IPC.music.chooseExportFolder, async () => {
     const win = getMainWindow()
     const current = settingsRepository.get().musicExportFolder

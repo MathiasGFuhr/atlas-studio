@@ -15,10 +15,18 @@ import {
   VolumeX,
 } from 'lucide-react'
 import type { AutoCutPreset, MusicAnalysis, MusicSegment, MusicTrack } from '@shared/musicAnalysis'
-import { autoCutMusic, computePeaks, formatTimecode, mixToMono } from '@shared/musicAnalysis'
-import { analyzeMusic } from '@shared/musicAnalysis'
+import {
+  analyzeMusic,
+  autoCutMusic,
+  clipAnalysisToAudible,
+  computePeaks,
+  formatTimecode,
+  mixToMono,
+  sliceSamplesToDuration,
+} from '@shared/musicAnalysis'
 import {
   addManualSelection,
+  fitCutsToExactDuration,
   removeCut as removeCutFromList,
   renameCut,
   sanitizeExportName,
@@ -113,7 +121,9 @@ export function MusicEditorPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const samplesRef = useRef<Float32Array | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const playbackModeRef = useRef<'full' | 'region'>('full')
+  const playAuthorizedRef = useRef(false)
   const historyRef = useRef(createEditorHistory<HistorySnapshot>())
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [track, setTrack] = useState<MusicTrack | null>(null)
@@ -172,8 +182,8 @@ export function MusicEditorPage() {
           length: samples.length,
           getChannelData: () => samples,
         })
-        const nextAnalysis = analyzeMusic(mono, sampleRate)
-        const nextPeaks = computePeaks(mono, 1200)
+        const nextAnalysis = clipAnalysisToAudible(analyzeMusic(mono, sampleRate))
+        const audibleMono = sliceSamplesToDuration(mono, sampleRate, nextAnalysis.duration)
         let nextTrack = { ...current, duration: nextAnalysis.duration }
         if (nextTrack.cuts.length === 0) {
           nextTrack = {
@@ -182,26 +192,65 @@ export function MusicEditorPage() {
             appliedPreset: 'completo',
             cuts: autoCutMusic(nextAnalysis, 'completo'),
           }
+        } else {
+          nextTrack = {
+            ...nextTrack,
+            cuts: fitCutsToExactDuration(nextTrack.cuts, nextTrack.duration),
+          }
+        }
+        const lastCutEnd = nextTrack.cuts.reduce((max, cut) => Math.max(max, cut.end), 0)
+        if (
+          current.cuts.length > 0 &&
+          lastCutEnd > 0 &&
+          nextTrack.duration - lastCutEnd > 0.25
+        ) {
+          nextTrack = { ...nextTrack, duration: lastCutEnd }
+        }
+        const editorialAnalysis =
+          nextTrack.duration < nextAnalysis.duration - 0.05
+            ? clipAnalysisToAudible(nextAnalysis, nextTrack.duration)
+            : nextAnalysis
+        const editorialSamples = sliceSamplesToDuration(audibleMono, sampleRate, nextTrack.duration)
+        const durationChanged = Math.abs((current.duration || 0) - nextTrack.duration) > 0.05
+        if (!current.cuts.length) {
           await api.music.update(id, {
             duration: nextTrack.duration,
             cutMode: nextTrack.cutMode,
             cuts: nextTrack.cuts,
-            appliedPreset: 'completo',
+            appliedPreset: nextTrack.appliedPreset ?? 'completo',
           })
-        } else if (!current.duration) {
-          await api.music.update(id, { duration: nextTrack.duration })
+        } else if (durationChanged) {
+          await api.music.update(id, { duration: nextTrack.duration, cuts: nextTrack.cuts })
         }
         if (cancelled) return
-        const copy = new Uint8Array(preview.byteLength)
-        copy.set(preview)
-        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
-        objectUrlRef.current = URL.createObjectURL(new Blob([copy], { type: 'audio/wav' }))
-        if (audioRef.current) audioRef.current.src = objectUrlRef.current
-        samplesRef.current = mono
+        let nextUrl: string | null = null
+        try {
+          if (typeof api.music.previewUrl === 'function') {
+            nextUrl = await api.music.previewUrl(id)
+          }
+        } catch {
+          nextUrl = null
+        }
+        if (!nextUrl) {
+          const copy = new Uint8Array(preview.byteLength)
+          copy.set(preview)
+          nextUrl = URL.createObjectURL(new Blob([copy], { type: 'audio/wav' }))
+          if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
+          objectUrlRef.current = nextUrl
+        }
+        if (cancelled) {
+          if (objectUrlRef.current) {
+            URL.revokeObjectURL(objectUrlRef.current)
+            objectUrlRef.current = null
+          }
+          return
+        }
+        setPreviewUrl(nextUrl)
+        samplesRef.current = editorialSamples
         historyRef.current.clear()
         setTrack(nextTrack)
-        setAnalysis(nextAnalysis)
-        setPeaks(nextPeaks)
+        setAnalysis(editorialAnalysis)
+        setPeaks(computePeaks(editorialSamples, 1200))
         setSelectedId(nextTrack.selectedId ?? nextTrack.cuts[0]?.id ?? null)
         refreshHistoryFlags()
         const settings = await api.settings.get()
@@ -221,14 +270,26 @@ export function MusicEditorPage() {
     })()
     return () => {
       cancelled = true
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current)
+        objectUrlRef.current = null
+      }
+      setPreviewUrl(null)
     }
   }, [api, id, navigate, push])
 
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
-    const onPlay = () => setPlaying(true)
+    if (previewUrl && !audio.getAttribute('src')) audio.src = previewUrl
+    const onPlay = () => {
+      if (!playAuthorizedRef.current) {
+        audio.pause()
+        setPlaying(false)
+        return
+      }
+      setPlaying(true)
+    }
     const onPause = () => setPlaying(false)
     audio.addEventListener('play', onPlay)
     audio.addEventListener('pause', onPause)
@@ -236,7 +297,7 @@ export function MusicEditorPage() {
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
     }
-  }, [track])
+  }, [previewUrl, track])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -248,12 +309,14 @@ export function MusicEditorPage() {
     const tick = () => {
       const audio = audioRef.current
       if (audio) {
-        const time = audio.currentTime
+        const limit = track?.duration ?? audio.duration ?? 0
+        const time = Math.min(audio.currentTime, limit)
+        if (audio.currentTime > limit) audio.currentTime = limit
         setPlayhead(time)
         const region = playbackModeRef.current === 'region' ? selected : null
         const next = nextPlaybackTime({
           currentTime: time,
-          duration: track?.duration ?? audio.duration ?? 0,
+          duration: limit,
           mode: playbackModeRef.current,
           loop,
           region: region ? { start: region.start, end: region.end } : null,
@@ -303,19 +366,56 @@ export function MusicEditorPage() {
 
   function seekTo(time: number) {
     const audio = audioRef.current
-    if (audio) audio.currentTime = time
-    setPlayhead(time)
+    const limit = track?.duration ?? audio?.duration ?? 0
+    const next = Math.max(0, Math.min(time, limit))
+    if (audio) audio.currentTime = next
+    setPlayhead(next)
+  }
+
+  function stopAudio() {
+    playAuthorizedRef.current = false
+    const audio = audioRef.current
+    if (audio && !audio.paused) audio.pause()
+    setPlaying(false)
+  }
+
+  function scrubTo(time: number) {
+    stopAudio()
+    seekTo(time)
+  }
+
+  async function playAudio() {
+    const audio = audioRef.current
+    if (!audio) return
+    if (previewUrl && !audio.getAttribute('src')) {
+      audio.src = previewUrl
+    }
+    playAuthorizedRef.current = true
+    setPlaying(true)
+    try {
+      await audio.play()
+      if (!playAuthorizedRef.current) {
+        audio.pause()
+        setPlaying(false)
+      }
+    } catch (error) {
+      playAuthorizedRef.current = false
+      setPlaying(false)
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      push(error instanceof Error ? error.message : 'Não foi possível reproduzir o áudio', 'error')
+    }
   }
 
   function togglePlayPause() {
     const audio = audioRef.current
     if (!audio) return
-    if (playing) {
-      audio.pause()
+    const isPlaying = !audio.paused || playing
+    if (isPlaying) {
+      stopAudio()
       return
     }
     playbackModeRef.current = 'full'
-    void audio.play()
+    void playAudio()
   }
 
   function playSelectedRegion(cut = selected) {
@@ -324,7 +424,7 @@ export function MusicEditorPage() {
     playbackModeRef.current = 'region'
     setSelectedId(cut.id)
     audio.currentTime = cut.start
-    void audio.play()
+    void playAudio()
   }
 
   function cutAtPlayhead() {
@@ -428,7 +528,8 @@ export function MusicEditorPage() {
         }
       }
       setIaProgress('Aplicando sugestões...')
-      const cuts = result.cuts.length > 0 ? result.cuts : autoCutMusic(analysis, preset)
+      const rawCuts = result.cuts.length > 0 ? result.cuts : autoCutMusic(analysis, preset)
+      const cuts = fitCutsToExactDuration(rawCuts, analysis.duration)
       applyLocal(
         {
           cuts,
@@ -557,15 +658,25 @@ export function MusicEditorPage() {
         seekTo(next)
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   })
 
   if (loading || !track) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted">
-        Analisando a música...
-      </div>
+      <>
+        <audio
+          ref={audioRef}
+          src={previewUrl ?? undefined}
+          preload="auto"
+          controls={false}
+          tabIndex={-1}
+          className="pointer-events-none absolute h-0 w-0 opacity-0"
+        />
+        <div className="flex h-full items-center justify-center text-sm text-muted">
+          Analisando a música...
+        </div>
+      </>
     )
   }
 
@@ -573,7 +684,14 @@ export function MusicEditorPage() {
 
   return (
     <PageShell>
-      <audio ref={audioRef} />
+      <audio
+        ref={audioRef}
+        src={previewUrl ?? undefined}
+        preload="auto"
+        controls={false}
+        tabIndex={-1}
+        className="pointer-events-none absolute h-0 w-0 opacity-0"
+      />
       <PageHeader
         breadcrumb={environmentBreadcrumb('music', track.name, 'Editor de cortes')}
         title={track.name}
@@ -590,6 +708,7 @@ export function MusicEditorPage() {
           ← Voltar
         </Button>
         <Button
+          type="button"
           icon={playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           onClick={togglePlayPause}
           title="Espaço: play/pause"
@@ -671,16 +790,17 @@ export function MusicEditorPage() {
           selectedId={selected?.id ?? null}
           playhead={playhead}
           zoom={zoom}
-          onSeek={seekTo}
+          onSeek={scrubTo}
           onSelect={(cutId, time) => {
             setSelectedId(cutId)
-            seekTo(time)
+            scrubTo(time)
           }}
           onChangeCut={(cutId, start, end) => changeCut(cutId, start, end, false)}
           onCommitCut={() => undefined}
           onMoveMarker={(marker, time) => commitMarker(marker, time, false)}
           onCommitMarker={() => undefined}
           onBeginGesture={() => {
+            stopAudio()
             if (!track) return
             historyRef.current.push(snapshotFrom(track))
             refreshHistoryFlags()

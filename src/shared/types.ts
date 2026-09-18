@@ -771,6 +771,7 @@ export const IPC = {
     update: 'music:update',
     remove: 'music:remove',
     preview: 'music:preview',
+    previewUrl: 'music:previewUrl',
     export: 'music:export',
     exportAll: 'music:exportAll',
     chooseExportFolder: 'music:chooseExportFolder',

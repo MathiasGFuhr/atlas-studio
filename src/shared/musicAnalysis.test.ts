@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeMusic, autoCutMusic } from './musicAnalysis'
+import { analyzeMusic, autoCutMusic, clipAnalysisToAudible } from './musicAnalysis'
 
 function tone(sampleRate: number, seconds: number, freq: number, amp: number) {
   const length = Math.floor(sampleRate * seconds)
@@ -54,5 +54,34 @@ describe('musicAnalysis', () => {
     expect(hook.start).toBeGreaterThan(1)
     expect(hook.start).toBeLessThan(8)
     expect(hook.end).toBeGreaterThan(12)
+  })
+
+  it('corta a linha do tempo no fim real da música, sem cauda para fechar o card', () => {
+    const sampleRate = 22050
+    const samples = concat([
+      tone(sampleRate, 8, 220, 0.4),
+      tone(sampleRate, 7, 0, 0),
+    ])
+    const raw = analyzeMusic(samples, sampleRate)
+    expect(raw.duration).toBeGreaterThan(14)
+    const analysis = clipAnalysisToAudible(raw)
+    expect(analysis.duration).toBeLessThan(9.2)
+    expect(analysis.duration).toBeGreaterThan(7.6)
+
+    const cuts = autoCutMusic(analysis, 'completo')
+    expect(cuts.length).toBeGreaterThan(0)
+    expect(cuts[cuts.length - 1].end).toBeLessThanOrEqual(analysis.duration + 0.02)
+    expect(Math.max(...cuts.map((cut) => cut.end))).toBeLessThan(9.2)
+  })
+
+  it('não estica o último corte automático até o padding do arquivo', () => {
+    const sampleRate = 22050
+    const samples = concat([
+      tone(sampleRate, 6, 330, 0.42),
+      tone(sampleRate, 5, 0, 0),
+    ])
+    const analysis = analyzeMusic(samples, sampleRate)
+    const cuts = autoCutMusic(analysis, 'completo')
+    expect(cuts[cuts.length - 1].end).toBeLessThan(analysis.duration - 3)
   })
 })

@@ -208,6 +208,7 @@ const api = {
     ) => ipcRenderer.invoke(IPC.music.update, id, patch) as Promise<MusicTrack | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.music.remove, id) as Promise<boolean>,
     preview: (id: string) => ipcRenderer.invoke(IPC.music.preview, id) as Promise<Uint8Array>,
+    previewUrl: (id: string) => ipcRenderer.invoke(IPC.music.previewUrl, id) as Promise<string>,
     export: (payload: {
       id: string
       start: number
