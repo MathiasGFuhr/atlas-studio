@@ -910,7 +910,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.18.0',
+      currentVersion: '1.19.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

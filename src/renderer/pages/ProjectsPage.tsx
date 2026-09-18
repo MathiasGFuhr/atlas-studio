@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, FolderKanban, FolderOpen, Files, Pencil, Plus, Scissors, Search, Tag, Trash2 } from 'lucide-react'
+import { CheckCircle2, Clapperboard, FolderKanban, FolderOpen, Files, Music2, Pencil, Plus, Scissors, Search, Tag, Trash2 } from 'lucide-react'
 import type { Channel, Project, ProjectType } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
@@ -21,7 +21,11 @@ import { cn, formatRelativeDate } from '../lib/utils'
 
 const EMPTY_FORM: ProjectFormValues = { name: '', description: '', channelId: '' }
 
-type ProjectListTab = 'active' | 'published'
+type ProjectListTab = 'active' | 'published' | 'music' | 'videos'
+
+function hasLinkedVideo(project: Project) {
+  return Boolean(project.scheduledVideoId)
+}
 
 /**
  * Lista de projetos de um ambiente. A mesma tela serve História e Música —
@@ -36,7 +40,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [channels, setChannels] = useState<Channel[]>([])
   const [query, setQuery] = useState('')
-  const [tab, setTab] = useState<ProjectListTab>('active')
+  const [tab, setTab] = useState<ProjectListTab>(projectType === 'music' ? 'music' : 'active')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Project | null>(null)
   const [deleting, setDeleting] = useState<Project | null>(null)
@@ -76,10 +80,25 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
     () => projects.filter((project) => project.scheduledVideoStatus !== 'publicado'),
     [projects],
   )
-  const visibleProjects = tab === 'published' ? publishedProjects : activeProjects
+  const musicProjects = useMemo(
+    () => projects.filter((project) => !hasLinkedVideo(project)),
+    [projects],
+  )
+  const videoProjects = useMemo(
+    () => projects.filter((project) => hasLinkedVideo(project)),
+    [projects],
+  )
+  const visibleProjects =
+    tab === 'published'
+      ? publishedProjects
+      : tab === 'music'
+        ? musicProjects
+        : tab === 'videos'
+          ? videoProjects
+          : activeProjects
 
   useEffect(() => {
-    setTab('active')
+    setTab(projectType === 'music' ? 'music' : 'active')
   }, [projectType])
 
   function openCreate() {
@@ -212,64 +231,118 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
 
       <div
         role="tablist"
-        aria-label="Lista de projetos"
+        aria-label={projectType === 'music' ? 'Música e vídeos' : 'Lista de projetos'}
         className="mb-5 inline-flex rounded-xl border border-border bg-card-2 p-1"
       >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'active'}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-            tab === 'active' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
-          )}
-          style={tab === 'active' ? { backgroundColor: `${env.color}1f`, color: env.color } : undefined}
-          onClick={() => setTab('active')}
-        >
-          <FolderKanban className="h-3.5 w-3.5" />
-          Projetos
-          {activeProjects.length > 0 ? (
-            <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
-              {activeProjects.length}
-            </span>
-          ) : null}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'published'}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-            tab === 'published' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
-          )}
-          onClick={() => setTab('published')}
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          Publicados
-          {publishedProjects.length > 0 ? (
-            <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
-              {publishedProjects.length}
-            </span>
-          ) : null}
-        </button>
+        {projectType === 'music' ? (
+          <>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'music'}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+                tab === 'music' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+              )}
+              style={tab === 'music' ? { backgroundColor: `${env.color}1f`, color: env.color } : undefined}
+              onClick={() => setTab('music')}
+            >
+              <Music2 className="h-3.5 w-3.5" />
+              Música
+              {musicProjects.length > 0 ? (
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                  {musicProjects.length}
+                </span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'videos'}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+                tab === 'videos' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+              )}
+              onClick={() => setTab('videos')}
+            >
+              <Clapperboard className="h-3.5 w-3.5" />
+              Vídeos
+              {videoProjects.length > 0 ? (
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                  {videoProjects.length}
+                </span>
+              ) : null}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'active'}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+                tab === 'active' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+              )}
+              style={tab === 'active' ? { backgroundColor: `${env.color}1f`, color: env.color } : undefined}
+              onClick={() => setTab('active')}
+            >
+              <FolderKanban className="h-3.5 w-3.5" />
+              Projetos
+              {activeProjects.length > 0 ? (
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                  {activeProjects.length}
+                </span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'published'}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+                tab === 'published' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+              )}
+              onClick={() => setTab('published')}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Publicados
+              {publishedProjects.length > 0 ? (
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                  {publishedProjects.length}
+                </span>
+              ) : null}
+            </button>
+          </>
+        )}
       </div>
 
       {visibleProjects.length === 0 ? (
         <Card className="flex flex-col items-center py-14 text-center">
-          <env.icon className="h-8 w-8 text-muted-2" />
+          {tab === 'videos' ? (
+            <Clapperboard className="h-8 w-8 text-muted-2" />
+          ) : (
+            <env.icon className="h-8 w-8 text-muted-2" />
+          )}
           <p className="mt-3 text-sm font-medium text-text">
             {query
               ? 'Nenhum projeto encontrado'
               : tab === 'published'
                 ? 'Nenhum projeto publicado'
-                : `Nenhum projeto de ${env.label} ainda`}
+                : tab === 'videos'
+                  ? 'Nenhum vídeo neste ambiente'
+                  : tab === 'music'
+                    ? 'Nenhum projeto de música ainda'
+                    : `Nenhum projeto de ${env.label} ainda`}
           </p>
           <p className="mt-1 max-w-md text-xs leading-relaxed text-muted">
             {tab === 'published'
               ? 'Quando o vídeo do projeto for marcado como Publicado, ele sai do calendário e da agenda e o projeto aparece aqui.'
-              : env.description}
+              : tab === 'videos'
+                ? 'Quando o projeto tiver uma publicação no canal, ele aparece aqui como vídeo, separado das faixas.'
+                : env.description}
           </p>
-          {!query && tab !== 'published' ? (
+          {!query && tab !== 'published' && tab !== 'videos' ? (
             <Button
               className="mt-5"
               icon={<Plus className="h-4 w-4" />}
@@ -288,7 +361,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
               className="flex cursor-pointer flex-col gap-3 transition-colors hover:border-[#334049]"
               onClick={() => navigate(projectPath(projectType, project.id))}
             >
-              {projectType === 'music' && project.scheduledVideoId ? (
+              {tab === 'videos' ? (
                 <MusicPublicationCard
                   bare
                   compact
