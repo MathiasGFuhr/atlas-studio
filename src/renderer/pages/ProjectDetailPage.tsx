@@ -6,6 +6,7 @@ import type { MusicTrack } from '@shared/musicAnalysis'
 import { formatTimecode } from '@shared/musicAnalysis'
 import { channelVideoPath, formatMusicProjectPublicationLine } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { ConfirmDialog } from '../components/Modal'
@@ -155,7 +156,7 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
   if (!project) return null
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <Button
         variant="ghost"
         className="mb-3 h-9 px-2 text-xs"
@@ -378,7 +379,7 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
         onConfirm={() => void removeProject()}
         onClose={() => setConfirmDelete(false)}
       />
-    </div>
+    </PageShell>
   )
 }
 

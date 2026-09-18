@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Check, FolderOpen, Lightbulb, Plus, RefreshCw, Search } from 'lucide-react'
 import type { DiscoveredSkill, Niche, SkillScanReport } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { NicheCard } from '../components/NicheCard'
 import { Button } from '../components/Button'
 import { Select } from '../components/Select'
@@ -229,7 +230,7 @@ export function NichesPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <PageHeader
         breadcrumb={environmentBreadcrumb('history', 'Nichos')}
         title="Nichos"
@@ -433,6 +434,6 @@ export function NichesPage() {
           />
         </div>
       </Modal>
-    </div>
+    </PageShell>
   )
 }

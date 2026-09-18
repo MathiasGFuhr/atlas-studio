@@ -4,6 +4,7 @@ import { CalendarDays, MessageSquareText, Plus, Search, Trash2, Tv } from 'lucid
 import type { Channel, Niche } from '@shared/types'
 import { PROJECT_TYPE_LABEL } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { ConfirmDialog } from '../components/Modal'
 import {
@@ -140,7 +141,7 @@ export function ChannelsPage() {
   }
 
   return (
-    <div className="h-full min-w-0 w-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <PageHeader
         breadcrumb="Atlas / Canais"
         title="Canais"
@@ -286,6 +287,6 @@ export function ChannelsPage() {
         onConfirm={() => void confirmDelete()}
         onClose={() => setDeleting(null)}
       />
-    </div>
+    </PageShell>
   )
 }

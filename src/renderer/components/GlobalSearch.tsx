@@ -218,7 +218,7 @@ export function GlobalSearch() {
   const activeId = hits[activeIndex] ? `${listId}-${hits[activeIndex].id}` : undefined
 
   return (
-    <div ref={rootRef} className="relative mx-auto flex h-11 w-full max-w-[560px] items-center">
+    <div ref={rootRef} className="relative mx-auto flex h-10 w-full min-w-0 max-w-[560px] items-center sm:h-11">
       <Search className="pointer-events-none absolute left-3.5 z-10 h-4 w-4 text-muted-2" />
       <input
         ref={inputRef}
@@ -236,7 +236,7 @@ export function GlobalSearch() {
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onInputKeyDown}
-        className="h-11 w-full rounded-full border border-border bg-card px-10 pr-16 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+        className="h-10 w-full min-w-0 rounded-full border border-border bg-card px-10 pr-16 text-sm text-text placeholder:truncate placeholder:text-muted-2 focus:border-accent/50 focus:outline-none sm:h-11"
       />
       <kbd className="pointer-events-none absolute right-3 rounded-md border border-border bg-card-2 px-1.5 py-0.5 text-[10px] text-muted-2">
         {shortcut}

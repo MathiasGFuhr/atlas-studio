@@ -9,10 +9,12 @@ export function TopBar({ settings }: { settings: AppSettings | null }) {
   const navigate = useNavigate()
 
   return (
-    <header className="flex h-[68px] shrink-0 items-center gap-4 border-b border-border-soft bg-bg/80 px-6 backdrop-blur">
-      <GlobalSearch />
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border-soft bg-bg/80 px-3 backdrop-blur sm:h-[68px] sm:gap-4 sm:px-6">
+      <div className="min-w-0 flex-1">
+        <GlobalSearch />
+      </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
         <NewMenuButton />
         <NotificationBell />
 
@@ -31,13 +33,13 @@ export function TopBar({ settings }: { settings: AppSettings | null }) {
               />
             ) : null}
           </div>
-          <div className="hidden text-left xl:block">
-            <div className="text-sm font-medium text-text">
+          <div className="hidden min-w-0 text-left lg:block">
+            <div className="max-w-[140px] truncate text-sm font-medium text-text">
               {settings?.accountName || 'Atlas Studio'}
             </div>
             <div className="text-xs text-muted">{settings?.accountRole || 'Editor'}</div>
           </div>
-          <ChevronDown className="h-4 w-4 text-muted" />
+          <ChevronDown className="hidden h-4 w-4 text-muted sm:block" />
         </button>
       </div>
     </header>

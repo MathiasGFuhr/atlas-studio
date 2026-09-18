@@ -4,6 +4,7 @@ import { Music2, Plus, Scissors, Trash2 } from 'lucide-react'
 import type { MusicTrack } from '@shared/musicAnalysis'
 import { formatTimecode } from '@shared/musicAnalysis'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { ConfirmDialog } from '../components/Modal'
@@ -55,7 +56,7 @@ export function MusicPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <PageHeader
         breadcrumb={environmentBreadcrumb('music', 'Faixas')}
         title="Cortes de música"
@@ -128,6 +129,6 @@ export function MusicPage() {
         onClose={() => setDeleting(null)}
         onConfirm={() => void confirmDelete()}
       />
-    </div>
+    </PageShell>
   )
 }

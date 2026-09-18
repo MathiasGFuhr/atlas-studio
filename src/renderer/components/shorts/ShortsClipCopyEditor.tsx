@@ -3,7 +3,6 @@ import { Copy, Loader2, RefreshCw } from 'lucide-react'
 import type { ShortsClip, ShortsClipPatch, ShortsCopyFields } from '@shared/shorts'
 import { formatHashtags, normalizeHashtags } from '@shared/shorts'
 import { Button } from '../Button'
-import { Input } from '../Input'
 import { Textarea } from '../Textarea'
 import { cn } from '../../lib/utils'
 
@@ -11,7 +10,6 @@ export function ShortsClipCopyEditor({
   clip,
   disabled,
   regenerating,
-  compact,
   onPersist,
   onCopy,
   onRegenerate,
@@ -19,7 +17,6 @@ export function ShortsClipCopyEditor({
   clip: ShortsClip
   disabled?: boolean
   regenerating?: boolean
-  compact?: boolean
   onPersist: (patch: ShortsClipPatch) => void
   onCopy: (part: 'title' | 'description' | 'all') => void
   onRegenerate: (fields: ShortsCopyFields) => void
@@ -65,9 +62,12 @@ export function ShortsClipCopyEditor({
 
   return (
     <div className="space-y-3">
-      <Input
+      <Textarea
         label="Título sugerido"
         value={title}
+        rows={2}
+        autoGrow
+        className="min-h-[52px]"
         disabled={disabled || regenerating}
         onChange={(event) => setTitle(event.target.value)}
         onBlur={commitTitle}
@@ -75,21 +75,25 @@ export function ShortsClipCopyEditor({
       <Textarea
         label="Descrição"
         value={description}
+        autoGrow
+        className="min-h-[96px]"
         disabled={disabled || regenerating}
-        className={compact ? 'min-h-[84px]' : 'min-h-[110px]'}
         onChange={(event) => setDescription(event.target.value)}
         onBlur={commitDescription}
       />
-      <Input
+      <Textarea
         label="Hashtags"
         value={hashtags}
+        rows={2}
+        autoGrow
         placeholder="#tema #artista"
+        className="min-h-[52px]"
         disabled={disabled || regenerating}
         onChange={(event) => setHashtags(event.target.value)}
         onBlur={commitHashtags}
       />
       {clip.reason ? (
-        <p className="text-xs leading-relaxed text-muted">
+        <p className="text-xs leading-relaxed text-pretty break-words text-muted">
           <span className="text-muted-2">Motivo do corte: </span>
           {clip.reason}
         </p>

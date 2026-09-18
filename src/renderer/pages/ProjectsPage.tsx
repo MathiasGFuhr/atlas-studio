@@ -4,6 +4,7 @@ import { FolderOpen, Files, Pencil, Plus, Scissors, Search, Tag, Trash2 } from '
 import type { Channel, Project, ProjectType } from '@shared/types'
 import { formatMusicProjectPublicationLine } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { ConfirmDialog } from '../components/Modal'
@@ -140,7 +141,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <PageHeader
         breadcrumb={environmentBreadcrumb(projectType)}
         title={env.label}
@@ -148,7 +149,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
       />
 
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[260px] flex-1">
+        <div className="relative min-w-0 flex-1 sm:min-w-[240px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-2" />
           <input
             value={query}
@@ -318,6 +319,6 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
         onConfirm={() => void confirmDelete()}
         onClose={() => setDeleting(null)}
       />
-    </div>
+    </PageShell>
   )
 }

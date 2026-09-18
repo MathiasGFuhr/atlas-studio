@@ -3,7 +3,6 @@ import { constrainClipWindow } from './shortsDuration'
 import {
   formatInsufficientShortsNote,
   selectDiverseClips,
-  SHORTS_OVERLAP_LIMIT,
   type ShortsDiscardedWindow,
   type ShortsRankedWindow,
 } from './shortsDiversity'
@@ -77,7 +76,8 @@ export function finalizeShortsSelection(input: FinalizeShortsSelectionInput): Fi
     candidates: refined,
     count: input.clipCount,
     videoDuration: input.videoDuration,
-    overlapLimit: SHORTS_OVERLAP_LIMIT,
+    requestedDuration: input.requestedDuration,
+    role: 'final',
   })
 
   const clips = diversity.selected.map((clip, index) => ({

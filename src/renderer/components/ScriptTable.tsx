@@ -11,8 +11,8 @@ export function ScriptTable({
   onOpen: (id: string) => void
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border-soft bg-card">
-      <table className="w-full border-collapse text-left text-sm">
+    <div className="overflow-x-auto rounded-2xl border border-border-soft bg-card">
+      <table className="w-full min-w-[720px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-border-soft text-xs text-muted">
             <th className="px-4 py-3 font-medium">Título</th>
@@ -33,7 +33,7 @@ export function ScriptTable({
               key={script.id}
               className="border-b border-border-soft/70 transition-colors last:border-0 hover:bg-white/[0.02]"
             >
-              <td className="max-w-[280px] truncate px-4 py-3.5 font-medium text-text">
+              <td className="max-w-[min(28rem,40vw)] truncate px-4 py-3.5 font-medium text-text" title={script.title}>
                 {script.title}
               </td>
               <td className="px-4 py-3.5 text-muted">{script.nicheName}</td>

@@ -30,7 +30,7 @@ describe('prompts de compreensão audiovisual', () => {
     expect(prompt).not.toContain('ASSISTA e OUÇA')
   })
 
-  it('candidatos usam a compreensão global e permitem devolver menos cortes', () => {
+  it('candidatos pedem trechos fortes e temporalmente distintos', () => {
     const prompt = buildCandidateProposalPrompt({
       profile: 'music',
       duration: 200,
@@ -50,7 +50,7 @@ describe('prompts de compreensão audiovisual', () => {
         narrativeArc: 'build to chorus',
       },
     })
-    expect(prompt).toContain('Pode devolver MENOS')
+    expect(prompt).toContain('candidatos fortes e temporalmente distintos')
     expect(prompt).toContain('contentType: live')
     expect(prompt).toContain('visualReason')
     expect(prompt).toContain('Não escolha só o trecho mais alto')

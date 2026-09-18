@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Database, Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid } from 'lucide-react'
 import type { AntigravityStatus, AppSettings } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
@@ -177,7 +178,7 @@ export function SettingsPage({
   const versionLabel = codexAuth?.status?.codexVersion ?? '—'
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <PageHeader
         breadcrumb="Atlas / Configurações"
         title="Configurações"
@@ -823,7 +824,7 @@ export function SettingsPage({
         onClose={() => setAgyLinkOpen(false)}
         onStatus={setAntigravity}
       />
-    </div>
+    </PageShell>
   )
 }
 
@@ -878,7 +879,7 @@ function SettingsCard({
 
 function Row({ label, control }: { label: string; control: ReactNode }) {
   return (
-    <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-3">
+    <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[minmax(8rem,140px)_minmax(0,1fr)] sm:items-center sm:gap-3">
       <span className="text-sm text-muted">{label}</span>
       <div>{control}</div>
     </div>

@@ -98,8 +98,57 @@ describe('finalizeShortsSelection', () => {
     })
     expect(result.clips).toHaveLength(2)
     expect(result.insufficient).toBe(true)
-    expect(result.note).toContain('Encontramos 2 trechos realmente distintos')
+    expect(result.note).toContain('Encontramos 2 trechos distintos')
     expect(result.clips[0].start).toBeLessThan(20)
     expect(result.clips[1].start).toBeGreaterThan(60)
+  })
+
+  it('vídeo 56.6s / 30s / 2 Shorts devolve 2 trechos, inclusive no caso real 5–34 e 21.8–51.8', () => {
+    const result = finalizeShortsSelection({
+      ranked: [clip('ai1', 5, 34, 94), clip('ai2', 21.8, 51.8, 93)],
+      fallback: [
+        clip('c1', 0, 30, 70),
+        clip('c2', 5, 35, 68),
+        clip('c3', 21.8, 51.8, 66),
+        clip('c4', 26.6, 56.6, 64),
+      ],
+      clipCount: 2,
+      videoDuration: 56.6,
+      requestedDuration: 30,
+      durationMode: 'approximate',
+      profile: 'history',
+    })
+    expect(result.clips).toHaveLength(2)
+    expect(result.insufficient).toBe(false)
+    expect(result.note).toBe('')
+    const starts = result.clips.map((item) => item.start).sort((a, b) => a - b)
+    expect(starts[1] - starts[0]).toBeGreaterThan(10)
+  })
+
+  it('vídeo 56.6s / 30s / 5 Shorts devolve o máximo distinto, não 5 duplicatas', () => {
+    const fallback = [
+      clip('c1', 0, 30, 70),
+      clip('c2', 5, 35, 69),
+      clip('c3', 10, 40, 68),
+      clip('c4', 15, 45, 67),
+      clip('c5', 20, 50, 66),
+      clip('c6', 26.6, 56.6, 65),
+    ]
+    const result = finalizeShortsSelection({
+      ranked: [clip('ai1', 5, 34, 94), clip('ai2', 21.8, 51.8, 93)],
+      fallback,
+      clipCount: 5,
+      videoDuration: 56.6,
+      requestedDuration: 30,
+      durationMode: 'approximate',
+      profile: 'history',
+    })
+    expect(result.clips.length).toBeGreaterThanOrEqual(2)
+    expect(result.clips.length).toBeLessThan(5)
+    expect(result.insufficient).toBe(true)
+    expect(result.note).toContain('trechos distintos com qualidade suficiente para este vídeo.')
+    expect(new Set(result.clips.map((item) => `${item.start.toFixed(1)}-${item.end.toFixed(1)}`)).size).toBe(
+      result.clips.length,
+    )
   })
 })

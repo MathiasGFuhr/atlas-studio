@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BookOpen, CheckSquare, ChevronLeft, ChevronRight, Clapperboard, Home, MessageSquareText, Music2, Settings, Tv } from 'lucide-react'
 import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
@@ -12,6 +12,7 @@ import { getAtlasApi } from '../lib/api'
 import { onTasksChanged } from '../lib/taskEvents'
 import { useAntigravityStatus } from '../hooks/useAntigravityStatus'
 import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 const globalItems = [
   { to: '/', label: 'Início', icon: Home, end: true, color: undefined, area: null as 'history' | 'music' | null },
@@ -68,6 +69,8 @@ export function AppSidebar({
   const antigravityStatus = useAntigravityStatus()
   const aiStatus = deriveAtlasAiStatus(codexStatus, antigravityStatus)
   const [pendingCount, setPendingCount] = useState(0)
+  const compactViewport = useMediaQuery('(max-width: 1100px)')
+  const userToggledRef = useRef(false)
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
@@ -89,7 +92,13 @@ export function AppSidebar({
     return onTasksChanged(refresh)
   }, [api])
 
+  useEffect(() => {
+    if (userToggledRef.current) return
+    if (compactViewport) setCollapsed(true)
+  }, [compactViewport, userToggledRef])
+
   function toggleCollapsed() {
+    userToggledRef.current = true
     setCollapsed((current) => {
       const next = !current
       try {
@@ -115,7 +124,7 @@ export function AppSidebar({
   return (
     <aside
       className={cn(
-        'relative z-10 flex h-full shrink-0 flex-col border-r border-border-soft bg-sidebar',
+        'relative z-10 flex h-full shrink-0 flex-col border-r border-border-soft bg-sidebar transition-[width] duration-200 ease-out',
         collapsed ? 'w-[72px]' : 'w-[248px]',
       )}
     >

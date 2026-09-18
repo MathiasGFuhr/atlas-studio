@@ -9,6 +9,7 @@ import {
 } from '@shared/shortsProject'
 import type { ShortsImportResult } from '@shared/shortsProjectIdentity'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Input } from '../components/Input'
@@ -130,7 +131,7 @@ export function ShortsProjectsPage() {
   }
 
   return (
-    <div className="h-full min-w-0 overflow-y-auto px-8 py-6">
+    <PageShell>
       <PageHeader
         breadcrumb="Atlas / Shorts Studio"
         title="SHORTS STUDIO"
@@ -265,6 +266,6 @@ export function ShortsProjectsPage() {
           <p className="mt-3 truncate text-xs text-muted-2">{existingImport.project.name}</p>
         ) : null}
       </Modal>
-    </div>
+    </PageShell>
   )
 }

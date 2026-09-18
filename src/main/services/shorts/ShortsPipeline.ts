@@ -11,7 +11,7 @@ import type {
   ShortsProgressEvent,
 } from '../../../shared/shorts'
 import { capRequestedDuration } from '../../../shared/shortsDuration'
-import { toRankedWindows } from '../../../shared/shortsDiversity'
+import { composeShortsAnalysisNotes, sanitizeProposedShortsNotes, toRankedWindows } from '../../../shared/shortsDiversity'
 import { logger } from '../logging/logger'
 import { mergeReanalysisClips } from '../../../shared/shortsProjectIdentity'
 import { shortsRepository } from '../../repositories/shortsRepository'
@@ -294,23 +294,27 @@ export async function analyzeShortsJob(input: {
       probe.duration,
     )
 
-    let notes: string | null = durationCap.capped ? durationCap.message : null
-    notes = [notes, proposed.notes, selection.note].filter(Boolean).join('\n') || null
-    const languageNote = shortsLanguageAnalysisNote({
-      ...(shortsRepository.get(job.id) ?? job),
-      transcript: localTranscript.cues,
-      transcriptSource: localTranscript.source,
-      ...languageFields,
-    })
-    if (languageNote) notes = notes ? `${notes}\n${languageNote}` : languageNote
-    if (watchedVideo && !understandingHasSignal(global)) {
-      const extra = 'O proxy foi enviado à IA, mas a compreensão global veio incompleta. Os cortes ainda usaram o conteúdo audiovisual quando possível.'
-      notes = notes ? `${notes}\n${extra}` : extra
-    }
-    if (!watchedVideo) {
-      const extra = 'A IA não assistiu ao arquivo de vídeo. Análise por frames-chave, áudio e transcrição.'
-      notes = notes ? `${notes}\n${extra}` : extra
-    }
+    const notes = composeShortsAnalysisNotes([
+      durationCap.capped ? durationCap.message : null,
+      sanitizeProposedShortsNotes(proposed.notes, {
+        found: selection.clips.length,
+        requested: selection.requested,
+        note: selection.note,
+      }),
+      selection.note,
+      shortsLanguageAnalysisNote({
+        ...(shortsRepository.get(job.id) ?? job),
+        transcript: localTranscript.cues,
+        transcriptSource: localTranscript.source,
+        ...languageFields,
+      }),
+      watchedVideo && !understandingHasSignal(global)
+        ? 'O proxy foi enviado à IA, mas a compreensão global veio incompleta. Os cortes ainda usaram o conteúdo audiovisual quando possível.'
+        : null,
+      watchedVideo
+        ? null
+        : 'A IA não assistiu ao arquivo de vídeo. Análise por frames-chave, áudio e transcrição.',
+    ])
 
     const clipMediaByIndex = new Map<number, string>()
     if (watchedVideo && proxyPath) {

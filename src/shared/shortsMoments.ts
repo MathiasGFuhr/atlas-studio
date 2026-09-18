@@ -10,7 +10,6 @@ import {
   overlapRatio,
   selectDiverseClips,
   shortsCandidatePoolSize,
-  SHORTS_POOL_OVERLAP_LIMIT,
   withCandidateIds,
 } from './shortsDiversity'
 import { durationBounds } from './shortsDuration'
@@ -183,18 +182,25 @@ export function buildLocalShortsCandidates(input: {
     })
   }
 
-  const structureStep = Math.max(target * 0.7, (duration - target) / Math.max(poolSize - 1, 1))
-  for (let t = 0; t + bounds.min <= duration; t += structureStep) {
-    const window = makeWindow(duration, t, target, 'start')
+  const gridStep = Math.min(5, Math.max(2.5, target / 6))
+  const gridStarts = new Set<number>()
+  const maxStart = Math.max(0, duration - Math.min(target, duration))
+  for (let t = 0; t <= maxStart + 0.001; t += gridStep) {
+    gridStarts.add(roundTime(Math.min(t, maxStart)))
+  }
+  gridStarts.add(0)
+  gridStarts.add(roundTime(maxStart))
+  for (const start of [...gridStarts].sort((a, b) => a - b)) {
+    const window = makeWindow(duration, start, target, 'start')
     const energy = input.analysis ? windowEnergy(input.analysis, window.start, window.end) : 0.2
     pushCandidate(raw, {
       start: window.start,
       end: window.end,
-      score: Math.round(clamp(44 + energy * 90, 44, 76)),
+      score: Math.round(clamp(50 + energy * 90, 50, 78)),
       reason:
         input.profile === 'music'
-          ? 'Outra região da faixa com dinâmica aproveitável'
-          : 'Outra região contínua do vídeo',
+          ? 'Janela distribuída da faixa, fora do mesmo clímax'
+          : 'Janela distribuída ao longo do vídeo',
       source: 'structure',
     })
   }
@@ -228,7 +234,8 @@ export function buildLocalShortsCandidates(input: {
     candidates: normalized.map((item) => ({ ...item, hook: '' })),
     count: poolSize,
     videoDuration: duration,
-    overlapLimit: SHORTS_POOL_OVERLAP_LIMIT,
+    requestedDuration: target,
+    role: 'pool',
   })
 
   return picked.selected.map(({ hook: _hook, source, ...item }) => ({

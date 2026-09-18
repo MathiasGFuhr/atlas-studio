@@ -19,6 +19,7 @@ import {
   type QuickAdjustLabel,
 } from '@shared/adjustInstructions'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { Textarea } from '../components/Textarea'
@@ -154,7 +155,7 @@ export function ScriptDetailPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden px-8 pt-6">
+    <PageShell scroll={false} className="flex flex-col pt-6">
       <PageHeader
         breadcrumb={environmentBreadcrumb(
           'history',
@@ -165,7 +166,7 @@ export function ScriptDetailPage() {
         subtitle="Leia, copie, ajuste e exporte seu roteiro."
       />
 
-      <Card className="mb-3 grid shrink-0 grid-cols-1 gap-4 md:grid-cols-5" padding="sm">
+      <Card className="mb-3 grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5" padding="sm">
         <Meta icon={FileText} label="Título" value={script.title} />
         <Meta icon={FolderKanban} label="Nicho" value={script.nicheName ?? '—'} />
         <Meta icon={Globe} label="Idioma" value={script.language} />
@@ -336,7 +337,7 @@ export function ScriptDetailPage() {
           </p>
         </aside>
       </div>
-    </div>
+    </PageShell>
   )
 }
 
@@ -354,7 +355,9 @@ function Meta({
       <Icon className="mt-0.5 h-4 w-4 text-accent" />
       <div className="min-w-0">
         <div className="text-xs text-muted">{label}</div>
-        <div className="truncate text-sm font-medium text-text">{value}</div>
+        <div className="truncate text-sm font-medium text-text" title={value}>
+          {value}
+        </div>
       </div>
     </div>
   )

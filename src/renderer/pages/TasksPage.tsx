@@ -13,6 +13,7 @@ import {
   sortTasks,
 } from '@shared/tasks'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { ConfirmDialog } from '../components/Modal'
 import { TaskEditorModal, EMPTY_TASK_FORM, type TaskFormValues } from '../components/TaskEditorModal'
@@ -187,7 +188,7 @@ export function TasksPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <PageHeader
         breadcrumb="Atlas / Tarefas"
         title="Tarefas"
@@ -360,6 +361,6 @@ export function TasksPage() {
         onConfirm={() => void confirmDelete()}
         onClose={() => setDeleting(null)}
       />
-    </div>
+    </PageShell>
   )
 }

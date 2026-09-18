@@ -4,6 +4,7 @@ import { Check, ChevronLeft, ChevronRight, Copy, FolderOpen, FolderSearch, Image
 import type { Channel, ChannelVideo, ChannelVideoStatus, TitleStrengthAnalysis } from '@shared/types'
 import { channelVideoPath, toDateKey, todayDateKey } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { Input } from '../components/Input'
@@ -395,7 +396,7 @@ export function ChannelCalendarPage() {
 
   if (!loaded || !channel) {
     return (
-      <div className="h-full overflow-y-auto px-8 py-6">
+      <PageShell>
         <PageHeader
           breadcrumb="Atlas / Canais"
           title={loaded ? 'Canal não encontrado' : 'Canal'}
@@ -406,12 +407,12 @@ export function ChannelCalendarPage() {
             Voltar aos canais
           </Button>
         ) : null}
-      </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <div className="mb-2">
         <button
           type="button"
@@ -444,7 +445,8 @@ export function ChannelCalendarPage() {
         </Button>
       </div>
 
-      <Card padding="sm" className="overflow-hidden">
+      <Card padding="sm" className="overflow-x-auto">
+        <div className="min-w-[720px]">
         <div className="grid grid-cols-7 border-b border-border-soft">
           {WEEKDAYS.map((day) => (
             <div key={day} className="px-2 py-2 text-center text-[11px] font-medium uppercase tracking-wide text-muted-2">
@@ -510,6 +512,7 @@ export function ChannelCalendarPage() {
               </div>
             )
           })}
+        </div>
         </div>
       </Card>
 
@@ -797,6 +800,6 @@ export function ChannelCalendarPage() {
         onConfirm={() => void confirmDelete()}
         onClose={() => setDeleting(null)}
       />
-    </div>
+    </PageShell>
   )
 }

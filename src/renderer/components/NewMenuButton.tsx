@@ -90,7 +90,7 @@ export function NewMenuButton() {
         onClick={() => setOpen((value) => !value)}
         onKeyDown={onButtonKeyDown}
       >
-        Novo
+        <span className="hidden sm:inline">Novo</span>
       </Button>
 
       {open ? (

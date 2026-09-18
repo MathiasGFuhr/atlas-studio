@@ -1,4 +1,5 @@
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { QuickPromptsPanel } from '../components/QuickPromptsPanel'
 import { environmentBreadcrumb } from '../lib/environments'
 
@@ -7,13 +8,13 @@ import { environmentBreadcrumb } from '../lib/environments'
  */
 export function PromptsPage() {
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <PageHeader
         breadcrumb={environmentBreadcrumb('music', 'Prompts')}
         title="Prompts"
         subtitle="Biblioteca de Prompts rápidos do ambiente Música."
       />
       <QuickPromptsPanel />
-    </div>
+    </PageShell>
   )
 }

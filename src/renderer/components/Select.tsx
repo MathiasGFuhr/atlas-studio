@@ -9,13 +9,13 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 
 export function Select({ className, label, id, options, ...props }: SelectProps) {
   return (
-    <label className="flex w-full flex-col gap-2">
+    <label className="flex w-full min-w-0 flex-col gap-2">
       {label ? <span className="text-sm font-medium text-muted">{label}</span> : null}
       <div className="relative">
         <select
           id={id}
           className={cn(
-            'h-11 w-full appearance-none rounded-xl border border-border bg-card-2 px-3.5 pr-10 text-sm text-text',
+            'h-11 w-full min-w-0 appearance-none rounded-xl border border-border bg-card-2 px-3.5 pr-10 text-sm text-text',
             'transition-colors hover:border-[#334049] focus:border-accent/60 focus:outline-none',
             className,
           )}

@@ -42,6 +42,7 @@ import { isTypingTarget, nextPlaybackTime, seekStep } from '@shared/audio/playba
 import { parseTimecodeInput } from '@shared/audio/time'
 import type { AudioExportFormat, Mp3Bitrate } from '@shared/audio/audioExport'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Input } from '../components/Input'
@@ -571,7 +572,7 @@ export function MusicEditorPage() {
   const folderLabel = exportFolder ? exportFolder.split(/[/\\]/).filter(Boolean).slice(-2).join('/') : 'Escolher pasta'
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <audio ref={audioRef} />
       <PageHeader
         breadcrumb={environmentBreadcrumb('music', track.name, 'Editor de cortes')}
@@ -769,7 +770,7 @@ export function MusicEditorPage() {
         {track.cuts.map((cut, index) => (
           <Card key={cut.id} className={cut.id === selected?.id ? 'border-accent/40' : ''}>
             <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-[140px] flex-1">
+              <div className="min-w-0 flex-1">
                 <Input
                   label={`Corte ${index + 1}`}
                   value={cut.label}
@@ -856,6 +857,6 @@ export function MusicEditorPage() {
           if (preset) void applyPreset(preset)
         }}
       />
-    </div>
+    </PageShell>
   )
 }

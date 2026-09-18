@@ -43,8 +43,13 @@ export function ShortsResultCard({
   const vertical = aspectMode !== 'original'
 
   return (
-    <Card className="flex flex-col gap-4 lg:flex-row">
-      <div className={cn('mx-auto shrink-0', vertical ? 'w-[148px]' : 'w-full max-w-[260px] lg:w-[240px]')}>
+    <Card className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start">
+      <div
+        className={cn(
+          'mx-auto w-full shrink-0 xl:mx-0',
+          vertical ? 'max-w-[240px] xl:w-[200px]' : 'max-w-[420px] xl:w-[300px]',
+        )}
+      >
         <ShortsClipPreview
           clipId={clip.id}
           src={mediaUrl}
@@ -59,23 +64,22 @@ export function ShortsResultCard({
           onPlayingChange={onPlayingChange}
         />
       </div>
-      <div className="min-w-0 flex-1 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
+      <div className="min-w-0 flex-1 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-muted-2">Short #{clip.index}</p>
             <p className="mt-1 text-sm font-semibold tabular-nums text-text">
               {formatShortsTimecode(clip.start)} → {formatShortsTimecode(clip.end)}
               <span className="ml-2 font-normal text-muted">· {formatClipLength(clipDuration(clip))}</span>
             </p>
           </div>
-          <div className="rounded-xl bg-accent-dark px-3 py-2 text-center">
+          <div className="shrink-0 rounded-xl bg-accent-dark px-3 py-2 text-center">
             <p className="text-[10px] uppercase text-muted-2">Score</p>
             <p className="text-lg font-semibold text-accent">{clip.score}/100</p>
           </div>
         </div>
         <ShortsClipCopyEditor
           clip={clip}
-          compact
           disabled={busy}
           regenerating={regenerating}
           onPersist={onPersist}

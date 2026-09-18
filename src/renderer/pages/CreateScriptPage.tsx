@@ -11,6 +11,7 @@ import type {
 } from '@shared/types'
 import { GENERATION_STEPS } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Card } from '../components/Card'
 import { Select } from '../components/Select'
 import { Textarea } from '../components/Textarea'
@@ -197,8 +198,8 @@ export function CreateScriptPage({
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto px-8 pb-6 pt-6">
+    <div className="flex h-full min-h-0 flex-col">
+      <PageShell className="flex-1">
         <PageHeader
           breadcrumb={environmentBreadcrumb(
             'history',
@@ -411,9 +412,9 @@ export function CreateScriptPage({
             </Card>
           </aside>
         </div>
-      </div>
+      </PageShell>
 
-      <footer className="flex items-center justify-between border-t border-border-soft px-8 py-3 text-xs text-muted-2">
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border-soft px-4 py-3 text-xs text-muted-2 sm:px-6 lg:px-8">
         <span>Atlas Studio v1.0.0 | Criadores constroem o amanhã.</span>
         <span className="inline-flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />

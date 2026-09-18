@@ -70,7 +70,7 @@ export function ShortsAdjustModal({
     >
       {clip ? (
         <div className="space-y-5">
-          <div className="grid gap-5 lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
+          <div className="grid gap-5 xl:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
             <div className={vertical ? 'mx-auto w-full max-w-[240px]' : 'w-full'}>
               <ShortsClipPreview
                 clipId={clip.id}

@@ -7,6 +7,7 @@ import {
   todayDateKey,
 } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { HomeScheduledVideoCard } from '../components/home/HomeScheduledVideoCard'
 import { getAtlasApi } from '../lib/api'
 import { onVideosChanged } from '../lib/videoEvents'
@@ -62,7 +63,7 @@ export function ChannelAgendaPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-8 py-6">
+    <PageShell>
       <PageHeader
         breadcrumb="Atlas / Canais / Agenda"
         title="Vídeos agendados"
@@ -109,6 +110,6 @@ export function ChannelAgendaPage() {
           ))}
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

@@ -212,8 +212,11 @@ export function buildShortsAnalysisPrompt(input: {
     `requestedClipDuration: ${bounds.target.toFixed(1)}`,
     `durationMode: ${input.durationMode}`,
     `O usuário pediu até ${input.clipCount} Shorts. RANKEIE os candidatos locais. Não invente timestamps novos.`,
-    'Devolva selected[] com candidateId dos melhores momentos DISTINTOS.',
-    `Pode devolver menos que ${input.clipCount} se não houver trechos realmente diferentes com qualidade.`,
+    `Escolha até ${input.clipCount} candidatos fortes e temporalmente distintos.`,
+    `Tente chegar a ${input.clipCount}. Só devolva menos se realmente não houver outro trecho distinto.`,
+    'Não escolha só os melhores no mesmo clímax. Se um candidato conflitar, prefira o próximo melhor em outra região.',
+    'Uma pequena sobreposição é aceitável em vídeo curto (ex.: 00–30 e 26–56). Não devolva o mesmo trecho deslocado 2s.',
+    `Pode devolver até ${input.clipCount + 6} IDs para o seletor local. A diversidade final é validada no Atlas.`,
     'NUNCA devolva o mesmo start/end (nem o mesmo candidateId) para Shorts diferentes.',
     `Ajuste fino opcional de start/end: no máximo ${SHORTS_AI_ADJUST_SECONDS}s em relação ao candidato. Não transforme todos no final do vídeo.`,
     'Qualidade editorial continua prioritária, mas distribua os Shorts por regiões diferentes do vídeo quando houver alternativas boas.',
@@ -352,7 +355,7 @@ export function normalizeShortsAnalysis(
     const bounded = applyDurationBounds(resolved, input)
     if (!bounded) continue
     clips.push(bounded)
-    if (clips.length >= input.clipCount + 2) break
+    if (clips.length >= input.clipCount + 8) break
   }
 
   if (clips.length === 0 && candidates.length > 0) {
@@ -370,13 +373,13 @@ export function normalizeShortsAnalysis(
       )
       if (!bounded) continue
       clips.push(bounded)
-      if (clips.length >= input.clipCount) break
+      if (clips.length >= input.clipCount + 8) break
     }
   }
 
   clips.sort((a, b) => b.score - a.score || a.start - b.start)
   return {
-    clips: clips.slice(0, input.clipCount),
+    clips: clips.slice(0, Math.max(input.clipCount + 8, input.clipCount * 3)),
     notes: asText(raw.notes),
   }
 }

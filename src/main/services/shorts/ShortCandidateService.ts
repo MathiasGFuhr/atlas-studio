@@ -8,7 +8,7 @@ import type { AudioFeatureAnalysis } from '../../../shared/shorts/audioFeatures'
 import { summarizeAudioEvents } from '../../../shared/shorts/audioFeatures'
 import { fallbackScoreFromSignals, normalizeScoreDimensions, scoreFromDimensions } from '../../../shared/shorts/clipScoring'
 import { formatUnderstandingForPrompt, normalizeProposedCandidates, type VideoUnderstanding } from '../../../shared/shorts/videoUnderstanding'
-import { toRankedWindows, type ShortsRankedWindow } from '../../../shared/shortsDiversity'
+import { shortsCandidatePoolSize, toRankedWindows, type ShortsRankedWindow } from '../../../shared/shortsDiversity'
 import { durationBounds } from '../../../shared/shortsDuration'
 import { buildLocalShortsCandidates } from '../../../shared/shortsMoments'
 import { finalizeShortsSelection } from '../../../shared/shortsSelection'
@@ -53,7 +53,7 @@ export class ShortCandidateService {
     addDirs?: string[]
   }): Promise<{ ranked: ShortsRankedWindow[]; notes: string | null }> {
     const localHints = input.localCandidates
-      .slice(0, 18)
+      .slice(0, shortsCandidatePoolSize(input.clipCount))
       .map((item) => `${item.id}: ${item.start.toFixed(1)}–${item.end.toFixed(1)}s ${item.reason}`)
       .join('\n')
     try {
@@ -88,7 +88,7 @@ export class ShortCandidateService {
       })
       const proposed = normalizeProposedCandidates(raw, {
         duration: input.duration,
-        maxCount: input.clipCount + 4,
+        maxCount: shortsCandidatePoolSize(input.clipCount),
       })
       const ranked = proposed.map((item, index) => {
         const dims = normalizeScoreDimensions(item.dimensions)

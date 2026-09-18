@@ -42,6 +42,7 @@ import {
   shortsProjectDeleteMessage,
 } from '@shared/shortsProject'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Input } from '../components/Input'
@@ -63,12 +64,12 @@ function FieldSelect({
   children: ReactNode
 }) {
   return (
-    <label className="flex w-full flex-col gap-2">
+    <label className="flex w-full min-w-0 flex-col gap-2">
       <span className="text-sm font-medium text-muted">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-xl border border-border bg-card-2 px-3.5 text-sm text-text transition-colors hover:border-[#334049] focus:border-accent/60 focus:outline-none"
+        className="h-11 w-full min-w-0 rounded-xl border border-border bg-card-2 px-3.5 text-sm text-text transition-colors hover:border-[#334049] focus:border-accent/60 focus:outline-none"
       >
         {children}
       </select>
@@ -428,7 +429,7 @@ export function ShortsStudioPage() {
 
   if (missing) {
     return (
-      <div className="h-full overflow-y-auto px-8 py-6">
+      <PageShell>
         <button
           type="button"
           onClick={() => navigate(listPath)}
@@ -441,12 +442,12 @@ export function ShortsStudioPage() {
           <Clapperboard className="mb-3 h-10 w-10 text-muted" />
           <p className="text-sm text-muted">Projeto de Shorts não encontrado.</p>
         </Card>
-      </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="h-full min-w-0 overflow-y-auto px-8 py-6">
+    <PageShell>
       <button
         type="button"
         onClick={() => navigate(listPath)}
@@ -459,15 +460,15 @@ export function ShortsStudioPage() {
       <div className="mb-2 flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <PageHeader
-          breadcrumb={project ? `Atlas / Shorts Studio / ${project.name}` : 'Atlas / Shorts Studio'}
-          title={job?.name || 'Shorts Studio'}
-          subtitle="Importe um vídeo completo, deixe o Atlas sugerir os melhores trechos e exporte Shorts 9:16 com corte, crop e legenda. Sem editor complexo."
-          hint={
-            project
-              ? `Vinculado ao projeto ${project.name} (${project.projectType === 'music' ? 'Música' : 'História'}).`
-              : undefined
-          }
-        />
+            breadcrumb={project ? `Atlas / Shorts Studio / ${project.name}` : 'Atlas / Shorts Studio'}
+            title={job?.name || 'Shorts Studio'}
+            subtitle="Importe um vídeo completo, deixe o Atlas sugerir os melhores trechos e exporte Shorts 9:16 com corte, crop e legenda. Sem editor complexo."
+            hint={
+              project
+                ? `Vinculado ao projeto ${project.name} (${project.projectType === 'music' ? 'Música' : 'História'}).`
+                : undefined
+            }
+          />
         </div>
         <div className="mt-7 flex flex-wrap gap-2">
           <Button
@@ -494,7 +495,7 @@ export function ShortsStudioPage() {
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0 space-y-5">
           <Card className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
@@ -709,7 +710,7 @@ export function ShortsStudioPage() {
           </Card>
 
           {probe ? (
-            <Card className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
+            <Card className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 xl:grid-cols-5">
               <Meta label="Nome" value={probe.name} />
               <Meta label="Duração" value={formatShortsTimecode(probe.duration)} />
               <Meta label="Resolução" value={`${probe.width}×${probe.height}`} />
@@ -727,11 +728,13 @@ export function ShortsStudioPage() {
             </p>
           ) : null}
           {job?.analysisNotes ? (
-            <p className="text-xs leading-relaxed text-muted-2 whitespace-pre-line">{job.analysisNotes}</p>
+            <Card padding="sm">
+              <p className="text-sm leading-relaxed text-pretty break-words text-muted">{job.analysisNotes}</p>
+            </Card>
           ) : null}
 
           {job?.clips.length ? (
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="grid gap-5">
               {job.clips.map((clip) => (
                 <ShortsResultCard
                   key={clip.id}
@@ -907,15 +910,17 @@ export function ShortsStudioPage() {
             : ' Continue com frames + áudio + transcrição.'}
         </p>
       </Modal>
-    </div>
+    </PageShell>
   )
 }
 
 function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-[11px] uppercase tracking-wide text-muted-2">{label}</p>
-      <p className="mt-1 truncate text-text">{value}</p>
+      <p className="mt-1 break-words text-text" title={value}>
+        {value}
+      </p>
     </div>
   )
 }

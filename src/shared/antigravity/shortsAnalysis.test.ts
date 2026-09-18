@@ -47,6 +47,7 @@ describe('shortsAnalysis', () => {
     expect(music).toContain('integridade musical')
     expect(music).toContain('c1: 40.0–70.0s')
     expect(music).toContain('candidateId')
+    expect(music).toContain('candidatos fortes e temporalmente distintos')
     expect(music).not.toContain('virada narrativa')
 
     expect(history).toContain('Perfil editorial: HISTÓRIA')

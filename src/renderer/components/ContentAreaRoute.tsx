@@ -50,8 +50,8 @@ export function ContentAreaRoute({
 function HiddenAreaBanner({ area, onEnable }: { area: ContentArea; onEnable: () => void }) {
   const label = PROJECT_TYPE_LABEL[area]
   return (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-soft bg-card-2 px-8 py-3">
-      <p className="text-sm text-muted">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border-soft bg-card-2 px-4 py-3 sm:px-6">
+      <p className="min-w-0 text-sm leading-relaxed text-pretty text-muted">
         {label} está oculta nas suas preferências. Os dados continuam disponíveis.
       </p>
       <Button className="h-9 shrink-0 px-3 text-xs" onClick={onEnable}>
@@ -79,7 +79,7 @@ function HiddenAreaScreen({
       ? `Nada foi apagado. Você pode mostrar ${PROJECT_TYPE_LABEL[area]} de novo a qualquer momento.`
       : description
   return (
-    <div className="flex h-full items-center justify-center px-8 py-6">
+    <div className="flex h-full items-center justify-center px-4 py-6 sm:px-8">
       <Card className="max-w-lg text-center" padding="lg">
         <env.icon className="mx-auto h-8 w-8 text-muted-2" />
         <h1 className="mt-4 text-lg font-semibold text-text">{heading}</h1>

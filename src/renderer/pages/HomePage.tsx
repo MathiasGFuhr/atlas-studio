@@ -202,14 +202,14 @@ export function HomePage() {
         aria-hidden
       />
 
-      <div className="relative mx-auto w-full max-w-[1280px] px-8 py-8">
-        <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
+      <div className="relative mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-2">Início</p>
-            <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-text">{homeGreeting(accountName)}</h1>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-text sm:text-[32px]">{homeGreeting(accountName)}</h1>
             <p className="mt-1.5 text-sm text-muted">{homeDateLabel()}</p>
           </div>
-          <p className="max-w-sm text-right text-sm leading-relaxed text-muted-2">
+          <p className="max-w-sm text-sm leading-relaxed text-pretty text-muted-2 sm:text-right">
             Produção, agenda e pendências em um só lugar.
           </p>
         </header>
