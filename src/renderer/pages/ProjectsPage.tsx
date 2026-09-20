@@ -40,7 +40,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [channels, setChannels] = useState<Channel[]>([])
   const [query, setQuery] = useState('')
-  const [tab, setTab] = useState<ProjectListTab>(projectType === 'music' ? 'music' : 'active')
+  const [tab, setTab] = useState<ProjectListTab>(projectType === 'music' ? 'videos' : 'active')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Project | null>(null)
   const [deleting, setDeleting] = useState<Project | null>(null)
@@ -98,7 +98,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
           : activeProjects
 
   useEffect(() => {
-    setTab(projectType === 'music' ? 'music' : 'active')
+    setTab(projectType === 'music' ? 'videos' : 'active')
   }, [projectType])
 
   function openCreate() {
@@ -231,30 +231,11 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
 
       <div
         role="tablist"
-        aria-label={projectType === 'music' ? 'Música e vídeos' : 'Lista de projetos'}
+        aria-label={projectType === 'music' ? 'Vídeos e música' : 'Lista de projetos'}
         className="mb-5 inline-flex rounded-xl border border-border bg-card-2 p-1"
       >
         {projectType === 'music' ? (
           <>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'music'}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-                tab === 'music' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
-              )}
-              style={tab === 'music' ? { backgroundColor: `${env.color}1f`, color: env.color } : undefined}
-              onClick={() => setTab('music')}
-            >
-              <Music2 className="h-3.5 w-3.5" />
-              Música
-              {musicProjects.length > 0 ? (
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
-                  {musicProjects.length}
-                </span>
-              ) : null}
-            </button>
             <button
               type="button"
               role="tab"
@@ -263,6 +244,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
                 tab === 'videos' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
               )}
+              style={tab === 'videos' ? { backgroundColor: `${env.color}1f`, color: env.color } : undefined}
               onClick={() => setTab('videos')}
             >
               <Clapperboard className="h-3.5 w-3.5" />
@@ -270,6 +252,24 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
               {videoProjects.length > 0 ? (
                 <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
                   {videoProjects.length}
+                </span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'music'}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+                tab === 'music' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+              )}
+              onClick={() => setTab('music')}
+            >
+              <Music2 className="h-3.5 w-3.5" />
+              Música
+              {musicProjects.length > 0 ? (
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                  {musicProjects.length}
                 </span>
               ) : null}
             </button>
