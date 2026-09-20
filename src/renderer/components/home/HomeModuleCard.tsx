@@ -60,7 +60,12 @@ export function HomeModuleCard({
         <ArrowUpRight className="mt-1 h-4 w-4 shrink-0 text-muted-2 opacity-0 transition-opacity group-hover:opacity-100" />
       </div>
 
-      <dl className="grid grid-cols-3 gap-6 border-y border-border-soft/80 py-4">
+      <dl
+        className={cn(
+          'grid gap-6 border-y border-border-soft/80 py-4',
+          stats.length === 2 ? 'grid-cols-2' : 'grid-cols-3',
+        )}
+      >
         {stats.map((stat) => (
           <div key={stat.label}>
             <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-2">

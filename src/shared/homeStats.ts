@@ -7,7 +7,6 @@ export interface HomeModuleStats {
   draftCount: number
   reviewCount: number
   trackCount: number
-  cutCount: number
   scripts: ScriptRecord[]
   tracks: MusicTrack[]
 }
@@ -42,7 +41,6 @@ export function buildHomeModuleStats(input: {
     draftCount: scripts.filter((script) => script.status === 'rascunho').length,
     reviewCount: scripts.filter((script) => script.status === 'em_revisao').length,
     trackCount: tracks.length,
-    cutCount: tracks.reduce((total, track) => total + track.cuts.length, 0),
     scripts,
     tracks,
   }

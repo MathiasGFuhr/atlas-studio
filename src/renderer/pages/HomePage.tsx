@@ -276,7 +276,6 @@ export function HomePage() {
                 : [
                     { label: 'Projetos', value: moduleStats.musicCount },
                     { label: 'Faixas', value: moduleStats.trackCount },
-                    { label: 'Cortes', value: moduleStats.cutCount },
                   ]
 
             return (

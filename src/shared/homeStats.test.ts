@@ -68,7 +68,6 @@ describe('métricas da Home', () => {
       draftCount: 0,
       reviewCount: 0,
       trackCount: 0,
-      cutCount: 0,
     })
     expect(stats.scripts).toEqual([])
     expect(stats.tracks).toEqual([])
@@ -102,7 +101,6 @@ describe('métricas da Home', () => {
       draftCount: 1,
       reviewCount: 1,
       trackCount: 1,
-      cutCount: 1,
     })
     expect(stats.scripts.map((item) => item.id)).toEqual(['s1', 's2'])
     expect(stats.tracks.map((item) => item.id)).toEqual(['t1'])
