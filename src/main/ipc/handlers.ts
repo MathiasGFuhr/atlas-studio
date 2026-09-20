@@ -43,6 +43,7 @@ import { exportScriptFile } from '../services/storage/scriptFiles'
 import {
   clearProfilePhotoFiles,
   importProfilePhoto,
+  readImageDataUrl,
 } from '../services/storage/profilePhoto'
 import { importChannelImage } from '../services/storage/channelMedia'
 import { channelRepository } from '../repositories/channelRepository'
@@ -965,6 +966,7 @@ export function registerIpcHandlers(deps: {
     if (result.canceled || !result.filePaths[0]) return null
     return result.filePaths[0]
   })
+  ipcMain.handle(IPC.dialog.readImageDataUrl, (_e, filePath: string) => readImageDataUrl(filePath))
 
   ipcMain.handle(IPC.dialog.selectFiles, async () => {
     const win = getMainWindow()

@@ -5,6 +5,7 @@ import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
 import { isContentAreaEnabled, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { AtlasAiStatusCard } from './AtlasAiStatusCard'
+import { SidebarChannelSwitcher } from './SidebarChannelSwitcher'
 import { SidebarUpdateCard } from './SidebarUpdateCard'
 import { ENVIRONMENTS } from '../lib/environments'
 import { cn } from '../lib/utils'
@@ -134,11 +135,11 @@ export function AppSidebar({
         aria-label={collapseLabel}
         aria-expanded={!collapsed}
         onClick={toggleCollapsed}
-        className="absolute right-0 top-[4.75rem] z-20 flex h-6 w-6 translate-x-1/2 items-center justify-center rounded-full border border-border-soft bg-sidebar text-muted shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition-colors hover:bg-card-2 hover:text-text"
+        className="absolute right-0 top-[1.65rem] z-20 flex h-6 w-6 translate-x-1/2 items-center justify-center rounded-full border border-border-soft bg-sidebar text-muted shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition-colors hover:bg-card-2 hover:text-text"
       >
         {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
       </button>
-      <div className={cn('flex items-center pb-6 pt-5', collapsed ? 'justify-center px-2' : 'gap-3 px-5')}>
+      <div className={cn('flex items-center pb-3 pt-5', collapsed ? 'justify-center px-2' : 'gap-3 px-5')}>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-dark text-accent">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path
@@ -157,7 +158,14 @@ export function AppSidebar({
         )}
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3">
+      <SidebarChannelSwitcher compact={collapsed} />
+
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pt-3">
+        {collapsed ? null : (
+          <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-2">
+            Principal
+          </p>
+        )}
         {items.map((item) => (
           <NavLink
             key={item.to}

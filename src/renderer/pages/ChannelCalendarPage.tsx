@@ -100,6 +100,7 @@ export function ChannelCalendarPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<ChannelVideo | null>(null)
   const [pendingThumb, setPendingThumb] = useState<string | null>(null)
+  const [pendingThumbPreview, setPendingThumbPreview] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<ChannelVideo | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [analysis, setAnalysis] = useState<TitleStrengthAnalysis | null>(null)
@@ -197,6 +198,7 @@ export function ChannelCalendarPage() {
   function openCreate(dateKey?: string) {
     setEditing(null)
     setPendingThumb(null)
+    setPendingThumbPreview(null)
     setAnalysis(null)
     setAnalyzedTitle(null)
     setAnalysisError(null)
@@ -217,6 +219,7 @@ export function ChannelCalendarPage() {
   function openEdit(video: ChannelVideo) {
     setEditing(video)
     setPendingThumb(null)
+    setPendingThumbPreview(null)
     setAnalysis(video.titleAnalysis ?? null)
     setAnalyzedTitle(video.titleAnalysis ? video.title : null)
     setAnalysisError(null)
@@ -305,6 +308,8 @@ export function ChannelCalendarPage() {
   async function pickThumb() {
     const file = await api.dialog.selectImage()
     if (!file) return
+    const preview = await api.dialog.readImageDataUrl(file)
+    setPendingThumbPreview(preview)
     if (editing) {
       try {
         const updated = await api.videos.setThumbnail(editing.id, file)
@@ -501,6 +506,8 @@ export function ChannelCalendarPage() {
       </PageShell>
     )
   }
+
+  const thumbPreviewSrc = pendingThumbPreview || editing?.thumbnailDataUrl
 
   return (
     <PageShell>
@@ -901,8 +908,12 @@ export function ChannelCalendarPage() {
             <p className="mb-2 text-sm font-medium text-muted">Thumbnail</p>
             <div className="flex items-start gap-3">
               <div className="h-[90px] w-[160px] overflow-hidden rounded-xl border border-border bg-card-2">
-                {editing?.thumbnailDataUrl ? (
-                  <img src={editing.thumbnailDataUrl} alt="" className="h-full w-full object-cover" />
+                {thumbPreviewSrc ? (
+                  <img
+                    src={thumbPreviewSrc}
+                    alt="Preview da thumbnail"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-muted-2">
                     <ImagePlus className="h-5 w-5" />
@@ -910,7 +921,7 @@ export function ChannelCalendarPage() {
                 )}
               </div>
               <Button variant="secondary" className="h-9 px-3 text-xs" onClick={() => void pickThumb()}>
-                {pendingThumb ? 'Imagem selecionada' : 'Escolher thumb'}
+                {pendingThumb || pendingThumbPreview ? 'Imagem selecionada' : 'Escolher thumb'}
               </Button>
             </div>
           </div>

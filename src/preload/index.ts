@@ -449,6 +449,8 @@ const api = {
   dialog: {
     selectFolder: () => ipcRenderer.invoke(IPC.dialog.selectFolder) as Promise<string | null>,
     selectImage: () => ipcRenderer.invoke(IPC.dialog.selectImage) as Promise<string | null>,
+    readImageDataUrl: (filePath: string) =>
+      ipcRenderer.invoke(IPC.dialog.readImageDataUrl, filePath) as Promise<string | null>,
     selectFiles: () => ipcRenderer.invoke(IPC.dialog.selectFiles) as Promise<string[]>,
     selectExecutable: () =>
       ipcRenderer.invoke(IPC.dialog.selectExecutable) as Promise<string | null>,

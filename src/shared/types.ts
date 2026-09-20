@@ -864,6 +864,7 @@ export const IPC = {
   dialog: {
     selectFolder: 'dialog:selectFolder',
     selectImage: 'dialog:selectImage',
+    readImageDataUrl: 'dialog:readImageDataUrl',
     selectFiles: 'dialog:selectFiles',
     selectExecutable: 'dialog:selectExecutable',
   },

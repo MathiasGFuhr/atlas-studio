@@ -897,6 +897,7 @@ export const mockApi = {
   dialog: {
     selectFolder: async () => null,
     selectImage: async () => null,
+    readImageDataUrl: async () => null,
     selectFiles: async () => [],
     selectExecutable: async () => null,
   },
@@ -910,7 +911,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.19.0',
+      currentVersion: '1.20.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,
