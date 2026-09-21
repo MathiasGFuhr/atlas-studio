@@ -640,7 +640,12 @@ export function createAtlasActionRegistry(deps: {
     return ok({
       name: 'list_quick_prompts',
       title: `${items.length} prompts salvos`,
-      data: items.map((item) => ({ id: item.id, name: item.name, category: item.category })),
+      data: items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        tabId: item.tabId,
+      })),
     })
   })
 

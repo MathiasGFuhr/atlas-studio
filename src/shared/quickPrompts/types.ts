@@ -161,8 +161,22 @@ export interface CustomPrompt {
   name: string
   category: string
   text: string
+  /** Sub-aba em Meus prompts. `null` = sem aba (aparece só em Todos). */
+  tabId: string | null
   /** `null` = disponível em todos os projetos de Música. */
   projectId: string | null
   createdAt: string
   updatedAt: string
 }
+
+/** Sub-aba criada pelo usuário em Meus prompts (lipsync, câmeras, etc.). */
+export interface CustomPromptTab {
+  id: string
+  name: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** Id sintético da vista que lista todos os prompts, independente de aba. */
+export const ALL_PROMPT_TABS_ID = 'all'

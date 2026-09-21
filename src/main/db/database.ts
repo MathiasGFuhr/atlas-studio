@@ -244,7 +244,16 @@ export async function initDatabase(workspaceRoot: string): Promise<AppDatabase> 
       name TEXT NOT NULL,
       category TEXT NOT NULL DEFAULT 'custom',
       text TEXT NOT NULL,
+      tab_id TEXT,
       project_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS quick_prompt_tabs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -256,6 +265,8 @@ export async function initDatabase(workspaceRoot: string): Promise<AppDatabase> 
 
     CREATE INDEX IF NOT EXISTS idx_quick_prompts_project ON quick_prompts(project_id);
     CREATE INDEX IF NOT EXISTS idx_quick_prompts_updated ON quick_prompts(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_quick_prompts_tab ON quick_prompts(tab_id);
+    CREATE INDEX IF NOT EXISTS idx_quick_prompt_tabs_sort ON quick_prompt_tabs(sort_order, name);
 
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,

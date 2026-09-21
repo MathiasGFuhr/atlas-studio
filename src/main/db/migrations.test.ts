@@ -334,6 +334,7 @@ describe('migração para projetos de História e Música', () => {
       expect.objectContaining({ version: 10 }),
       expect.objectContaining({ version: 11 }),
       expect.objectContaining({ version: 12 }),
+      expect.objectContaining({ version: 13 }),
     ])
   })
 
@@ -669,5 +670,98 @@ describe('migração para projetos de História e Música', () => {
     const clips = JSON.parse(keeper.clips_json) as Array<{ exportedPath: string | null }>
     expect(clips.some((clip) => clip.exportedPath === exportPath)).toBe(true)
     expect(backfillShortsProjectDedup(db).shortsDuplicatesRemoved).toBe(0)
+  })
+})
+
+describe('migração de sub-abas de Meus prompts', () => {
+  it('vira categorias existentes em abas e deixa custom sem aba', async () => {
+    const SQL = await initSqlJs({
+      locateFile: () => require.resolve('sql.js/dist/sql-wasm.wasm'),
+    })
+    const raw = new SQL.Database()
+    const db: AppDatabase = {
+      exec(sql: string) {
+        raw.run(sql)
+      },
+      prepare(sql: string) {
+        return {
+          run(...params: unknown[]) {
+            raw.run(sql, params as never[])
+          },
+          get(...params: unknown[]) {
+            const stmt = raw.prepare(sql)
+            stmt.bind(params as never[])
+            const row = stmt.step() ? (stmt.getAsObject() as Record<string, unknown>) : undefined
+            stmt.free()
+            return row
+          },
+          all(...params: unknown[]) {
+            const stmt = raw.prepare(sql)
+            stmt.bind(params as never[])
+            const rows: Record<string, unknown>[] = []
+            while (stmt.step()) rows.push(stmt.getAsObject() as Record<string, unknown>)
+            stmt.free()
+            return rows
+          },
+        }
+      },
+      persist() {},
+    }
+
+    db.exec(`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      );
+      CREATE TABLE quick_prompts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'custom',
+        text TEXT NOT NULL,
+        project_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    db.prepare(
+      'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
+    ).run(12, 'shorts-vertical-framing', '2026-01-01T00:00:00.000Z')
+
+    const at = '2026-01-01T00:00:00.000Z'
+    db.prepare(
+      `INSERT INTO quick_prompts (id, name, category, text, created_at, updated_at)
+       VALUES (?, ?, ?, 'texto', ?, ?)`,
+    ).run('p1', 'Geral', 'custom', at, at)
+    db.prepare(
+      `INSERT INTO quick_prompts (id, name, category, text, created_at, updated_at)
+       VALUES (?, ?, ?, 'texto', ?, ?)`,
+    ).run('p2', 'Solo', 'Lip sync', at, at)
+    db.prepare(
+      `INSERT INTO quick_prompts (id, name, category, text, created_at, updated_at)
+       VALUES (?, ?, ?, 'texto', ?, ?)`,
+    ).run('p3', 'Banda', 'lip sync', at, at)
+    db.prepare(
+      `INSERT INTO quick_prompts (id, name, category, text, created_at, updated_at)
+       VALUES (?, ?, ?, 'texto', ?, ?)`,
+    ).run('p4', 'Close', 'Ângulos de câmera', at, at)
+
+    const result = migrateSchema(db)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+
+    const tabs = db
+      .prepare('SELECT name FROM quick_prompt_tabs ORDER BY sort_order, name')
+      .all() as Array<{ name: string }>
+    expect(tabs.map((tab) => tab.name).sort()).toEqual(['Lip sync', 'Ângulos de câmera'].sort())
+
+    const assigned = db
+      .prepare('SELECT id, tab_id FROM quick_prompts ORDER BY id')
+      .all() as Array<{ id: string; tab_id: string | null }>
+    const byId = Object.fromEntries(assigned.map((row) => [row.id, row.tab_id]))
+    expect(byId.p1).toBeFalsy()
+    expect(byId.p2).toBeTruthy()
+    expect(byId.p3).toBe(byId.p2)
+    expect(byId.p4).toBeTruthy()
+    expect(byId.p4).not.toBe(byId.p2)
   })
 })

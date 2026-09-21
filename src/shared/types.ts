@@ -746,6 +746,10 @@ export const IPC = {
     remove: 'quickPrompts:remove',
     listFavorites: 'quickPrompts:listFavorites',
     setFavorite: 'quickPrompts:setFavorite',
+    listTabs: 'quickPrompts:listTabs',
+    createTab: 'quickPrompts:createTab',
+    updateTab: 'quickPrompts:updateTab',
+    removeTab: 'quickPrompts:removeTab',
   },
   prompts: {
     list: 'prompts:list',

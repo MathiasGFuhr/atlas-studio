@@ -113,9 +113,9 @@ describe('rotas', () => {
     expect(contentAreaFromPath('/historia')).toBe('history')
   })
 
-  it('abre a aba de prompts do usuário', () => {
-    expect(MUSIC_PROMPTS_CUSTOM_PATH).toBe('/musica/prompts?tab=custom')
-    expect(contentAreaFromPath(MUSIC_PROMPTS_CUSTOM_PATH.split('?')[0])).toBe('music')
+  it('abre Meus prompts no ambiente de Música', () => {
+    expect(MUSIC_PROMPTS_CUSTOM_PATH).toBe('/musica/prompts')
+    expect(contentAreaFromPath(MUSIC_PROMPTS_CUSTOM_PATH)).toBe('music')
   })
 })
 

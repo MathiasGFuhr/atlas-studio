@@ -19,7 +19,7 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 12
+export const CURRENT_SCHEMA_VERSION = 13
 
 type SchemaStepResult = {
   historyCreated: number
@@ -114,6 +114,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'shorts-vertical-framing',
     backup: false,
     up: applyShortsVerticalFraming,
+  },
+  {
+    version: 13,
+    name: 'quick-prompt-tabs',
+    backup: false,
+    up: applyQuickPromptTabs,
   },
 ]
 
@@ -223,6 +229,70 @@ function applyShortsVerticalFraming(database: AppDatabase): SchemaStepResult {
   ensureColumn(database, 'shorts_jobs', 'framing_track_json', "TEXT NOT NULL DEFAULT '[]'")
   ensureColumn(database, 'shorts_jobs', 'framing_settings_json', "TEXT NOT NULL DEFAULT '{}'")
   return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyQuickPromptTabs(database: AppDatabase): SchemaStepResult {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS quick_prompt_tabs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_quick_prompt_tabs_sort ON quick_prompt_tabs(sort_order, name)',
+  )
+
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'quick_prompts')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+
+  ensureColumn(database, 'quick_prompts', 'tab_id', 'TEXT')
+  database.exec('CREATE INDEX IF NOT EXISTS idx_quick_prompts_tab ON quick_prompts(tab_id)')
+  backfillQuickPromptTabs(database)
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+/** Categorias já usadas viram sub-abas; 'custom' continua sem aba. */
+function backfillQuickPromptTabs(database: AppDatabase) {
+  const rows = database
+    .prepare(
+      `SELECT id, category, tab_id FROM quick_prompts
+       WHERE tab_id IS NULL OR TRIM(tab_id) = ''`,
+    )
+    .all() as Array<{ id: string; category: string; tab_id: string | null }>
+
+  const insertTab = database.prepare(
+    `INSERT INTO quick_prompt_tabs (id, name, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+  const assign = database.prepare('UPDATE quick_prompts SET tab_id = ? WHERE id = ?')
+  const existing = database.prepare('SELECT id, name FROM quick_prompt_tabs').all() as Array<{
+    id: string
+    name: string
+  }>
+  const byName = new Map(existing.map((tab) => [tab.name.trim().toLowerCase(), tab.id]))
+  let sortOrder = existing.length
+  const now = new Date().toISOString()
+
+  for (const row of rows) {
+    const name = String(row.category ?? '').trim()
+    if (!name || name.toLowerCase() === 'custom') continue
+    const key = name.toLowerCase()
+    let tabId = byName.get(key)
+    if (!tabId) {
+      tabId = randomUUID()
+      insertTab.run(tabId, name, sortOrder, now, now)
+      byName.set(key, tabId)
+      sortOrder += 1
+    }
+    assign.run(tabId, row.id)
+  }
 }
 
 function applyChannelVideoPipelineStatus(database: AppDatabase): {

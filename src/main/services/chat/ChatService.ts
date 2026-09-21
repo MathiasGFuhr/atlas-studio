@@ -102,7 +102,7 @@ function buildSystemPrompt(ctx: ChatClientContext, today: string): string {
     'Canais não têm campo de idioma: se o usuário informar idioma, passe em language na create_channel.',
     'Responda em JSON com: message (texto para o usuário), actions (array de {name, input}), conversationTitle opcional.',
     'Se for só conversa (ideias, títulos, rascunhos), actions deve ser [].',
-    'Se o usuário pedir para salvar, guardar, criar ou cadastrar um prompt, use save_quick_prompt com name e o texto completo. O item aparece em Prompts → Meus prompts. Não deixe o prompt só no chat.',
+    'Se o usuário pedir para salvar, guardar, criar ou cadastrar um prompt, use save_quick_prompt com name e o texto completo. O item aparece em Prompts → Meus prompts. Se ele pedir uma aba (lipsync, câmeras, etc.), passe category com o nome da aba. Não deixe o prompt só no chat.',
     'Não misture agentes: você é um único agente nesta resposta.',
     chatAreasPromptNote(capabilities),
     '',

@@ -35,7 +35,7 @@ import { adviseCutsLocally, type MusicAdviseRequest } from '../src/shared/audio/
 import type { ShortsAnalyzeInput, ShortsJob, ShortsProgressEvent } from '../src/shared/shorts'
 import { TEXT_ONLY_CAPABILITIES } from '../src/shared/agents/capabilities'
 import type { ShortsImportResult } from '../src/shared/shortsProjectIdentity'
-import type { CustomPrompt } from '../src/shared/quickPrompts/types'
+import type { CustomPrompt, CustomPromptTab } from '../src/shared/quickPrompts/types'
 import type {
   ChatAgentStatusSnapshot,
   ChatAttachment,
@@ -65,6 +65,7 @@ const channels: Channel[] = []
 const videos: ChannelVideo[] = []
 const prompts: ChannelPrompt[] = []
 const quickPrompts: CustomPrompt[] = []
+const quickPromptTabs: CustomPromptTab[] = []
 const quickPromptFavorites = new Set<string>()
 const scripts: ScriptRecord[] = []
 const musicTracks: MusicTrack[] = []
@@ -622,13 +623,33 @@ export const mockApi = {
       name: string
       category?: string
       text: string
+      tabId?: string | null
       projectId?: string | null
     }) => {
+      const tab = input.tabId
+        ? quickPromptTabs.find((item) => item.id === input.tabId)
+        : input.category?.trim() && input.category.trim().toLowerCase() !== 'custom'
+          ? quickPromptTabs.find(
+              (item) => item.name.toLowerCase() === input.category!.trim().toLowerCase(),
+            ) ??
+            (() => {
+              const created: CustomPromptTab = {
+                id: crypto.randomUUID(),
+                name: input.category!.trim(),
+                sortOrder: quickPromptTabs.length,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }
+              quickPromptTabs.push(created)
+              return created
+            })()
+          : null
       const prompt: CustomPrompt = {
         id: crypto.randomUUID(),
         name: input.name.trim(),
-        category: input.category?.trim() || 'custom',
+        category: tab?.name ?? (input.category?.trim() || 'custom'),
         text: input.text.trim(),
+        tabId: tab?.id ?? null,
         projectId: input.projectId ?? null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -639,9 +660,15 @@ export const mockApi = {
     update: async (id: string, patch: Partial<CustomPrompt>) => {
       const idx = quickPrompts.findIndex((p) => p.id === id)
       if (idx < 0) return null
+      const tab =
+        patch.tabId !== undefined
+          ? quickPromptTabs.find((item) => item.id === patch.tabId) ?? null
+          : undefined
       quickPrompts[idx] = {
         ...quickPrompts[idx],
         ...patch,
+        tabId: tab === undefined ? quickPrompts[idx].tabId : tab?.id ?? null,
+        category: tab?.name ?? patch.category ?? quickPrompts[idx].category,
         updatedAt: new Date().toISOString(),
       }
       return quickPrompts[idx]
@@ -658,6 +685,51 @@ export const mockApi = {
       if (favorite) quickPromptFavorites.add(itemId)
       else quickPromptFavorites.delete(itemId)
       return [...quickPromptFavorites]
+    },
+    listTabs: async () => [...quickPromptTabs],
+    createTab: async (input: { name: string }) => {
+      const name = input.name.trim()
+      if (!name) throw new Error('O nome da aba é obrigatório.')
+      if (quickPromptTabs.some((tab) => tab.name.toLowerCase() === name.toLowerCase())) {
+        throw new Error(`Já existe uma aba chamada "${name}".`)
+      }
+      const tab: CustomPromptTab = {
+        id: crypto.randomUUID(),
+        name,
+        sortOrder: quickPromptTabs.length,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      quickPromptTabs.push(tab)
+      return tab
+    },
+    updateTab: async (id: string, patch: { name?: string; sortOrder?: number }) => {
+      const idx = quickPromptTabs.findIndex((tab) => tab.id === id)
+      if (idx < 0) return null
+      const name = patch.name?.trim() ?? quickPromptTabs[idx].name
+      if (!name) throw new Error('O nome da aba é obrigatório.')
+      quickPromptTabs[idx] = {
+        ...quickPromptTabs[idx],
+        name,
+        sortOrder: patch.sortOrder ?? quickPromptTabs[idx].sortOrder,
+        updatedAt: new Date().toISOString(),
+      }
+      for (const prompt of quickPrompts) {
+        if (prompt.tabId === id) prompt.category = name
+      }
+      return quickPromptTabs[idx]
+    },
+    removeTab: async (id: string) => {
+      const idx = quickPromptTabs.findIndex((tab) => tab.id === id)
+      if (idx < 0) return false
+      quickPromptTabs.splice(idx, 1)
+      for (const prompt of quickPrompts) {
+        if (prompt.tabId === id) {
+          prompt.tabId = null
+          prompt.category = 'custom'
+        }
+      }
+      return true
     },
   },
   antigravity: {
@@ -911,7 +983,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.22.0',
+      currentVersion: '1.23.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

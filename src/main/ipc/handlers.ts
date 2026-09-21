@@ -311,8 +311,16 @@ export function registerIpcHandlers(deps: {
   )
   ipcMain.handle(
     IPC.quickPrompts.create,
-    (_e, input: { name: string; category?: string; text: string; projectId?: string | null }) =>
-      quickPromptRepository.create(input),
+    (
+      _e,
+      input: {
+        name: string
+        category?: string
+        text: string
+        tabId?: string | null
+        projectId?: string | null
+      },
+    ) => quickPromptRepository.create(input),
   )
   ipcMain.handle(
     IPC.quickPrompts.update,
@@ -323,6 +331,18 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.quickPrompts.listFavorites, () => quickPromptRepository.listFavorites())
   ipcMain.handle(IPC.quickPrompts.setFavorite, (_e, itemId: string, favorite: boolean) =>
     quickPromptRepository.setFavorite(itemId, favorite),
+  )
+  ipcMain.handle(IPC.quickPrompts.listTabs, () => quickPromptRepository.listTabs())
+  ipcMain.handle(IPC.quickPrompts.createTab, (_e, input: { name: string }) =>
+    quickPromptRepository.createTab(input),
+  )
+  ipcMain.handle(
+    IPC.quickPrompts.updateTab,
+    (_e, id: string, patch: { name?: string; sortOrder?: number }) =>
+      quickPromptRepository.updateTab(id, patch),
+  )
+  ipcMain.handle(IPC.quickPrompts.removeTab, (_e, id: string) =>
+    quickPromptRepository.removeTab(id),
   )
 
   ipcMain.handle(IPC.antigravity.status, () => antigravityService.getStatus())

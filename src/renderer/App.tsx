@@ -172,7 +172,7 @@ export default function App() {
                   element={
                     <ContentAreaRoute
                       area="music"
-                      unavailableTitle="Prompts rápidos fazem parte do ambiente Música."
+                      unavailableTitle="Prompts fazem parte do ambiente Música."
                       unavailableDescription={null}
                     >
                       <PromptsPage />

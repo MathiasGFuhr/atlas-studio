@@ -45,7 +45,7 @@ import type {
 import type { ShortsAnalysisPlan } from '../shared/shorts/analysisPlan'
 import type { ShortsProjectListFilters } from '../shared/shortsProject'
 import type { ShortsImportResult } from '../shared/shortsProjectIdentity'
-import type { CustomPrompt } from '../shared/quickPrompts/types'
+import type { CustomPrompt, CustomPromptTab } from '../shared/quickPrompts/types'
 import type {
   ChatAgentStatusSnapshot,
   ChatAttachment,
@@ -160,6 +160,7 @@ const api = {
       name: string
       category?: string
       text: string
+      tabId?: string | null
       projectId?: string | null
     }) => ipcRenderer.invoke(IPC.quickPrompts.create, input) as Promise<CustomPrompt>,
     update: (id: string, patch: Partial<Omit<CustomPrompt, 'id' | 'createdAt' | 'updatedAt'>>) =>
@@ -169,6 +170,13 @@ const api = {
       ipcRenderer.invoke(IPC.quickPrompts.listFavorites) as Promise<string[]>,
     setFavorite: (itemId: string, favorite: boolean) =>
       ipcRenderer.invoke(IPC.quickPrompts.setFavorite, itemId, favorite) as Promise<string[]>,
+    listTabs: () => ipcRenderer.invoke(IPC.quickPrompts.listTabs) as Promise<CustomPromptTab[]>,
+    createTab: (input: { name: string }) =>
+      ipcRenderer.invoke(IPC.quickPrompts.createTab, input) as Promise<CustomPromptTab>,
+    updateTab: (id: string, patch: { name?: string; sortOrder?: number }) =>
+      ipcRenderer.invoke(IPC.quickPrompts.updateTab, id, patch) as Promise<CustomPromptTab | null>,
+    removeTab: (id: string) =>
+      ipcRenderer.invoke(IPC.quickPrompts.removeTab, id) as Promise<boolean>,
   },
   antigravity: {
     status: () => ipcRenderer.invoke(IPC.antigravity.status) as Promise<AntigravityStatus>,
