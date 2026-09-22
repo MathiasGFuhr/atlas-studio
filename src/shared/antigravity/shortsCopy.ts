@@ -25,6 +25,8 @@ export interface ShortsCopyClipInput {
   keyframePaths?: string[]
   clipMediaPath?: string | null
   watchedClip?: boolean
+  rejectedTitle?: string
+  rejectedDescription?: string
 }
 
 export interface ShortsAiCopy {
@@ -47,8 +49,16 @@ export const SHORTS_COPY_SCHEMA = {
         properties: {
           index: { type: 'integer', description: 'Número do Short (1-based)' },
           hook: { type: 'string', description: 'Gancho de 1 frase no idioma do conteúdo, específico deste trecho' },
-          title: { type: 'string', description: 'Título editorial nativo no idioma do conteúdo (contentLanguage)' },
-          description: { type: 'string', description: 'Descrição curta nativa no idioma do conteúdo (1 a 3 frases)' },
+          title: {
+            type: 'string',
+            description:
+              'Título clicável: uma frase literal dita ou cantada neste trecho, cortada para dar vontade de ouvir o resto. Proibido instrumento, clima, arranjo ou “a canção começa”.',
+          },
+          description: {
+            type: 'string',
+            description:
+              '1 a 3 frases com as falas reais deste trecho, para quem lê saber o que é dito antes de ouvir. Proibido arranjo, instrumento ou “a canção se inicia”.',
+          },
           hashtags: {
             type: 'array',
             items: { type: 'string' },
@@ -86,9 +96,275 @@ function formatCueLine(cue: TranscriptCue): string {
   return `[${cue.start.toFixed(1)}-${cue.end.toFixed(1)}] ${cue.text.trim()}`
 }
 
+function spokenLines(cues: TranscriptCue[]): string[] {
+  return cues
+    .map((cue) => cue.text.replace(/\s+/g, ' ').trim())
+    .filter((line) => line.length > 1)
+    .slice(0, 24)
+}
+
 function transcriptBlock(cues: TranscriptCue[]): string {
   const lines = cues.map((cue) => formatCueLine(cue)).filter((line) => line.trim())
   return lines.length > 0 ? lines.slice(0, 40).join('\n') : '(sem fala transcrita neste trecho)'
+}
+
+function spokenSourceBlock(cues: TranscriptCue[]): string {
+  const lines = spokenLines(cues)
+  if (lines.length === 0) {
+    return [
+      'O QUE É DITO NESTE TRECHO: (sem transcrição)',
+      'Sem fala utilizável: não invente letra e não preencha título/descrição com instrumento, clima ou “abertura intimista”.',
+    ].join('\n')
+  }
+  return [
+    'O QUE É DITO NESTE TRECHO (única fonte de título e descrição):',
+    ...lines.map((line) => `- "${line}"`),
+  ].join('\n')
+}
+
+const ARRANGEMENT_WORDS = new Set([
+  'abertura',
+  'intimista',
+  'violao',
+  'piano',
+  'introducao',
+  'interprete',
+  'serena',
+  'sereno',
+  'premissa',
+  'acustico',
+  'acustica',
+  'arranjo',
+  'melodia',
+  'guitarra',
+  'bateria',
+  'plateia',
+  'refrao',
+  'climax',
+  'instrumental',
+  'delicadeza',
+  'emocional',
+  'gitarre',
+  'klavier',
+])
+
+const STOP_WORDS = new Set([
+  'que',
+  'de',
+  'da',
+  'do',
+  'das',
+  'dos',
+  'a',
+  'o',
+  'e',
+  'em',
+  'um',
+  'uma',
+  'para',
+  'com',
+  'no',
+  'na',
+  'se',
+  'eu',
+  'voce',
+  'me',
+  'te',
+  'por',
+  'mais',
+  'nao',
+  'os',
+  'as',
+  'ao',
+  'ou',
+  'ja',
+  'ele',
+  'ela',
+  'the',
+  'and',
+  'of',
+  'to',
+  'in',
+  'ich',
+  'du',
+  'und',
+  'der',
+  'die',
+  'das',
+  'ein',
+  'eine',
+])
+
+const NOISE_LINE =
+  /^(musica|music|aplausos|applause|risos|laughter|silencio|silence|instrumental|ah+|oh+|yeah+|la+|na+|hmm+|hum+)$/
+
+const EMOTION =
+  /\b(eu|voce|nunca|sempre|ainda|mas|porque|quando|sem|amor|perd\w*|dor|medo|chor\w*|odei\w*|quero|precis\w*|deix\w*|volt\w*|ich|nicht|immer|nie|aber|wenn|liebe|schmerz|zu viel|te amo)\b/
+
+function fold(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function usableSpeechLines(cues: TranscriptCue[]): string[] {
+  const seen = new Set<string>()
+  const lines: string[] = []
+  for (const cue of cues) {
+    const clean = cue.text.replace(/[♪♫]/g, ' ').replace(/\s+/g, ' ').trim()
+    const folded = fold(clean)
+    if (folded.length < 2 || NOISE_LINE.test(folded) || seen.has(folded)) continue
+    seen.add(folded)
+    lines.push(clean)
+  }
+  return lines.slice(0, 24)
+}
+
+function arrangementHits(text: string, speech: string): boolean {
+  const speechFold = fold(speech)
+  return fold(text)
+    .split(' ')
+    .filter((word) => word.length > 3)
+    .some((word) => ARRANGEMENT_WORDS.has(word) && !speechFold.includes(word))
+}
+
+function hasLiteralPhrase(text: string, speech: string): boolean {
+  const speechFold = fold(speech)
+  const words = fold(text)
+    .split(' ')
+    .filter((word) => word.length > 1)
+  if (words.length === 0 || !speechFold) return false
+  const size = Math.min(3, words.length)
+  if (size < 2) return words[0].length >= 4 && !STOP_WORDS.has(words[0]) && speechFold.includes(words[0])
+  for (let i = 0; i + size <= words.length; i += 1) {
+    const window = words.slice(i, i + size)
+    const hasContent = window.some((word) => word.length >= 4 && !STOP_WORDS.has(word))
+    if (!hasContent) continue
+    if (speechFold.includes(window.join(' '))) return true
+  }
+  return false
+}
+
+function titleIsGrounded(title: string, lines: string[], songTitle?: string): boolean {
+  const speech = lines.join(' ')
+  if (!title.trim() || arrangementHits(title, speech) || !hasLiteralPhrase(title, speech)) return false
+  const foldedTitle = fold(title)
+  const foldedSong = songTitle ? fold(songTitle) : ''
+  if (!foldedSong) return true
+  const rest = foldedTitle.startsWith(foldedSong) ? foldedTitle.slice(foldedSong.length).trim() : foldedTitle
+  const songOnly = foldedTitle === foldedSong || rest.split(' ').filter(Boolean).length < 3
+  if (!songOnly) return true
+  const hasRicherLine = lines.some((line) => {
+    const folded = fold(line)
+    return folded !== foldedSong && folded.split(' ').length >= 4
+  })
+  return !hasRicherLine
+}
+
+function descriptionIsGrounded(description: string, lines: string[]): boolean {
+  const speech = lines.join(' ')
+  return Boolean(description.trim()) && !arrangementHits(description, speech) && hasLiteralPhrase(description, speech)
+}
+
+function polishPhrase(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim().replace(/^["“”']+|["“”']+$/g, '')
+  if (!clean) return ''
+  return clean.charAt(0).toUpperCase() + clean.slice(1)
+}
+
+function clipTitle(text: string): string {
+  const clean = polishPhrase(text)
+  if (clean.length <= 100) return clean
+  const cut = clean.slice(0, 100)
+  const lastSpace = cut.lastIndexOf(' ')
+  return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut).replace(/[,:;.\s]+$/, '')
+}
+
+function scoreTitle(text: string, songTitle?: string): number {
+  const folded = fold(text)
+  const words = folded.split(' ').filter(Boolean)
+  let score = 0
+  if (words.length >= 6 && words.length <= 12) score += 8
+  else if (words.length >= 4 && words.length <= 14) score += 4
+  else score -= 4
+  score -= Math.abs(words.length - 9)
+  if (text.includes('?')) score += 6
+  if (EMOTION.test(folded)) score += 4
+  if (songTitle && folded === fold(songTitle)) score -= 15
+  return score
+}
+
+export function clickableCopyFromSpeech(
+  cues: TranscriptCue[],
+  songTitle?: string,
+): { title: string; description: string } {
+  const lines = usableSpeechLines(cues)
+  if (lines.length === 0) return { title: '', description: '' }
+  const candidates: string[] = []
+  for (let i = 0; i < lines.length; i += 1) {
+    candidates.push(lines[i])
+    if (i + 1 < lines.length) {
+      const head = lines[i].replace(/[.!?,;:]+$/g, '')
+      const tail = lines[i + 1].trim()
+      const bridge = /^(mas|porque|quando|though|but|aber)\b/i.test(tail) ? ',' : ''
+      const joined = `${head}${bridge} ${tail}`.replace(/\s+/g, ' ').trim()
+      const count = joined.split(/\s+/).length
+      if (count >= 4 && count <= 14) candidates.push(joined)
+    }
+  }
+  const best = candidates.reduce((winner, current) =>
+    scoreTitle(current, songTitle) > scoreTitle(winner, songTitle) ? current : winner,
+  )
+  const title = clipTitle(best)
+  const description = lines
+    .slice(0, 5)
+    .map((line) => {
+      const clean = polishPhrase(line)
+      return /[.!?…]$/.test(clean) ? clean : `${clean}.`
+    })
+    .join(' ')
+    .slice(0, 320)
+  return { title, description: description || title }
+}
+
+export function speechCopyNeedsRepair(
+  copy: Pick<ShortsAiCopy, 'title' | 'description'>,
+  transcript: TranscriptCue[],
+  options?: { songTitle?: string; fields?: ShortsCopyFields },
+): boolean {
+  const lines = usableSpeechLines(transcript)
+  if (lines.length === 0) return false
+  const fields = options?.fields ?? 'all'
+  if (fields !== 'description' && !titleIsGrounded(copy.title, lines, options?.songTitle)) return true
+  if (fields !== 'title' && !descriptionIsGrounded(copy.description, lines)) return true
+  return false
+}
+
+export function groundShortsCopy(
+  copy: ShortsAiCopy,
+  input: { transcript: TranscriptCue[]; songTitle?: string },
+): ShortsAiCopy {
+  const lines = usableSpeechLines(input.transcript)
+  if (lines.length === 0) {
+    return {
+      ...copy,
+      title: arrangementHits(copy.title, '') ? '' : copy.title,
+      description: arrangementHits(copy.description, '') ? '' : copy.description,
+    }
+  }
+  const local = clickableCopyFromSpeech(input.transcript, input.songTitle)
+  const titleOk = titleIsGrounded(copy.title, lines, input.songTitle)
+  const descriptionOk = descriptionIsGrounded(copy.description, lines)
+  return {
+    ...copy,
+    title: titleOk ? copy.title.trim() : local.title,
+    description: descriptionOk ? copy.description.trim() : local.description,
+    hook: copy.hook && titleIsGrounded(copy.hook, lines, input.songTitle) ? copy.hook.trim() : '',
+  }
 }
 
 export function fallbackShortsCopy(input: {
@@ -96,24 +372,15 @@ export function fallbackShortsCopy(input: {
   hook: string
   reason: string
   transcript: TranscriptCue[]
+  songTitle?: string
 }): ShortsAiCopy {
-  const snippet = input.transcript
-    .map((cue) => cue.text.trim())
-    .filter(Boolean)
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  const fromTranscript = snippet.length > 8 ? snippet.slice(0, 80).replace(/[,.;:!?\s]+$/, '') : ''
-  const title = (input.hook || fromTranscript || input.reason || `Short #${input.index}`).trim().slice(0, 100)
-  const description = [input.reason.trim(), snippet && snippet !== input.reason ? snippet.slice(0, 180) : '']
-    .filter(Boolean)
-    .join(' ')
-    .slice(0, 280)
+  const local = clickableCopyFromSpeech(input.transcript, input.songTitle)
   return {
     index: input.index,
-    title,
-    description,
+    title: local.title,
+    description: local.description,
     hashtags: [],
+    hook: local.title,
   }
 }
 
@@ -139,42 +406,70 @@ export function buildShortsCopiesPrompt(input: {
   const musicRules =
     input.profile === 'music'
       ? [
-          'Estratégia Música (títulos editoriais profissionais):',
-          '- explore o momento específico: refrão, clímax, solo, reação da plateia, frase da música, acontecimento visual',
-          '- pode citar artista e música quando fizer sentido editorial',
-          '- NÃO use clickbait vazio nem superlativos ocos',
-          '- cada Short é um instante diferente da performance — o título precisa mostrar QUAL instante',
+          'Estratégia Música (título clicável a partir do que é dito/cantado NESTE trecho):',
+          '- título e descrição nascem da FALA/LETRA transcrita deste Short',
+          '- o título é uma frase LITERAL do bloco "O QUE É DITO": verso, confissão ou pergunta, cortada para dar vontade de ouvir a próxima linha',
+          '- pode cortar a frase; não pode trocar as palavras por clima, instrumento ou sinônimo',
+          '- comece pela frase forte. O nome da música não substitui o que é dito',
+          '- cada Short usa palavras diferentes daquele intervalo',
+          '- PROIBIDO descrever arranjo, instrumento, clima ou estrutura: "abertura intimista", "voz, violão e piano", "introdução serena", "o intérprete entra", "tom emocional", "a canção se inicia"',
+          '- PROIBIDO clickbait vazio que não esteja nas palavras: "momento incrível", "você precisa ouvir", "não perca"',
         ]
       : [
-          'Estratégia História (unidade narrativa do trecho):',
-          '- priorize descoberta, consequência, pergunta implícita, fato específico, revelação, conflito, curiosidade',
+          'Estratégia História (título clicável a partir do que é dito NESTE trecho):',
+          '- título e descrição nascem da fala transcrita deste Short',
+          '- título clicável: descoberta, consequência, pergunta implícita, fato específico, revelação ou conflito dito no trecho',
           '- o título deve funcionar sozinho, sem o episódio completo',
           '- NÃO invente fatos que não estejam no trecho',
-          '- NÃO use clickbait falso',
+          '- NÃO use clickbait falso nem resumo genérico do episódio',
         ]
 
   const clipBlocks = input.clips
     .map((clip) => {
       const used = (clip.usedTitles ?? []).filter(Boolean)
+      const spoken = spokenLines(clip.transcript)
+      const suggested = spoken.length
+        ? clickableCopyFromSpeech(clip.transcript, input.editorial.songTitle).title
+        : ''
       return [
         `--- SHORT #${clip.index} ---`,
+        spokenSourceBlock(clip.transcript),
+        suggested ? `fraseLiteralParaOTitulo: "${suggested}"` : '',
         `janela: ${formatShortsTimecode(clip.start)} → ${formatShortsTimecode(clip.end)} (${(clip.end - clip.start).toFixed(1)}s)`,
         `startSeconds: ${clip.start.toFixed(2)}`,
         `endSeconds: ${clip.end.toFixed(2)}`,
         `score: ${clip.score}`,
-        `motivoDoCorte: ${clip.reason || '(não informado)'}`,
-        clip.visualReason ? `visualDesteTrecho: ${clip.visualReason}` : '',
-        clip.audioReason ? `audioDesteTrecho: ${clip.audioReason}` : '',
-        clip.visualSummary ? `oQueSeVeNesteTrecho: ${clip.visualSummary}` : '',
-        clip.audioSummary ? `oQueSeOuveNesteTrecho: ${clip.audioSummary}` : '',
-        clip.watchedClip && clip.clipMediaPath
-          ? `Assista/ouça ESTE recorte em ${clip.clipMediaPath} (intervalo ${clip.start.toFixed(1)}–${clip.end.toFixed(1)}s). Não recicle a análise global.`
-          : clip.keyframePaths?.length
-            ? `Frames deste Short:\n${clip.keyframePaths.map((path) => `  ${path}`).join('\n')}\nAnalise ESTE trecho. Você não necessariamente assistiu ao vídeo inteiro.`
-            : 'Analise o conteúdo específico deste Short, não o vídeo inteiro.',
+        `motivoDoCorte (nota interna, não copie como título): ${clip.reason || '(não informado)'}`,
+        spoken.length
+          ? 'Este Short tem fala transcrita. Título e descrição usam só essas palavras. Não descreva imagem, instrumento, plateia nem clima.'
+          : [
+              clip.visualReason ? `visualDesteTrecho (contexto, não vira título nem descrição): ${clip.visualReason}` : '',
+              clip.audioReason ? `audioDesteTrecho (contexto, não vira título nem descrição): ${clip.audioReason}` : '',
+              clip.visualSummary ? `oQueSeVeNesteTrecho (contexto, não vira copy): ${clip.visualSummary}` : '',
+              clip.audioSummary ? `oQueSeOuveNesteTrecho (contexto, não vira copy): ${clip.audioSummary}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n'),
+        spoken.length
+          ? 'Se assistir ao recorte, é só para conferir as palavras já transcritas. Não transforme o que você vê em título.'
+          : clip.watchedClip && clip.clipMediaPath
+            ? `Assista/ouça ESTE recorte em ${clip.clipMediaPath} (intervalo ${clip.start.toFixed(1)}–${clip.end.toFixed(1)}s). Não recicle a análise global.`
+            : clip.keyframePaths?.length
+              ? `Frames deste Short:\n${clip.keyframePaths.map((path) => `  ${path}`).join('\n')}\nAnalise ESTE trecho. Você não necessariamente assistiu ao vídeo inteiro.`
+              : 'Analise o conteúdo específico deste Short, não o vídeo inteiro.',
         `hookAtual: ${clip.hook || '(vazio)'}`,
         clip.currentTitle ? `tituloAtual: ${clip.currentTitle}` : '',
         clip.currentDescription ? `descricaoAtual: ${clip.currentDescription}` : '',
+        clip.rejectedTitle || clip.rejectedDescription
+          ? [
+              'A resposta anterior foi rejeitada porque não usa o que é dito neste trecho.',
+              clip.rejectedTitle ? `tituloRejeitado: ${clip.rejectedTitle}` : '',
+              clip.rejectedDescription ? `descricaoRejeitada: ${clip.rejectedDescription}` : '',
+              'Não repita esse texto. O título novo copia uma frase literal da transcrição.',
+            ]
+              .filter(Boolean)
+              .join('\n')
+          : '',
         used.length ? `titulosJaUsadosEmOutrosShorts: ${used.join(' | ')}` : '',
         'transcriptDesteTrecho:',
         transcriptBlock(clip.transcript),
@@ -215,19 +510,31 @@ export function buildShortsCopiesPrompt(input: {
     '- NÃO traduza automaticamente para inglês.',
     '- reason/hook abaixo: reason é nota interna; hook já deve estar no idioma do conteúdo. Não copie reason como título.',
     '',
-    musicRules.join('\n'),
-    '- NÃO invente tema político, social ou letra que não esteja evidenciada neste trecho.',
-    '- Se não entender a letra, descreva a performance visível/auditiva (ex.: “Johann Falk live during the final chorus”).',
+    'Exemplo que será descartado:',
+    'Título ruim: Aprender a Perdoar: Abertura íntima com voz, violão e piano',
+    'Descrição ruim: A canção se inicia com uma introdução serena ao piano e violão. O intérprete entra com delicadeza, estabelecendo a premissa emocional.',
+    'Exemplo certo, só se o trecho disser essas palavras: título "Eu tentei te odiar, mas eu ainda te amo". A descrição continua com as frases seguintes da fala, sem instrumento e sem clima.',
     '',
-    'Regras de título:',
-    '- um título por Short, específico DAQUELE trecho (transcript + motivo + hook)',
-    '- se houver 5 Shorts, quero 5 títulos realmente diferentes',
+    musicRules.join('\n'),
+    '- NÃO invente tema político, social ou letra que não esteja em "O QUE É DITO NESTE TRECHO".',
+    '- Se houver fala transcrita, ignore arranjo, instrumento, plateia e clima. Isso não é título nem descrição.',
+    '- O título precisa conter uma sequência literal de palavras desse bloco. fraseLiteralParaOTitulo é a frase forte; use ela ou outro corte literal do mesmo bloco.',
+    '- Sem fala transcrita: não invente letra e não substitua por "abertura", "violão", "piano" ou "tom intimista".',
+    '',
+    'Regras de título (clicável):',
+    '- um título por Short, feito SÓ com o que é dito naquele intervalo',
+    '- a pessoa clica porque quer ouvir aquela frase, confissão ou pergunta — não porque leu uma ficha da música',
+    '- 4 a 12 palavras quando a frase couber; no máximo 100 caracteres',
+    '- se houver 5 Shorts, quero 5 títulos realmente diferentes, cada um com palavras daquele trecho',
     '- proibido repetir o mesmo título ou variar só um adjetivo',
+    '- proibido "Nome da música: abertura/clima/instrumento"',
     `- proibido títulos genéricos como: ${GENERIC_TITLE_HINTS.map((item) => `"${item}"`).join(', ')}`,
-    '- profissional, editorial, concreto',
     '',
     'Regras de descrição:',
-    '- 1 a 3 frases curtas contextualizando ESTE trecho',
+    '- 1 a 3 frases curtas com o que é falado ou cantado NESTE trecho',
+    '- cite as falas reais do intervalo, para quem lê saber o conteúdo antes de ouvir',
+    '- cada frase precisa trazer palavras que estão na transcrição deste Short',
+    '- proibido: "a canção se inicia", "introdução serena", "o intérprete entra", "estabelecendo a premissa emocional"',
     '- não copiar a descrição do vídeo original',
     '- sem enrolação',
     '',

@@ -8,6 +8,7 @@ import type {
 import { cuesForClip } from '../../../shared/shortsExport'
 import {
   fallbackShortsCopy,
+  groundShortsCopy,
   type ShortsCopyClipInput,
 } from '../../../shared/antigravity/shortsCopy'
 import type { AudioFeatureAnalysis } from '../../../shared/shorts/audioFeatures'
@@ -68,25 +69,34 @@ export class ShortMetadataService {
   }): Promise<ShortsClip[]> {
     if (input.copyInputs.length === 0) return input.clips
     try {
-      const copies = await this.antigravity.generateShortsCopies({
-        profile: input.job.profile as ShortsProfile,
-        editorial: input.editorial,
-        fileName: input.job.sourceName,
-        videoDuration: input.job.probe?.duration ?? Math.max(...input.clips.map((clip) => clip.end), 0),
-        fields: input.fields,
-        clips: input.copyInputs,
-        model: input.model,
-        addDirs: input.addDirs,
+      const copies = (
+        await this.antigravity.generateShortsCopies({
+          profile: input.job.profile as ShortsProfile,
+          editorial: input.editorial,
+          fileName: input.job.sourceName,
+          videoDuration: input.job.probe?.duration ?? Math.max(...input.clips.map((clip) => clip.end), 0),
+          fields: input.fields,
+          clips: input.copyInputs,
+          model: input.model,
+          addDirs: input.addDirs,
+        })
+      ).map((copy) => {
+        const source = input.copyInputs.find((clip) => clip.index === copy.index)
+        if (!source) return copy
+        return groundShortsCopy(copy, {
+          transcript: source.transcript,
+          songTitle: input.editorial.songTitle,
+        })
       })
       const byIndex = new Map(copies.map((item) => [item.index, item]))
       return input.clips.map((clip) => {
         const copy = byIndex.get(clip.index)
         if (!copy || (input.focus && clip.id !== input.focus.id)) return clip
         const next = { ...clip }
-        if (copy.hook?.trim() && input.fields === 'all') next.hook = copy.hook.trim()
-        if (input.fields !== 'description') next.title = copy.title.trim() || next.title
+        if (input.fields === 'all') next.hook = copy.hook?.trim() ?? ''
+        if (input.fields !== 'description') next.title = copy.title.trim()
         if (input.fields !== 'title') {
-          next.description = copy.description.trim() || next.description
+          next.description = copy.description.trim()
           if (copy.hashtags.length) next.hashtags = copy.hashtags
         }
         if (!next.title.trim() || !next.description.trim()) {
@@ -95,6 +105,7 @@ export class ShortMetadataService {
             hook: clip.hook,
             reason: clip.reason,
             transcript: cuesForClip(input.job.transcript, clip.start, clip.end),
+            songTitle: input.editorial.songTitle,
           })
           if (!next.title.trim()) next.title = fallback.title
           if (!next.description.trim()) next.description = fallback.description
@@ -110,6 +121,7 @@ export class ShortMetadataService {
           hook: clip.hook,
           reason: clip.reason,
           transcript: cuesForClip(input.job.transcript, clip.start, clip.end),
+          songTitle: input.editorial.songTitle,
         })
         return {
           ...clip,

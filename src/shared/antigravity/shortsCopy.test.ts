@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildShortsCopiesPrompt,
   fallbackShortsCopy,
+  groundShortsCopy,
   normalizeShortsCopies,
+  speechCopyNeedsRepair,
 } from './shortsCopy'
 
 const editorial = {
@@ -73,7 +75,9 @@ describe('shortsCopy', () => {
     expect(music).toContain('artistName: Johann Falk')
     expect(music).toContain('songTitle: ZU VIEL VON ALLEM')
     expect(music).toContain('NÃO traduza automaticamente para inglês')
-    expect(music).toContain('reação da plateia')
+    expect(music).toContain('fraseLiteralParaOTitulo')
+    expect(music).toContain('Abertura íntima')
+    expect(music).toContain('Zu viel von allem')
     expect(music).not.toContain('virada narrativa')
     expect(music).toContain('Não gere título/descrição só com a análise global')
     expect(music).toContain('NÃO invente tema político')
@@ -138,6 +142,77 @@ describe('shortsCopy', () => {
     expect(result[0]).toEqual({ index: 1, title: '', description: '', hashtags: [], hook: '' })
     expect(result[1].title).toBe('O solo que corta a luz')
     expect(result[1].hashtags).toEqual(['solo', 'JohannFalk'])
+  })
+
+  it('com fala, o prompt esconde clima visual e pede a frase dita', () => {
+    const prompt = buildShortsCopiesPrompt({
+      profile: 'music',
+      editorial,
+      fileName: 'show.mp4',
+      videoDuration: 180,
+      fields: 'all',
+      clips: [
+        {
+          index: 1,
+          start: 15,
+          end: 72,
+          score: 84,
+          reason: 'entrada do vocal',
+          hook: 'Abertura intimista',
+          transcript: [{ start: 15, end: 28, text: 'eu tentei te odiar mas eu ainda te amo' }],
+          visualReason: 'luz baixa no piano e no violão',
+          rejectedTitle: 'Aprender a Perdoar: Abertura íntima com voz, violão e piano',
+          rejectedDescription: 'A canção se inicia com uma introdução serena.',
+        },
+      ],
+    })
+    expect(prompt).toContain('eu tentei te odiar mas eu ainda te amo')
+    expect(prompt).toContain('tituloRejeitado')
+    expect(prompt).not.toContain('luz baixa no piano')
+  })
+
+  it('troca ficha de arranjo pelo que é dito e mantém título literal', () => {
+    const transcript = [
+      { start: 15, end: 22, text: 'Eu tentei te odiar' },
+      { start: 22, end: 32, text: 'mas eu ainda te amo demais' },
+      { start: 32, end: 48, text: 'aprender a perdoar dói quando a gente ainda espera' },
+    ]
+    const generic = groundShortsCopy(
+      {
+        index: 1,
+        title: 'Aprender a Perdoar: Abertura íntima com voz, violão e piano',
+        description:
+          "A canção 'Aprender a Perdoar' se inicia com uma introdução serena ao piano e violão acústico. O intérprete entra com delicadeza, estabelecendo a premissa emocional da música em tom intimista.",
+        hashtags: ['perdao'],
+        hook: 'Abertura intimista com voz e piano',
+      },
+      { transcript, songTitle: 'Aprender a Perdoar' },
+    )
+    expect(generic.title.toLowerCase()).toContain('perdoar dói quando a gente ainda espera')
+    expect(generic.title.toLowerCase()).not.toMatch(/violão|piano|abertura|intimista/)
+    expect(generic.description.toLowerCase()).toContain('tentei te odiar')
+    expect(generic.description.toLowerCase()).toContain('ainda espera')
+    expect(generic.description.toLowerCase()).not.toMatch(/introdução serena|intérprete|premissa/)
+    expect(speechCopyNeedsRepair(
+      {
+        title: 'Aprender a Perdoar: Abertura íntima com voz, violão e piano',
+        description: 'A canção se inicia com uma introdução serena ao piano.',
+      },
+      transcript,
+      { songTitle: 'Aprender a Perdoar' },
+    )).toBe(true)
+
+    const literal = groundShortsCopy(
+      {
+        index: 1,
+        title: 'Eu tentei te odiar, mas eu ainda te amo demais',
+        description: 'Eu tentei te odiar, mas eu ainda te amo demais. Aprender a perdoar dói quando a gente ainda espera.',
+        hashtags: [],
+      },
+      { transcript, songTitle: 'Aprender a Perdoar' },
+    )
+    expect(literal.title).toBe('Eu tentei te odiar, mas eu ainda te amo demais')
+    expect(literal.description).toContain('ainda espera')
   })
 
   it('fallback usa o trecho, não um título genérico', () => {
