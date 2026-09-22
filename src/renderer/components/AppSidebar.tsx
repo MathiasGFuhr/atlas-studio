@@ -14,6 +14,7 @@ import { onTasksChanged } from '../lib/taskEvents'
 import { useAntigravityStatus } from '../hooks/useAntigravityStatus'
 import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { PRODUCT_TOUR_ACTIVE_EVENT } from '../lib/productTourEvents'
 
 const globalItems = [
   { to: '/', label: 'Início', icon: Home, end: true, color: undefined, area: null as 'history' | 'music' | null },
@@ -72,6 +73,9 @@ export function AppSidebar({
   const [pendingCount, setPendingCount] = useState(0)
   const compactViewport = useMediaQuery('(max-width: 1100px)')
   const userToggledRef = useRef(false)
+  const collapsedRef = useRef(false)
+  const tourLockRef = useRef(false)
+  const tourRestoreRef = useRef<boolean | null>(null)
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
@@ -79,6 +83,7 @@ export function AppSidebar({
       return false
     }
   })
+  collapsedRef.current = collapsed
   const { capabilities } = useWorkspaceCapabilities()
   const items = globalItems.filter((item) => {
     if (!item.area) return true
@@ -94,9 +99,27 @@ export function AppSidebar({
   }, [api])
 
   useEffect(() => {
-    if (userToggledRef.current) return
+    if (userToggledRef.current || tourLockRef.current) return
     if (compactViewport) setCollapsed(true)
-  }, [compactViewport, userToggledRef])
+  }, [compactViewport])
+
+  useEffect(() => {
+    function onTour(event: Event) {
+      const active = Boolean((event as CustomEvent<{ active?: boolean }>).detail?.active)
+      tourLockRef.current = active
+      if (active) {
+        if (tourRestoreRef.current === null) tourRestoreRef.current = collapsedRef.current
+        setCollapsed(false)
+        return
+      }
+      if (tourRestoreRef.current !== null) {
+        setCollapsed(tourRestoreRef.current)
+        tourRestoreRef.current = null
+      }
+    }
+    window.addEventListener(PRODUCT_TOUR_ACTIVE_EVENT, onTour)
+    return () => window.removeEventListener(PRODUCT_TOUR_ACTIVE_EVENT, onTour)
+  }, [])
 
   function toggleCollapsed() {
     userToggledRef.current = true
@@ -124,6 +147,7 @@ export function AppSidebar({
 
   return (
     <aside
+      data-tour="sidebar"
       className={cn(
         'relative z-10 flex h-full shrink-0 flex-col border-r border-border-soft bg-sidebar transition-[width] duration-200 ease-out',
         collapsed ? 'w-[72px]' : 'w-[248px]',

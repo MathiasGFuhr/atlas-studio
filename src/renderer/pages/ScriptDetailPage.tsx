@@ -181,7 +181,7 @@ export function ScriptDetailPage() {
         </div>
       </Card>
 
-      <div className="mb-4 shrink-0 bg-bg pb-1">
+      <div data-tour="page-actions" className="mb-4 shrink-0 bg-bg pb-1">
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={() => void handleCopy()}>
             Copiar tudo

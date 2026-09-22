@@ -215,7 +215,7 @@ export function CreateScriptPage({
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
           <div className="space-y-6">
-            <Card className="space-y-5">
+            <Card data-tour="page-actions" className="space-y-5">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <Select
                   label="Nicho"

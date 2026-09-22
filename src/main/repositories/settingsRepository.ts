@@ -53,6 +53,8 @@ const DEFAULTS: AppSettings = {
   codexBinaryPath: '',
   antigravityBinaryPath: '',
   codexOnboardingDismissed: false,
+  productTourCompleted: false,
+  seenProductTours: [],
   notificationReadKeys: [],
   contentAreasAutoDetect: true,
   contentAreasHistoryEnabled: true,
@@ -105,6 +107,9 @@ export const settingsRepository = {
 
     settings.accountPhotoDataUrl = readImageDataUrl(String(settings.accountPhotoPath || ''))
     settings.notificationReadKeys = normalizeNotificationReadKeys(settings.notificationReadKeys)
+    settings.seenProductTours = Array.isArray(settings.seenProductTours)
+      ? settings.seenProductTours.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : []
 
     return settings
   },

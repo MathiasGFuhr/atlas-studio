@@ -258,6 +258,7 @@ export function HomePage() {
         </Card>
 
         <div
+          data-tour="modules"
           className={
             modules.length > 1
               ? 'mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2'

@@ -265,7 +265,6 @@ export async function initDatabase(workspaceRoot: string): Promise<AppDatabase> 
 
     CREATE INDEX IF NOT EXISTS idx_quick_prompts_project ON quick_prompts(project_id);
     CREATE INDEX IF NOT EXISTS idx_quick_prompts_updated ON quick_prompts(updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_quick_prompts_tab ON quick_prompts(tab_id);
     CREATE INDEX IF NOT EXISTS idx_quick_prompt_tabs_sort ON quick_prompt_tabs(sort_order, name);
 
     CREATE TABLE IF NOT EXISTS tasks (

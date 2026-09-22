@@ -24,7 +24,7 @@ export function QuickPromptsPanel({ projectId }: { projectId?: string | null }) 
   }, [])
 
   return (
-    <div className="space-y-4">
+    <div data-tour="page-actions" className="space-y-4">
       <Card className="space-y-4">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-dark text-accent">

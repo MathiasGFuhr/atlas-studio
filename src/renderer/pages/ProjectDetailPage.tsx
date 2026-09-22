@@ -210,7 +210,7 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
             </div>
           ) : null}
 
-          <div className="flex items-center justify-between">
+          <div data-tour="page-actions" className="flex items-center justify-between">
             <h2 className="text-base font-semibold text-text">
               {projectType === 'history' ? 'Roteiros do projeto' : 'Faixas do projeto'}
             </h2>

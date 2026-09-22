@@ -24,9 +24,9 @@ export function CodexOnboarding({
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold text-text">Bem-vindo ao Atlas Studio</h3>
+          <h3 className="text-lg font-semibold text-text">Pronto para gerar com IA</h3>
           <p className="mt-3 text-sm leading-relaxed text-muted">
-            O Atlas Studio usa o Codex para pesquisar, escrever e revisar seus roteiros.
+            O Atlas usa o Codex para pesquisar, escrever e revisar seus roteiros.
             Vincule sua conta para começar a gerar conteúdo.
           </p>
         </div>

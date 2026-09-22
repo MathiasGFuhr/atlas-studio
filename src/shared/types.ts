@@ -483,6 +483,10 @@ export interface AppSettings {
   antigravityBinaryPath: string
   /** Onboarding de vínculo com Codex já foi descartado. */
   codexOnboardingDismissed: boolean
+  /** Tour guiado do primeiro acesso já foi concluído ou pulado. */
+  productTourCompleted: boolean
+  /** Tutoriais de tela já vistos (uma chave por página). */
+  seenProductTours: string[]
   /** Chaves estáveis de notificações já lidas (ex.: task-overdue:<id>:<dueDate>). */
   notificationReadKeys: string[]
   /** Quando true, História/Música aparecem conforme canais e projetos existentes. */

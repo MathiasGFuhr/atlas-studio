@@ -698,7 +698,7 @@ export function MusicEditorPage() {
         subtitle="Edite ouvindo a faixa. O áudio original nunca é alterado — o Atlas guarda só os pontos de corte e o FFmpeg gera os arquivos na exportação."
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div data-tour="page-actions" className="mb-4 flex flex-wrap items-center gap-2">
         <Button
           variant="secondary"
           onClick={() =>

@@ -122,6 +122,8 @@ const settings: AppSettings = {
   codexBinaryPath: '',
   antigravityBinaryPath: '',
   codexOnboardingDismissed: true,
+  productTourCompleted: false,
+  seenProductTours: [],
   notificationReadKeys: [],
   contentAreasAutoDetect: true,
   contentAreasHistoryEnabled: true,
@@ -983,7 +985,7 @@ export const mockApi = {
   updates: {
     status: async () => ({
       state: 'dev' as const,
-      currentVersion: '1.23.0',
+      currentVersion: '1.24.0',
       availableVersion: null,
       releaseNotes: null,
       downloadPercent: null,

@@ -74,9 +74,9 @@ export function ChannelAgendaPage() {
       />
 
       {!loaded ? (
-        <p className="text-sm text-muted">Carregando agenda…</p>
+        <p data-tour="page-actions" className="text-sm text-muted">Carregando agenda…</p>
       ) : videos.length === 0 ? (
-        <div className="rounded-2xl border border-border-soft bg-card px-4 py-4">
+        <div data-tour="page-actions" className="rounded-2xl border border-border-soft bg-card px-4 py-4">
           <p className="text-sm text-muted">Nenhum vídeo agendado.</p>
           <button
             type="button"
@@ -94,7 +94,7 @@ export function ChannelAgendaPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div data-tour="page-actions" className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {videos.map((video) => (
             <HomeScheduledVideoCard
               key={video.id}

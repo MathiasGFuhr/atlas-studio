@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import type { AppSettings } from '@shared/types'
 import { AppSidebar } from './components/AppSidebar'
@@ -8,6 +8,9 @@ import { CreateActionsProvider } from './components/CreateActionsProvider'
 import { ContentAreaRoute } from './components/ContentAreaRoute'
 import { CodexLinkModal } from './components/CodexLinkModal'
 import { CodexOnboarding } from './components/CodexOnboarding'
+import { INTRO_TOUR_STEPS, ProductTour } from './components/ProductTour'
+import { PageTourHost } from './components/PageTourHost'
+import { PRODUCT_TOUR_REPLAY_EVENT } from './lib/productTourEvents'
 import { HomePage } from './pages/HomePage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
@@ -52,11 +55,55 @@ function OpenChatRedirect() {
 export default function App() {
   const api = getAtlasApi()
   const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [tourOpen, setTourOpen] = useState(false)
+  const [tourChecked, setTourChecked] = useState(false)
   const codexAuth = useCodexAuth()
   const [linkModalOpen, setLinkModalOpen] = useState(false)
+  const [pageTourOpen, setPageTourOpen] = useState(false)
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
 
   useEffect(() => {
-    void api.settings.get().then(setSettings)
+    void api.settings.get().then((next) => {
+      setSettings(next)
+      if (!next.productTourCompleted) setTourOpen(true)
+      setTourChecked(true)
+    })
+  }, [api])
+
+  useEffect(() => {
+    function replay() {
+      setTourOpen(true)
+    }
+    window.addEventListener(PRODUCT_TOUR_REPLAY_EVENT, replay)
+    return () => window.removeEventListener(PRODUCT_TOUR_REPLAY_EVENT, replay)
+  }, [])
+
+  const finishTour = useCallback(() => {
+    setTourOpen(false)
+    const seen = settingsRef.current?.seenProductTours ?? []
+    const seenProductTours = seen.includes('home') ? seen : [...seen, 'home']
+    void api.settings.update({ productTourCompleted: true, seenProductTours }).then(setSettings)
+  }, [api])
+
+  const finishTourAndConnect = useCallback(() => {
+    setTourOpen(false)
+    const seen = settingsRef.current?.seenProductTours ?? []
+    const seenProductTours = seen.includes('home') ? seen : [...seen, 'home']
+    void api.settings.update({ productTourCompleted: true, seenProductTours }).then(setSettings)
+    codexAuth.dismissOnboarding()
+    setLinkModalOpen(true)
+  }, [api, codexAuth])
+
+  const markPageTourSeen = useCallback((id: string) => {
+    const seen = settingsRef.current?.seenProductTours ?? []
+    if (seen.includes(id)) return
+    const seenProductTours = [...seen, id]
+    settingsRef.current = settingsRef.current
+      ? { ...settingsRef.current, seenProductTours }
+      : settingsRef.current
+    setSettings((current) => (current ? { ...current, seenProductTours } : current))
+    void api.settings.update({ seenProductTours }).then(setSettings)
   }, [api])
 
   const handleOnboardingLink = useCallback(() => {
@@ -241,9 +288,26 @@ export default function App() {
           v{appVersion}
         </div>
 
-        {/* Onboarding modal - first run only */}
+        <ProductTour
+          open={tourOpen}
+          steps={INTRO_TOUR_STEPS}
+          aiConnected={codexAuth.isConnected}
+          offerConnect
+          focusHome
+          onComplete={finishTour}
+          onConnectAi={finishTourAndConnect}
+        />
+        <PageTourHost
+          ready={tourChecked}
+          blocked={tourOpen || codexAuth.showOnboarding || linkModalOpen}
+          seen={settings?.seenProductTours ?? []}
+          onSeen={markPageTourSeen}
+          onActiveChange={setPageTourOpen}
+        />
+
+        {/* Onboarding modal - first run only, depois do tour */}
         <CodexOnboarding
-          open={codexAuth.showOnboarding}
+          open={tourChecked && !tourOpen && !pageTourOpen && codexAuth.showOnboarding}
           onLink={handleOnboardingLink}
           onSkip={handleOnboardingSkip}
         />

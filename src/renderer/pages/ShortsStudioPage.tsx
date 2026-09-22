@@ -522,7 +522,7 @@ export function ShortsStudioPage() {
             }
           />
         </div>
-        <div className="mt-7 flex flex-wrap gap-2">
+        <div data-tour="page-actions" className="mt-7 flex flex-wrap gap-2">
           <Button
             variant="ghost"
             className="h-9 px-3 text-xs"

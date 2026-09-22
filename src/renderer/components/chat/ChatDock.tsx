@@ -1,4 +1,4 @@
-import { MessageSquare, X } from 'lucide-react'
+import { MessageSquare, Sparkles, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   CHAT_DOCK_DEFAULT_HEIGHT,
@@ -7,6 +7,7 @@ import {
   normalizeChatDockSize,
   type ChatDockSize,
 } from '@shared/chat/chatDockSize'
+import { atlasAssistantCopy } from '@shared/assistant'
 import { ChatPage } from '../../pages/ChatPage'
 import { getAtlasApi } from '../../lib/api'
 import { onAtlasChatOpen } from '../../lib/chatEvents'
@@ -141,26 +142,52 @@ export function ChatDock() {
 
   return (
     <>
-      <button
-        type="button"
-        aria-label={open ? 'Fechar chat' : 'Abrir chat'}
-        title="Chat"
-        onClick={() => {
-          if (open) {
-            setOpen(false)
-            return
-          }
-          setOpen(true)
-        }}
-        className={cn(
-          'fixed bottom-5 right-5 z-[45] flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-colors',
-          open
-            ? 'bg-card-2 text-text ring-1 ring-border hover:bg-white/10'
-            : 'bg-accent text-black hover:bg-accent-hover',
-        )}
-      >
-        {open ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
-      </button>
+      <div className="fixed bottom-5 right-5 z-[45]">
+        {!open ? (
+          <div
+            id="atlas-chat-hint"
+            className="pointer-events-none absolute bottom-[calc(100%+10px)] right-0 whitespace-nowrap rounded-xl bg-card px-2.5 py-1.5 text-[11px] font-medium text-text shadow-[0_8px_24px_rgba(0,0,0,0.4)] ring-1 ring-border"
+          >
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="h-3 w-3 text-accent" />
+              {atlasAssistantCopy.speakHint}
+            </span>
+            <span className="absolute -bottom-1.5 right-4 h-3 w-3 rotate-45 bg-card ring-1 ring-border" />
+            <span className="absolute -bottom-px right-4 h-3 w-3 rotate-45 bg-card" />
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          data-tour="chat"
+          aria-label={open ? 'Fechar chat' : atlasAssistantCopy.speakLabel}
+          aria-describedby={open ? undefined : 'atlas-chat-hint'}
+          title={open ? 'Fechar chat' : atlasAssistantCopy.speakHint}
+          onClick={() => {
+            if (open) {
+              setOpen(false)
+              return
+            }
+            setOpen(true)
+          }}
+          className={cn(
+            'relative flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-colors',
+            open
+              ? 'bg-card-2 text-text ring-1 ring-border hover:bg-white/10'
+              : 'bg-accent text-black hover:bg-accent-hover',
+          )}
+        >
+          {open ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
+          {!open ? (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/80" />
+              <span className="relative inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white text-[8px] font-bold leading-none text-black">
+                1
+              </span>
+            </span>
+          ) : null}
+        </button>
+      </div>
 
       {open ? (
         <div

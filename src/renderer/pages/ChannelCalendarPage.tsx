@@ -526,7 +526,7 @@ export function ChannelCalendarPage() {
         subtitle="Planeje título, descrição e thumbnail de cada vídeo no calendário do canal."
       />
 
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div data-tour="page-actions" className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div
           role="tablist"
           aria-label="Visão do canal"

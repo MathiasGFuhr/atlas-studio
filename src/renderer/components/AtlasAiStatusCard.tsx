@@ -29,6 +29,7 @@ export function AtlasAiStatusCard({
     return (
       <button
         type="button"
+        data-tour="ai"
         title={view.compactLabel}
         aria-label={view.compactLabel}
         onClick={onClick}
@@ -51,6 +52,7 @@ export function AtlasAiStatusCard({
   return (
     <button
       type="button"
+      data-tour="ai"
       title={view.tooltip}
       aria-label={view.compactLabel}
       onClick={onClick}

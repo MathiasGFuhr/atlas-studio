@@ -51,6 +51,8 @@ export function seedIfEmpty(db: AppDatabase, workspaceRoot: string) {
     codexBinaryPath: '',
     antigravityBinaryPath: '',
     codexOnboardingDismissed: false,
+    productTourCompleted: false,
+    seenProductTours: [],
     notificationReadKeys: [],
     contentAreasAutoDetect: true,
     contentAreasHistoryEnabled: true,

@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { startAppUpdateService } from './services/updates/AppUpdateService'
@@ -100,33 +100,42 @@ function resolvePreloadPath(): string {
 }
 
 app.whenReady().then(async () => {
-  if (isSplashEnabled()) {
-    splashController = new SplashController()
-    if (!splashController.start(resolveAppIcon())) {
-      splashController = null
+  try {
+    if (isSplashEnabled()) {
+      splashController = new SplashController()
+      if (!splashController.start(resolveAppIcon())) {
+        splashController = null
+      }
     }
-  }
 
-  const { codexService } = await bootAtlasApp()
+    const { codexService } = await bootAtlasApp()
 
-  if (process.env.ATLAS_STATUS_CHECK === '1') {
-    try {
-      const status = await codexService.connect()
-      console.log('[atlas-status]', JSON.stringify(status))
-      app.exit(status.connected ? 0 : 1)
-    } catch (error) {
-      console.error('[atlas-status] failed', error)
-      app.exit(1)
+    if (process.env.ATLAS_STATUS_CHECK === '1') {
+      try {
+        const status = await codexService.connect()
+        console.log('[atlas-status]', JSON.stringify(status))
+        app.exit(status.connected ? 0 : 1)
+      } catch (error) {
+        console.error('[atlas-status] failed', error)
+        app.exit(1)
+      }
+      return
     }
-    return
+
+    createWindow()
+    startAppUpdateService({ getWindow: getMainWindow })
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  } catch (error) {
+    console.error('[atlas] falha ao preparar o workspace', error)
+    splashController?.dispose()
+    splashController = null
+    const message = error instanceof Error ? error.message : String(error)
+    dialog.showErrorBox('Atlas Studio', `Não foi possível preparar o workspace.\n\n${message}`)
+    app.exit(1)
   }
-
-  createWindow()
-  startAppUpdateService({ getWindow: getMainWindow })
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
 })
 
 app.on('window-all-closed', () => {

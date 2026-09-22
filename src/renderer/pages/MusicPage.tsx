@@ -63,7 +63,7 @@ export function MusicPage() {
         subtitle="Importe uma faixa para o Atlas analisar o áudio e sugerir cortes profissionais. Você pode aceitar o corte automático ou ajustar na mão."
       />
 
-      <div className="mb-5 flex justify-end gap-2">
+      <div data-tour="page-actions" className="mb-5 flex justify-end gap-2">
         <Button variant="secondary" onClick={() => navigate('/musica')}>
           Projetos de Música
         </Button>

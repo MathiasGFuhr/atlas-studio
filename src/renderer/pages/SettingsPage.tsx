@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Database, Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid, ExternalLink } from 'lucide-react'
+import { Database, Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid, ExternalLink, Compass } from 'lucide-react'
 import type { AntigravityStatus, AppSettings } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
@@ -19,6 +19,7 @@ import { notifySettingsChanged } from '../lib/settingsEvents'
 import { AgentIntegrationModels } from '../components/settings/AgentIntegrationModels'
 import { useAgentModels } from '../hooks/useAgentModels'
 import { cn } from '../lib/utils'
+import { requestProductTourReplay } from '../lib/productTourEvents'
 
 export function SettingsPage({
   onSettingsSaved,
@@ -190,7 +191,7 @@ export function SettingsPage({
         subtitle="Ajuste o sistema para o seu fluxo de trabalho."
       />
 
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div data-tour="page-actions" className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatusMini
           icon={Bot}
           title="Codex"
@@ -222,7 +223,7 @@ export function SettingsPage({
         />
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <SettingsCard title="Áreas do Atlas" icon={LayoutGrid}>
           <p className="text-xs leading-relaxed text-muted">
             Controla só o que aparece na interface. Projetos, canais e roteiros continuam no Atlas.
@@ -285,6 +286,32 @@ export function SettingsPage({
             />
             Música
           </label>
+        </SettingsCard>
+        <SettingsCard title="Introdução" icon={Compass}>
+          <p className="text-xs leading-relaxed text-muted">
+            A introdução mostra o estúdio na primeira abertura. Cada tela nova também tem um tutorial curto na primeira visita.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              icon={<Compass className="h-4 w-4" />}
+              onClick={() => requestProductTourReplay()}
+            >
+              Rever a introdução
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                void api.settings.update({ seenProductTours: [] }).then((next) => {
+                  setSettings(next)
+                  onSettingsSaved?.(next)
+                  push('Tutoriais das telas reativados.', 'success')
+                })
+              }}
+            >
+              Repetir tutoriais das telas
+            </Button>
+          </div>
         </SettingsCard>
       </div>
 
