@@ -293,6 +293,16 @@ describe('migração para projetos de História e Música', () => {
     })
   })
 
+  it('adiciona a pasta do artista aos canais em bancos antigos', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+
+    migrateSchema(db)
+
+    const cols = db.prepare('PRAGMA table_info(channels)').all() as Array<{ name: string }>
+    expect(cols.some((col) => col.name === 'folder_path')).toBe(true)
+  })
+
   it('adiciona pasta do projeto aos vídeos do calendário em bancos antigos', async () => {
     const db = await createLegacyDatabase()
     seedLegacyContent(db)
@@ -335,6 +345,7 @@ describe('migração para projetos de História e Música', () => {
       expect.objectContaining({ version: 11 }),
       expect.objectContaining({ version: 12 }),
       expect.objectContaining({ version: 13 }),
+      expect.objectContaining({ version: 14 }),
     ])
   })
 

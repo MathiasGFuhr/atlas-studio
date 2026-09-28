@@ -19,7 +19,7 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 13
+export const CURRENT_SCHEMA_VERSION = 14
 
 type SchemaStepResult = {
   historyCreated: number
@@ -120,6 +120,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'quick-prompt-tabs',
     backup: false,
     up: applyQuickPromptTabs,
+  },
+  {
+    version: 14,
+    name: 'channel-folder',
+    backup: false,
+    up: applyChannelFolder,
   },
 ]
 
@@ -311,6 +317,14 @@ function applyChannelVideoProjectFolder(database: AppDatabase): {
   musicCreated: number
 } {
   ensureColumn(database, 'channel_videos', 'project_folder_path', 'TEXT')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyChannelFolder(database: AppDatabase): SchemaStepResult {
+  const channels = database
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'channels'`)
+    .get() as { name: string } | undefined
+  if (channels) ensureColumn(database, 'channels', 'folder_path', 'TEXT')
   return { historyCreated: 0, musicCreated: 0 }
 }
 

@@ -22,6 +22,7 @@ import {
   createProjectFolder,
   folderExists,
   resolveEnvironmentRoot,
+  resolveFolderDialogStart,
 } from '../storage/projectFolders'
 import type { CodexService } from '../codex/CodexService'
 import { AtlasActionRegistry, projectNavigatePath, type AtlasActionContext } from './AtlasActionRegistry'
@@ -293,7 +294,13 @@ export function createAtlasActionRegistry(deps: {
         entityId: project.id,
       })
     }
-    const folder = createProjectFolder({ name: project.name, projectType: project.projectType })
+    const folder = createProjectFolder({
+      name: project.name,
+      projectType: project.projectType,
+      parentFolder: project.channelId
+        ? channelRepository.get(project.channelId)?.folderPath
+        : null,
+    })
     const updated = projectRepository.update(project.id, { projectFolderPath: folder })
     return ok({
       name: 'create_project_folder',
@@ -311,10 +318,13 @@ export function createAtlasActionRegistry(deps: {
     const result = await dialog.showOpenDialog(win ?? undefined!, {
       title: 'Selecionar pasta do projeto',
       properties: ['openDirectory', 'createDirectory'],
-      defaultPath:
-        (project.projectFolderPath && folderExists(project.projectFolderPath)
-          ? project.projectFolderPath
-          : undefined) ?? resolveEnvironmentRoot(project.projectType),
+      defaultPath: resolveFolderDialogStart(
+        [
+          project.projectFolderPath,
+          project.channelId ? channelRepository.get(project.channelId)?.folderPath : null,
+        ],
+        resolveEnvironmentRoot(project.projectType),
+      ),
     })
     if (result.canceled || !result.filePaths[0]) {
       throw new Error('Nenhuma pasta foi selecionada.')
@@ -377,6 +387,7 @@ export function createAtlasActionRegistry(deps: {
         name: item.name,
         channelType: item.channelType,
         description: item.description,
+        folderPath: item.folderPath,
       })),
     })
   })
@@ -396,6 +407,7 @@ export function createAtlasActionRegistry(deps: {
         name: channel.name,
         channelType: channel.channelType,
         description: channel.description,
+        folderPath: channel.folderPath,
       },
     })
   })
@@ -418,6 +430,7 @@ export function createAtlasActionRegistry(deps: {
       color: str(input, 'color') || '#35e58b',
       channelType,
       active: true,
+      folderPath: null,
     })
     return ok({
       name: 'create_channel',

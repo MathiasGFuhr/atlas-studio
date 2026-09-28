@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, MessageSquareText, Plus, Search, Trash2, Tv } from 'lucide-react'
+import { CalendarDays, CheckCircle2, FolderOpen, MessageSquareText, Plus, Search, Trash2, Tv } from 'lucide-react'
 import type { Channel, Niche } from '@shared/types'
 import { PROJECT_TYPE_LABEL } from '@shared/types'
 import { channelAgendaPath, channelPublishedPath } from '@shared/channelVideos'
@@ -22,6 +22,15 @@ import { MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { ENVIRONMENTS } from '../lib/environments'
 import { notifyChannelsChanged } from '../lib/channelEvents'
 import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
+
+function folderTail(folderPath: string): string {
+  const parts = folderPath.split(/[/\\]/).filter(Boolean)
+  return parts.slice(-2).join('\\') || folderPath
+}
+
+function folderPrompt(channel: Channel): string {
+  return channel.channelType === 'music' ? 'Vincular pasta do artista' : 'Vincular pasta do canal'
+}
 
 export function ChannelsPage() {
   const api = getAtlasApi()
@@ -69,6 +78,7 @@ export function ChannelsPage() {
       color: channel.color || CHANNEL_COLORS[0],
       channelType: channel.channelType ?? 'history',
       active: channel.active,
+      folderPath: channel.folderPath ?? null,
     })
     setModalOpen(true)
   }
@@ -106,6 +116,7 @@ export function ChannelsPage() {
         color: form.color,
         channelType: form.channelType,
         active: form.active,
+        folderPath: form.folderPath?.trim() || null,
       }
       let saved: Channel
       if (editing) {
@@ -125,6 +136,34 @@ export function ChannelsPage() {
       await load()
     } catch (error) {
       push(error instanceof Error ? error.message : 'Falha ao salvar canal', 'error')
+    }
+  }
+
+  async function linkFolder(channel: Channel) {
+    const folder = await api.dialog.selectFolder({
+      title: channel.channelType === 'music' ? 'Pasta do artista' : 'Pasta do canal',
+      defaultPath: channel.folderPath || undefined,
+    })
+    if (!folder) return
+    try {
+      await api.channels.update(channel.id, { folderPath: folder })
+      push(
+        channel.channelType === 'music' ? 'Pasta do artista vinculada.' : 'Pasta do canal vinculada.',
+        'success',
+      )
+      notifyChannelsChanged()
+      await load()
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao vincular a pasta', 'error')
+    }
+  }
+
+  async function openFolder(channel: Channel) {
+    if (!channel.folderPath) return
+    try {
+      await api.system.openPath(channel.folderPath)
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao abrir a pasta', 'error')
     }
   }
 
@@ -240,6 +279,27 @@ export function ChannelsPage() {
                   <span className="min-w-0 truncate">Nicho: {channel.nicheName}</span>
                 ) : null}
               </div>
+
+              <button
+                type="button"
+                className="flex min-w-0 items-center gap-1.5 text-left text-xs text-muted hover:text-text"
+                onClick={() =>
+                  void (
+                    channel.folderPath && channel.folderExists !== false
+                      ? openFolder(channel)
+                      : linkFolder(channel)
+                  )
+                }
+              >
+                <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {channel.folderPath && channel.folderExists !== false
+                    ? folderTail(channel.folderPath)
+                    : channel.folderPath
+                      ? 'Pasta não encontrada — vincular outra'
+                      : folderPrompt(channel)}
+                </span>
+              </button>
 
               <div className="mt-auto flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <StatusBadge

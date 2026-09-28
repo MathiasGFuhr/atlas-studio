@@ -1,11 +1,13 @@
-import { ImagePlus } from 'lucide-react'
+import { FolderOpen, FolderSearch, ImagePlus } from 'lucide-react'
 import type { Channel, ChannelType, Niche } from '@shared/types'
 import { PROJECT_TYPE_LABEL } from '@shared/types'
+import { getAtlasApi } from '../lib/api'
 import { Button } from './Button'
 import { Input } from './Input'
 import { Modal } from './Modal'
 import { Select } from './Select'
 import { Textarea } from './Textarea'
+import { useToast } from './Toast'
 
 export const CHANNEL_COLORS = ['#35e58b', '#5b8cff', '#f0b429', '#f07178', '#c084fc', '#38bdf8']
 
@@ -17,6 +19,7 @@ export type ChannelFormValues = {
   color: string
   channelType: ChannelType
   active: boolean
+  folderPath: string | null
 }
 
 export const EMPTY_CHANNEL_FORM: ChannelFormValues = {
@@ -27,6 +30,7 @@ export const EMPTY_CHANNEL_FORM: ChannelFormValues = {
   color: CHANNEL_COLORS[0],
   channelType: 'history',
   active: true,
+  folderPath: null,
 }
 
 export function ChannelEditorModal({
@@ -56,7 +60,27 @@ export function ChannelEditorModal({
   onSubmit: () => void
   onPickAvatar: () => void
 }) {
+  const api = getAtlasApi()
+  const { push } = useToast()
   const types = allowedTypes?.length ? allowedTypes : (['history', 'music'] as ChannelType[])
+  const folderTitle = form.channelType === 'music' ? 'Pasta do artista' : 'Pasta do canal'
+
+  async function pickFolder() {
+    const folder = await api.dialog.selectFolder({
+      title: folderTitle,
+      defaultPath: form.folderPath || undefined,
+    })
+    if (folder) onChange({ folderPath: folder })
+  }
+
+  async function openFolder() {
+    if (!form.folderPath) return
+    try {
+      await api.system.openPath(form.folderPath)
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao abrir a pasta', 'error')
+    }
+  }
   const nicheOptions = [
     { value: '', label: 'Nenhum nicho vinculado' },
     ...niches.map((n) => ({ value: n.id, label: n.name })),
@@ -127,6 +151,57 @@ export function ChannelEditorModal({
               />
             ))}
           </div>
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-medium text-muted">{folderTitle}</p>
+          {form.folderPath ? (
+            <>
+              <p className="mb-2 break-all rounded-xl border border-border-soft bg-card-2 px-3 py-2.5 font-mono text-xs text-muted">
+                {form.folderPath}
+              </p>
+              {editing?.folderPath === form.folderPath && editing.folderExists === false ? (
+                <p className="mb-2 text-xs text-yellow-500/80">A pasta vinculada não foi encontrada no disco.</p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-9 px-3 text-xs"
+                  icon={<FolderOpen className="h-3.5 w-3.5" />}
+                  onClick={() => void openFolder()}
+                >
+                  Abrir pasta
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-9 px-3 text-xs"
+                  icon={<FolderSearch className="h-3.5 w-3.5" />}
+                  onClick={() => void pickFolder()}
+                >
+                  Alterar pasta
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-9 px-3 text-xs"
+                  onClick={() => onChange({ folderPath: null })}
+                >
+                  Desvincular
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9 px-3 text-xs"
+              icon={<FolderSearch className="h-3.5 w-3.5" />}
+              onClick={() => void pickFolder()}
+            >
+              Vincular pasta
+            </Button>
+          )}
         </div>
         <div>
           <p className="mb-2 text-sm font-medium text-muted">Foto do canal</p>

@@ -16,6 +16,7 @@ import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { TitleScoreBadge, TitleScorePanel } from '../components/TitleScore'
 import { notifyVideosChanged } from '../lib/videoEvents'
+import { notifyChannelsChanged } from '../lib/channelEvents'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { projectPath } from '../lib/environments'
 import { cn } from '../lib/utils'
@@ -342,10 +343,44 @@ export function ChannelCalendarPage() {
   }
 
   async function pickProjectFolder() {
-    const folder = await api.dialog.selectFolder()
+    const folder = await api.dialog.selectFolder({
+      title: 'Pasta do projeto',
+      defaultPath:
+        (channel?.folderPath && channel.folderExists !== false ? channel.folderPath : undefined) ||
+        undefined,
+    })
     if (!folder) return
     setForm((f) => ({ ...f, projectFolderPath: folder }))
     push('Pasta do projeto selecionada.', 'success')
+  }
+
+  async function linkArtistFolder() {
+    if (!channel) return
+    const folder = await api.dialog.selectFolder({
+      title: channel.channelType === 'music' ? 'Pasta do artista' : 'Pasta do canal',
+      defaultPath: channel.folderPath || undefined,
+    })
+    if (!folder) return
+    try {
+      const updated = await api.channels.update(channel.id, { folderPath: folder })
+      if (updated) setChannel(updated)
+      notifyChannelsChanged()
+      push(
+        channel.channelType === 'music' ? 'Pasta do artista vinculada.' : 'Pasta do canal vinculada.',
+        'success',
+      )
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao vincular a pasta', 'error')
+    }
+  }
+
+  async function openArtistFolder() {
+    if (!channel?.folderPath) return
+    try {
+      await api.system.openPath(channel.folderPath)
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao abrir a pasta', 'error')
+    }
   }
 
   async function openProjectFolder() {
@@ -574,6 +609,19 @@ export function ChannelCalendarPage() {
             </div>
             <Button variant="secondary" className="h-10 w-10 px-0" onClick={() => shiftMonth(1)} aria-label="Próximo mês">
               <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="secondary"
+              icon={<FolderOpen className="h-4 w-4" />}
+              onClick={() =>
+                void (
+                  channel.folderPath && channel.folderExists !== false
+                    ? openArtistFolder()
+                    : linkArtistFolder()
+                )
+              }
+            >
+              {channel.folderPath && channel.folderExists !== false ? 'Pasta' : 'Vincular pasta'}
             </Button>
             <Button icon={<Plus className="h-4 w-4" />} onClick={() => openCreate()}>
               Novo vídeo

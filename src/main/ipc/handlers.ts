@@ -7,6 +7,7 @@ import type {
   AnalyzeTitleRequest,
   Channel,
   ChannelPrompt,
+  SelectFolderOptions,
   ChannelVideo,
   ChannelVideoWriteInput,
   GenerateScriptRequest,
@@ -25,6 +26,7 @@ import {
   createProjectFolder,
   folderExists,
   resolveEnvironmentRoot,
+  resolveFolderDialogStart,
 } from '../services/storage/projectFolders'
 import { scriptRepository } from '../repositories/scriptRepository'
 import { settingsRepository } from '../repositories/settingsRepository'
@@ -98,6 +100,11 @@ import {
 import path from 'node:path'
 import fs from 'node:fs'
 
+function channelFolderPath(channelId: string | null | undefined): string | null {
+  if (!channelId) return null
+  return channelRepository.get(channelId)?.folderPath ?? null
+}
+
 export function registerIpcHandlers(deps: {
   codexService: CodexService
   runtimeManager: CodexRuntimeManager
@@ -166,7 +173,11 @@ export function registerIpcHandlers(deps: {
     if (project.projectFolderPath && folderExists(project.projectFolderPath)) {
       return project
     }
-    const folder = createProjectFolder({ name: project.name, projectType: project.projectType })
+    const folder = createProjectFolder({
+      name: project.name,
+      projectType: project.projectType,
+      parentFolder: channelFolderPath(project.channelId),
+    })
     return projectRepository.update(id, { projectFolderPath: folder })
   })
 
@@ -177,10 +188,10 @@ export function registerIpcHandlers(deps: {
     const result = await dialog.showOpenDialog(win ?? undefined!, {
       title: 'Selecionar pasta do projeto',
       properties: ['openDirectory', 'createDirectory'],
-      defaultPath:
-        (project.projectFolderPath && folderExists(project.projectFolderPath)
-          ? project.projectFolderPath
-          : undefined) ?? resolveEnvironmentRoot(project.projectType),
+      defaultPath: resolveFolderDialogStart(
+        [project.projectFolderPath, channelFolderPath(project.channelId)],
+        resolveEnvironmentRoot(project.projectType),
+      ),
     })
     if (result.canceled || !result.filePaths[0]) return null
     return projectRepository.update(id, { projectFolderPath: result.filePaths[0] })
@@ -964,12 +975,18 @@ export function registerIpcHandlers(deps: {
     chatService.prepareAttachments(paths),
   )
 
-  ipcMain.handle(IPC.dialog.selectFolder, async () => {
+  ipcMain.handle(IPC.dialog.selectFolder, async (_e, options?: SelectFolderOptions) => {
     const win = getMainWindow()
     const settings = settingsRepository.get()
+    const preferred = typeof options?.defaultPath === 'string' ? options.defaultPath : ''
+    const title = typeof options?.title === 'string' ? options.title.trim() : ''
     const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: title || 'Selecionar pasta',
       properties: ['openDirectory'],
-      defaultPath: settings.skillLibraryRoot || undefined,
+      defaultPath:
+        (preferred && folderExists(preferred) ? preferred : undefined) ||
+        settings.skillLibraryRoot ||
+        undefined,
     })
     if (result.canceled || !result.filePaths[0]) return null
     return result.filePaths[0]

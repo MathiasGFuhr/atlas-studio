@@ -179,6 +179,7 @@ export function CreateActionsProvider({ children }: { children: ReactNode }) {
         color: channelForm.color,
         channelType: channelForm.channelType,
         active: channelForm.active,
+        folderPath: channelForm.folderPath?.trim() || null,
       })
       if (pendingAvatar) {
         await api.channels.setAvatar(saved.id, pendingAvatar)

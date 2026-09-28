@@ -1,5 +1,8 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { sanitizeWindowsFolderName } from './projectFolders'
+import { createProjectFolder, sanitizeWindowsFolderName } from './projectFolders'
 
 describe('sanitizeWindowsFolderName', () => {
   it('remove os caracteres que o Windows não aceita em nomes de pasta', () => {
@@ -29,5 +32,22 @@ describe('sanitizeWindowsFolderName', () => {
 
   it('limita o tamanho para caber no limite de caminho do Windows', () => {
     expect(sanitizeWindowsFolderName('a'.repeat(200))).toHaveLength(80)
+  })
+})
+
+describe('createProjectFolder', () => {
+  it('cria o projeto dentro da pasta do artista quando ela existe', () => {
+    const artist = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-artist-'))
+    try {
+      const created = createProjectFolder({
+        name: 'Heilige Luegen',
+        projectType: 'music',
+        parentFolder: artist,
+      })
+      expect(created).toBe(path.join(artist, 'Heilige Luegen'))
+      expect(fs.statSync(created).isDirectory()).toBe(true)
+    } finally {
+      fs.rmSync(artist, { recursive: true, force: true })
+    }
   })
 })

@@ -163,9 +163,18 @@ export interface Channel {
   /** Ambiente ao qual o canal está associado. Canais antigos assumem 'history'. */
   channelType: ChannelType
   active: boolean
+  /** Pasta física do artista ou do canal. `null` enquanto não houver vínculo. */
+  folderPath: string | null
+  /** Indica se a pasta vinculada ainda existe no disco. Calculado na leitura. */
+  folderExists?: boolean
   videoCount?: number
   createdAt: string
   updatedAt: string
+}
+
+export type SelectFolderOptions = {
+  title?: string
+  defaultPath?: string
 }
 
 export type TitleAnalysisProfile = 'music' | 'history' | 'general'

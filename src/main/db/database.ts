@@ -180,6 +180,7 @@ export async function initDatabase(workspaceRoot: string): Promise<AppDatabase> 
       youtube_url TEXT NOT NULL DEFAULT '',
       color TEXT NOT NULL DEFAULT '#35e58b',
       active INTEGER NOT NULL DEFAULT 1,
+      folder_path TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (niche_id) REFERENCES niches(id)

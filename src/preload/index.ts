@@ -13,6 +13,7 @@ import type {
   AntigravityStatus,
   Channel,
   ChannelPrompt,
+  SelectFolderOptions,
   ChannelVideo,
   ChannelVideoWriteInput,
   DiscoveredSkill,
@@ -455,7 +456,8 @@ const api = {
     },
   },
   dialog: {
-    selectFolder: () => ipcRenderer.invoke(IPC.dialog.selectFolder) as Promise<string | null>,
+    selectFolder: (options?: SelectFolderOptions) =>
+      ipcRenderer.invoke(IPC.dialog.selectFolder, options) as Promise<string | null>,
     selectImage: () => ipcRenderer.invoke(IPC.dialog.selectImage) as Promise<string | null>,
     readImageDataUrl: (filePath: string) =>
       ipcRenderer.invoke(IPC.dialog.readImageDataUrl, filePath) as Promise<string | null>,

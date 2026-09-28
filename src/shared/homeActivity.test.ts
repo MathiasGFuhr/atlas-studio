@@ -53,6 +53,7 @@ function channel(partial: Partial<Channel> & Pick<Channel, 'id' | 'name'>): Chan
     color: '#35e58b',
     channelType: 'history',
     active: true,
+    folderPath: null,
     createdAt: '2026-09-09T10:00:00.000Z',
     updatedAt: '2026-09-09T10:00:00.000Z',
     ...partial,

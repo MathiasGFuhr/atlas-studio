@@ -23,6 +23,7 @@ function channel(partial: Partial<Channel> & Pick<Channel, 'id' | 'name'>): Chan
     color: '#a78bfa',
     channelType: 'music',
     active: true,
+    folderPath: null,
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
     ...partial,

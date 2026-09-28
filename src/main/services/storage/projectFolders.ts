@@ -53,9 +53,16 @@ export function resolveEnvironmentRoot(projectType: ProjectType): string {
 /**
  * Cria a pasta física do projeto. Se já existir uma pasta com o mesmo nome,
  * adiciona um sufixo numérico em vez de reaproveitar a pasta de outro projeto.
+ * Se o artista tiver uma pasta vinculada e ela existir, o projeto nasce dentro dela.
  */
-export function createProjectFolder(input: { name: string; projectType: ProjectType }): string {
-  const environmentRoot = resolveEnvironmentRoot(input.projectType)
+export function createProjectFolder(input: {
+  name: string
+  projectType: ProjectType
+  parentFolder?: string | null
+}): string {
+  const artistFolder =
+    input.parentFolder && folderExists(input.parentFolder) ? path.resolve(input.parentFolder) : null
+  const environmentRoot = artistFolder ?? resolveEnvironmentRoot(input.projectType)
   fs.mkdirSync(environmentRoot, { recursive: true })
 
   const baseName = sanitizeWindowsFolderName(input.name)
@@ -69,6 +76,17 @@ export function createProjectFolder(input: { name: string; projectType: ProjectT
 
   fs.mkdirSync(target, { recursive: true })
   return target
+}
+
+/** Primeiro caminho que ainda existe no disco, ou o fallback. */
+export function resolveFolderDialogStart(
+  candidates: Array<string | null | undefined>,
+  fallback: string,
+): string {
+  for (const candidate of candidates) {
+    if (candidate && folderExists(candidate)) return path.resolve(candidate)
+  }
+  return fallback
 }
 
 export function folderExists(folderPath: string | null | undefined): boolean {

@@ -24,6 +24,7 @@ type ChannelRow = {
   color: string | null
   channel_type: string | null
   active: number
+  folder_path: string | null
   created_at: string
   updated_at: string
   niche_name?: string | null
@@ -82,6 +83,8 @@ function mapChannel(row: ChannelRow): Channel {
     color: row.color || '#35e58b',
     channelType: isProjectType(row.channel_type) ? row.channel_type : 'history',
     active: Number(row.active) === 1,
+    folderPath: row.folder_path?.trim() ? row.folder_path : null,
+    folderExists: folderExists(row.folder_path),
     videoCount: Number(row.video_count ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -168,14 +171,17 @@ export const channelRepository = {
   },
 
   create(
-    input: Omit<Channel, 'id' | 'createdAt' | 'updatedAt' | 'avatarDataUrl' | 'videoCount' | 'nicheName'>,
+    input: Omit<
+      Channel,
+      'id' | 'createdAt' | 'updatedAt' | 'avatarDataUrl' | 'videoCount' | 'nicheName' | 'folderExists'
+    >,
   ): Channel {
     const id = randomUUID()
     const timestamp = new Date().toISOString()
     getDb()
       .prepare(
-        `INSERT INTO channels (id, name, description, avatar_path, niche_id, youtube_url, color, channel_type, active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO channels (id, name, description, avatar_path, niche_id, youtube_url, color, channel_type, active, folder_path, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -187,6 +193,7 @@ export const channelRepository = {
         input.color || '#35e58b',
         isProjectType(input.channelType) ? input.channelType : 'history',
         input.active ? 1 : 0,
+        input.folderPath?.trim() || null,
         timestamp,
         timestamp,
       )
@@ -195,7 +202,9 @@ export const channelRepository = {
 
   update(
     id: string,
-    patch: Partial<Omit<Channel, 'id' | 'createdAt' | 'avatarDataUrl' | 'videoCount' | 'nicheName'>>,
+    patch: Partial<
+      Omit<Channel, 'id' | 'createdAt' | 'avatarDataUrl' | 'videoCount' | 'nicheName' | 'folderExists'>
+    >,
   ): Channel | null {
     const current = this.get(id)
     if (!current) return null
@@ -204,7 +213,7 @@ export const channelRepository = {
       .prepare(
         `UPDATE channels SET
           name = ?, description = ?, avatar_path = ?, niche_id = ?, youtube_url = ?,
-          color = ?, channel_type = ?, active = ?, updated_at = ?
+          color = ?, channel_type = ?, active = ?, folder_path = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -216,6 +225,7 @@ export const channelRepository = {
         next.color || '#35e58b',
         isProjectType(next.channelType) ? next.channelType : 'history',
         next.active ? 1 : 0,
+        next.folderPath?.trim() || null,
         next.updatedAt,
         id,
       )
