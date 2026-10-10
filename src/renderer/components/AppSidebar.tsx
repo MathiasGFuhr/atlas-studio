@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, CheckSquare, ChevronLeft, ChevronRight, Clapperboard, Home, MessageSquareText, Music2, Settings, Tv } from 'lucide-react'
+import { BookOpen, CheckSquare, ChevronLeft, ChevronRight, Clapperboard, Home, MessageSquareText, MessagesSquare, Music2, Settings, Tv } from 'lucide-react'
 import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
 import { isContentAreaEnabled, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
@@ -39,6 +39,7 @@ const globalItems = [
     color: ENVIRONMENTS.music.color,
     area: 'music' as const,
   },
+  { to: '/equipe', label: 'Chat', icon: MessagesSquare, color: undefined, area: null },
   { to: '/canais', label: 'Canais', icon: Tv, color: undefined, area: null },
   { to: '/shorts', label: 'Shorts Studio', icon: Clapperboard, color: undefined, area: null },
   { to: '/tarefas', label: 'Tarefas', icon: CheckSquare, color: undefined, area: null },

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
+import type { AtlasSession } from '@shared/account'
 import type { AppSettings } from '@shared/types'
 import { AppSidebar } from './components/AppSidebar'
 import { TopBar } from './components/TopBar'
@@ -29,6 +30,8 @@ import { MusicEditorPage } from './pages/MusicEditorPage'
 import { ShortsStudioPage } from './pages/ShortsStudioPage'
 import { ShortsProjectsPage } from './pages/ShortsProjectsPage'
 import { TasksPage } from './pages/TasksPage'
+import { LoginPage } from './pages/LoginPage'
+import { TeamChatPage } from './pages/TeamChatPage'
 import { ChatDock } from './components/chat/ChatDock'
 import { getAtlasApi } from './lib/api'
 import { openAtlasChat } from './lib/chatEvents'
@@ -55,6 +58,7 @@ function OpenChatRedirect() {
 export default function App() {
   const api = getAtlasApi()
   const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [session, setSession] = useState<AtlasSession | 'loading'>('loading')
   const [tourOpen, setTourOpen] = useState(false)
   const [tourChecked, setTourChecked] = useState(false)
   const codexAuth = useCodexAuth()
@@ -69,6 +73,8 @@ export default function App() {
       if (!next.productTourCompleted) setTourOpen(true)
       setTourChecked(true)
     })
+    void api.account.getSession().then(setSession)
+    return api.account.onChanged(setSession)
   }, [api])
 
   useEffect(() => {
@@ -114,6 +120,22 @@ export default function App() {
   const handleOnboardingSkip = useCallback(() => {
     codexAuth.dismissOnboarding()
   }, [codexAuth])
+
+  if (session === 'loading') {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-bg text-sm text-muted">
+        Abrindo o Atlas...
+      </div>
+    )
+  }
+
+  if (!session.user) {
+    return (
+      <ToastProvider>
+        <LoginPage onSignedIn={setSession} />
+      </ToastProvider>
+    )
+  }
 
   return (
         <ToastProvider>
@@ -236,6 +258,7 @@ export default function App() {
                 <Route path="/shorts" element={<ShortsProjectsPage />} />
                 <Route path="/shorts/:jobId" element={<ShortsStudioPage />} />
                 <Route path="/tarefas" element={<TasksPage />} />
+                <Route path="/equipe" element={<TeamChatPage account={session.user} />} />
                 <Route path="/chat" element={<OpenChatRedirect />} />
                 <Route path="/prompts" element={<Navigate to={MUSIC_PROMPTS_PATH} replace />} />
                 <Route

@@ -763,6 +763,9 @@ export const IPC = {
     createTab: 'quickPrompts:createTab',
     updateTab: 'quickPrompts:updateTab',
     removeTab: 'quickPrompts:removeTab',
+    listShared: 'quickPrompts:listShared',
+    setPublic: 'quickPrompts:setPublic',
+    copyShared: 'quickPrompts:copyShared',
   },
   prompts: {
     list: 'prompts:list',
@@ -835,6 +838,21 @@ export const IPC = {
   },
   workspace: {
     capabilities: 'workspace:capabilities',
+  },
+  account: {
+    getSession: 'account:getSession',
+    signIn: 'account:signIn',
+    signUp: 'account:signUp',
+    signOut: 'account:signOut',
+    updateProfile: 'account:updateProfile',
+    changed: 'account:changed',
+  },
+  teamChat: {
+    listMessages: 'teamChat:listMessages',
+    sendMessage: 'teamChat:sendMessage',
+    listOnline: 'teamChat:listOnline',
+    message: 'teamChat:message',
+    presence: 'teamChat:presence',
   },
   codex: {
     status: 'codex:status',

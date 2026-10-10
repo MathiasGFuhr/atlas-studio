@@ -1,7 +1,7 @@
 {
   "name": "atlas-studio",
   "productName": "Atlas Studio",
-  "version": "1.27.0",
+  "version": "1.28.0",
   "description": "Atlas Studio — Sistema de roteiros com IA",
   "private": true,
   "main": "dist-electron/main.js",
@@ -32,6 +32,7 @@
     "postinstall": "node scripts/patch-electron-plugin.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.3.0",

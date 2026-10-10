@@ -346,6 +346,7 @@ describe('migração para projetos de História e Música', () => {
       expect.objectContaining({ version: 12 }),
       expect.objectContaining({ version: 13 }),
       expect.objectContaining({ version: 14 }),
+      expect.objectContaining({ version: 15 }),
     ])
   })
 
@@ -841,5 +842,71 @@ describe('migração de sub-abas de Meus prompts', () => {
     expect(() => {
       db.exec('CREATE INDEX IF NOT EXISTS idx_quick_prompts_tab ON quick_prompts(tab_id)')
     }).not.toThrow()
+  })
+})
+
+describe('migração de prompts públicos', () => {
+  it('adiciona is_public em quick_prompts existentes', async () => {
+    const SQL = await initSqlJs({
+      locateFile: () => require.resolve('sql.js/dist/sql-wasm.wasm'),
+    })
+    const raw = new SQL.Database()
+    const db: AppDatabase = {
+      exec(sql: string) {
+        raw.run(sql)
+      },
+      prepare(sql: string) {
+        return {
+          run(...params: unknown[]) {
+            raw.run(sql, params as never[])
+          },
+          get(...params: unknown[]) {
+            const stmt = raw.prepare(sql)
+            stmt.bind(params as never[])
+            const row = stmt.step() ? (stmt.getAsObject() as Record<string, unknown>) : undefined
+            stmt.free()
+            return row
+          },
+          all(...params: unknown[]) {
+            const stmt = raw.prepare(sql)
+            stmt.bind(params as never[])
+            const rows: Record<string, unknown>[] = []
+            while (stmt.step()) rows.push(stmt.getAsObject() as Record<string, unknown>)
+            stmt.free()
+            return rows
+          },
+        }
+      },
+      persist() {},
+    }
+
+    db.exec(`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      );
+      CREATE TABLE quick_prompts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'custom',
+        text TEXT NOT NULL,
+        tab_id TEXT,
+        project_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(
+      14,
+      'channel-folder',
+      '2026-01-01T00:00:00.000Z',
+    )
+
+    const result = migrateSchema(db)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+
+    const cols = db.prepare('PRAGMA table_info(quick_prompts)').all() as Array<{ name: string }>
+    expect(cols.some((col) => col.name === 'is_public')).toBe(true)
   })
 })

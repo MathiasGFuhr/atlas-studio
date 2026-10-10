@@ -165,8 +165,30 @@ export interface CustomPrompt {
   tabId: string | null
   /** `null` = disponível em todos os projetos de Música. */
   projectId: string | null
+  /** Publicado no catálogo do Supabase para outros usuários. */
+  isPublic: boolean
   createdAt: string
   updatedAt: string
+}
+
+/** Prompt publicado no catálogo compartilhado. */
+export interface SharedPrompt {
+  id: string
+  localPromptId: string
+  name: string
+  text: string
+  tabName: string | null
+  authorId: string
+  authorName: string
+  publishedAt: string
+  updatedAt: string
+}
+
+/** Lista pública + se o app tem Supabase e quem é o autor desta instalação. */
+export interface SharedPromptCatalogSnapshot {
+  configured: boolean
+  authorId: string | null
+  items: SharedPrompt[]
 }
 
 /** Sub-aba criada pelo usuário em Meus prompts (lipsync, câmeras, etc.). */
@@ -180,3 +202,6 @@ export interface CustomPromptTab {
 
 /** Id sintético da vista que lista todos os prompts, independente de aba. */
 export const ALL_PROMPT_TABS_ID = 'all'
+
+/** Id sintético da vista que lista prompts públicos do Supabase. */
+export const SHARED_PROMPT_TABS_ID = 'shared'

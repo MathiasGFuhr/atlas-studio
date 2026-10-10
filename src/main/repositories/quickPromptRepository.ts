@@ -9,6 +9,7 @@ type QuickPromptRow = {
   text: string
   tab_id: string | null
   project_id: string | null
+  is_public: number | null
   created_at: string
   updated_at: string
 }
@@ -29,6 +30,7 @@ function mapPrompt(row: QuickPromptRow): CustomPrompt {
     text: row.text,
     tabId: row.tab_id?.trim() || null,
     projectId: row.project_id ?? null,
+    isPublic: Boolean(row.is_public),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -104,8 +106,8 @@ export const quickPromptRepository = {
     const timestamp = new Date().toISOString()
     getDb()
       .prepare(
-        `INSERT INTO quick_prompts (id, name, category, text, tab_id, project_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO quick_prompts (id, name, category, text, tab_id, project_id, is_public, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
       )
       .run(
         id,
@@ -147,6 +149,15 @@ export const quickPromptRepository = {
          WHERE id = ?`,
       )
       .run(name, category, text, tabId, projectId, new Date().toISOString(), id)
+    return this.get(id)
+  },
+
+  setPublic(id: string, isPublic: boolean): CustomPrompt | null {
+    const current = this.get(id)
+    if (!current) return null
+    getDb()
+      .prepare('UPDATE quick_prompts SET is_public = ?, updated_at = ? WHERE id = ?')
+      .run(isPublic ? 1 : 0, new Date().toISOString(), id)
     return this.get(id)
   },
 

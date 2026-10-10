@@ -52,6 +52,10 @@ import { channelRepository } from '../repositories/channelRepository'
 import { promptRepository } from '../repositories/promptRepository'
 import { quickPromptRepository } from '../repositories/quickPromptRepository'
 import type { CustomPrompt } from '../../shared/quickPrompts/types'
+import { sharedPromptService } from '../services/quickPrompts/sharedPromptService'
+import { accountService } from '../services/account/accountService'
+import { teamChatService } from '../services/teamChat/teamChatService'
+import type { AtlasAuthInput } from '../../shared/account'
 import { musicRepository } from '../repositories/musicRepository'
 import { shortsRepository } from '../repositories/shortsRepository'
 import { analyzeShortsJob, regenerateShortsClipCopy } from '../services/shorts/ShortsPipeline'
@@ -128,6 +132,16 @@ export function registerIpcHandlers(deps: {
       win.webContents.send(IPC.agents.capabilitiesChanged, bundle)
     }
   }
+
+  const emitSession = (session: Awaited<ReturnType<typeof accountService.getSession>>) => {
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(IPC.account.changed, session)
+  }
+
+  teamChatService.attachWindow(getMainWindow)
+  void accountService.getSession().then((session) => {
+    if (session.user) void teamChatService.start()
+  })
 
   agentModelCatalog.onChange(emitCapabilities)
 
@@ -335,10 +349,16 @@ export function registerIpcHandlers(deps: {
   )
   ipcMain.handle(
     IPC.quickPrompts.update,
-    (_e, id: string, patch: Partial<Omit<CustomPrompt, 'id' | 'createdAt' | 'updatedAt'>>) =>
-      quickPromptRepository.update(id, patch),
+    async (_e, id: string, patch: Partial<Omit<CustomPrompt, 'id' | 'createdAt' | 'updatedAt'>>) => {
+      const updated = quickPromptRepository.update(id, patch)
+      if (updated) await sharedPromptService.syncIfPublic(updated)
+      return updated
+    },
   )
-  ipcMain.handle(IPC.quickPrompts.remove, (_e, id: string) => quickPromptRepository.remove(id))
+  ipcMain.handle(IPC.quickPrompts.remove, async (_e, id: string) => {
+    await sharedPromptService.unpublishLocal(id)
+    return quickPromptRepository.remove(id)
+  })
   ipcMain.handle(IPC.quickPrompts.listFavorites, () => quickPromptRepository.listFavorites())
   ipcMain.handle(IPC.quickPrompts.setFavorite, (_e, itemId: string, favorite: boolean) =>
     quickPromptRepository.setFavorite(itemId, favorite),
@@ -355,6 +375,44 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.quickPrompts.removeTab, (_e, id: string) =>
     quickPromptRepository.removeTab(id),
   )
+  ipcMain.handle(IPC.quickPrompts.listShared, () => sharedPromptService.listShared())
+  ipcMain.handle(IPC.quickPrompts.setPublic, (_e, id: string, isPublic: boolean) =>
+    sharedPromptService.setPublic(id, isPublic),
+  )
+  ipcMain.handle(
+    IPC.quickPrompts.copyShared,
+    (_e, sharedId: string, input?: { tabId?: string | null }) =>
+      sharedPromptService.copyShared(sharedId, input),
+  )
+
+  ipcMain.handle(IPC.account.getSession, () => accountService.getSession())
+  ipcMain.handle(IPC.account.signIn, async (_e, input: AtlasAuthInput) => {
+    const session = await accountService.signIn(input)
+    emitSession(session)
+    void teamChatService.start()
+    return session
+  })
+  ipcMain.handle(IPC.account.signUp, async (_e, input: AtlasAuthInput) => {
+    const session = await accountService.signUp(input)
+    emitSession(session)
+    void teamChatService.start()
+    return session
+  })
+  ipcMain.handle(IPC.account.signOut, async () => {
+    teamChatService.stop()
+    const session = await accountService.signOut()
+    emitSession(session)
+    return session
+  })
+  ipcMain.handle(IPC.account.updateProfile, async (_e, name: string) => {
+    const session = await accountService.updateProfile(name)
+    emitSession(session)
+    void teamChatService.start()
+    return session
+  })
+  ipcMain.handle(IPC.teamChat.listMessages, () => teamChatService.listMessages())
+  ipcMain.handle(IPC.teamChat.sendMessage, (_e, body: string) => teamChatService.sendMessage(body))
+  ipcMain.handle(IPC.teamChat.listOnline, () => teamChatService.listOnline())
 
   ipcMain.handle(IPC.antigravity.status, () => antigravityService.getStatus())
   ipcMain.handle(IPC.antigravity.healthCheck, async () => {

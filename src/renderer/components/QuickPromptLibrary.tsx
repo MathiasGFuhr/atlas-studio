@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Check, Copy, FolderPlus, Pencil, Plus, Search, Star, Trash2 } from 'lucide-react'
-import { ALL_PROMPT_TABS_ID } from '@shared/quickPrompts'
-import type { CustomPrompt, CustomPromptTab } from '@shared/quickPrompts'
+import { Check, Copy, FolderPlus, Globe, Pencil, Plus, Search, Star, Trash2 } from 'lucide-react'
+import { ALL_PROMPT_TABS_ID, SHARED_PROMPT_TABS_ID } from '@shared/quickPrompts'
+import type {
+  CustomPrompt,
+  CustomPromptTab,
+  SharedPrompt,
+  SharedPromptCatalogSnapshot,
+} from '@shared/quickPrompts'
 import { Card } from './Card'
 import { Button } from './Button'
 import { Input } from './Input'
@@ -17,7 +22,12 @@ import { cn } from '../lib/utils'
 const TAB_STORAGE_KEY = 'atlas.quickPrompts.subTab'
 const LEGACY_TABS = new Set(['image', 'animation', 'custom'])
 
-const EMPTY_PROMPT_FORM = { name: '', tabId: '', text: '', scope: 'global' }
+const EMPTY_PROMPT_FORM = { name: '', tabId: '', text: '', scope: 'global', isPublic: false }
+const EMPTY_SHARED_CATALOG: SharedPromptCatalogSnapshot = {
+  configured: true,
+  authorId: null,
+  items: [],
+}
 const EMPTY_TAB_FORM = { name: '' }
 
 function readStoredTab(): string {
@@ -33,6 +43,10 @@ function readStoredTab(): string {
 function parseTabParam(value: string | null | undefined): string | null {
   if (!value || LEGACY_TABS.has(value)) return null
   return value
+}
+
+function isBuiltInTab(id: string): boolean {
+  return id === ALL_PROMPT_TABS_ID || id === SHARED_PROMPT_TABS_ID
 }
 
 /**
@@ -59,6 +73,7 @@ export function QuickPromptLibrary({
   const [customPrompts, setCustomPrompts] = useState<CustomPrompt[]>([])
   const [tabs, setTabs] = useState<CustomPromptTab[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
+  const [sharedCatalog, setSharedCatalog] = useState<SharedPromptCatalogSnapshot>(EMPTY_SHARED_CATALOG)
   const [activeTabId, setActiveTabId] = useState(
     () => parseTabParam(searchParams.get('tab')) ?? readStoredTab(),
   )
@@ -77,14 +92,16 @@ export function QuickPromptLibrary({
   const activeTab = activeTabId === ALL_PROMPT_TABS_ID ? null : (tabById.get(activeTabId) ?? null)
 
   const load = useCallback(async () => {
-    const [promptList, tabList, favoriteList] = await Promise.all([
+    const [promptList, tabList, favoriteList, shared] = await Promise.all([
       api.quickPrompts.list({ projectId }),
       api.quickPrompts.listTabs(),
       api.quickPrompts.listFavorites(),
+      api.quickPrompts.listShared().catch(() => EMPTY_SHARED_CATALOG),
     ])
     setCustomPrompts(promptList)
     setTabs(tabList)
     setFavorites(favoriteList)
+    setSharedCatalog(shared)
   }, [api, projectId])
 
   useEffect(() => {
@@ -103,7 +120,7 @@ export function QuickPromptLibrary({
   }, [searchParams])
 
   useEffect(() => {
-    if (activeTabId === ALL_PROMPT_TABS_ID || tabs.length === 0) return
+    if (isBuiltInTab(activeTabId) || tabs.length === 0) return
     if (tabs.some((tab) => tab.id === activeTabId)) return
     setActiveTabId(ALL_PROMPT_TABS_ID)
     try {
@@ -161,6 +178,17 @@ export function QuickPromptLibrary({
     }
   }
 
+  async function addSharedToLibrary(item: SharedPrompt) {
+    try {
+      await api.quickPrompts.copyShared(item.id)
+      push('Prompt adicionado à sua biblioteca.', 'success')
+      notifyPromptsChanged()
+      await load()
+    } catch (error) {
+      push(error instanceof Error ? error.message : 'Falha ao copiar o prompt público', 'error')
+    }
+  }
+
   async function toggleFavorite(id: string) {
     setFavorites(await api.quickPrompts.setFavorite(id, !favoriteSet.has(id)))
   }
@@ -181,6 +209,7 @@ export function QuickPromptLibrary({
       tabId: prompt.tabId ?? '',
       text: prompt.text,
       scope: prompt.projectId ? 'project' : 'global',
+      isPublic: prompt.isPublic,
     })
     setFormOpen(true)
   }
@@ -203,13 +232,16 @@ export function QuickPromptLibrary({
         tabId: form.tabId || null,
         projectId: form.scope === 'project' ? projectId : null,
       }
-      if (editing) {
-        await api.quickPrompts.update(editing.id, payload)
-        push('Prompt atualizado.', 'success')
-      } else {
-        await api.quickPrompts.create(payload)
-        push('Prompt salvo.', 'success')
+      const saved = editing
+        ? await api.quickPrompts.update(editing.id, payload)
+        : await api.quickPrompts.create(payload)
+      if (!saved) throw new Error('Não foi possível salvar o prompt.')
+      if (form.isPublic !== saved.isPublic) {
+        await api.quickPrompts.setPublic(saved.id, form.isPublic)
+      } else if (form.isPublic) {
+        await api.quickPrompts.setPublic(saved.id, true)
       }
+      push(editing ? 'Prompt atualizado.' : 'Prompt salvo.', 'success')
       setFormOpen(false)
       notifyPromptsChanged()
       await load()
@@ -275,22 +307,51 @@ export function QuickPromptLibrary({
     ...tabs.map((tab) => ({ value: tab.id, label: tab.name })),
   ]
 
-  const emptyMessage = query
-    ? 'Nenhum prompt encontrado'
-    : activeTab
-      ? `Nenhum prompt em “${activeTab.name}”`
-      : 'Nenhum prompt criado ainda'
-  const emptyHint = query
-    ? 'Nenhum prompt encontrado para esta busca.'
-    : activeTab
-      ? 'Clique em Adicionar prompt para guardar um texto nesta aba.'
-      : 'Peça para a IA salvar um prompt na conversa ou clique em Adicionar prompt.'
+  const viewingShared = activeTabId === SHARED_PROMPT_TABS_ID
+  const sharedItems = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    if (!term) return sharedCatalog.items
+    return sharedCatalog.items.filter((item) => {
+      return (
+        item.name.toLowerCase().includes(term) ||
+        item.text.toLowerCase().includes(term) ||
+        (item.authorName ?? '').toLowerCase().includes(term) ||
+        (item.tabName ?? '').toLowerCase().includes(term)
+      )
+    })
+  }, [query, sharedCatalog.items])
+
+  const emptyMessage = viewingShared
+    ? query
+      ? 'Nenhum prompt público encontrado'
+      : 'Nenhum prompt público ainda'
+    : query
+      ? 'Nenhum prompt encontrado'
+      : activeTab
+        ? `Nenhum prompt em “${activeTab.name}”`
+        : 'Nenhum prompt criado ainda'
+  const emptyHint = viewingShared
+    ? query
+      ? 'Nenhum prompt público encontrado para esta busca.'
+      : 'Quando alguém marcar um prompt como público, ele aparece aqui.'
+    : query
+      ? 'Nenhum prompt encontrado para esta busca.'
+      : activeTab
+        ? 'Clique em Adicionar prompt para guardar um texto nesta aba.'
+        : 'Peça para a IA salvar um prompt na conversa ou clique em Adicionar prompt.'
 
   const body = (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card-2 p-1">
         <TabButton active={activeTabId === ALL_PROMPT_TABS_ID} onClick={() => selectTab(ALL_PROMPT_TABS_ID)}>
           Todos
+        </TabButton>
+        <TabButton
+          active={activeTabId === SHARED_PROMPT_TABS_ID}
+          onClick={() => selectTab(SHARED_PROMPT_TABS_ID)}
+        >
+          <Globe className="h-3.5 w-3.5" />
+          Públicos
         </TabButton>
         {tabs.map((tab) => (
           <TabButton
@@ -319,26 +380,82 @@ export function QuickPromptLibrary({
           <Input
             className="pl-9"
             placeholder={
-              activeTab ? `Buscar em ${activeTab.name}...` : 'Buscar meus prompts...'
+              viewingShared
+                ? 'Buscar prompts públicos...'
+                : activeTab
+                  ? `Buscar em ${activeTab.name}...`
+                  : 'Buscar meus prompts...'
             }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <Button
-          variant="secondary"
-          className="h-11"
-          icon={<Plus className="h-4 w-4" />}
-          onClick={openCreate}
-        >
-          Adicionar prompt
-        </Button>
+        {viewingShared ? null : (
+          <Button
+            variant="secondary"
+            className="h-11"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={openCreate}
+          >
+            Adicionar prompt
+          </Button>
+        )}
       </div>
 
-      {items.length === 0 ? (
+      {(viewingShared ? sharedItems.length === 0 : items.length === 0) ? (
         <div className="flex flex-col items-center py-10 text-center">
           <p className="text-sm font-medium text-text">{emptyMessage}</p>
           <p className="mt-1 max-w-md text-xs leading-relaxed text-muted">{emptyHint}</p>
+        </div>
+      ) : viewingShared ? (
+        <div className="space-y-2">
+          {sharedItems.map((item) => {
+            const mine = Boolean(sharedCatalog.authorId && item.authorId === sharedCatalog.authorId)
+            return (
+              <div
+                key={item.id}
+                className="flex items-start gap-2 rounded-xl border border-border bg-card-2 px-3 py-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="truncate text-sm font-medium text-text">{item.name}</div>
+                    {mine ? (
+                      <span className="rounded-md bg-accent-dark px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                        Seu
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-xs text-muted-2">
+                    {[item.authorName || 'Autor anônimo', item.tabName].filter(Boolean).join(' · ')}
+                  </div>
+                  <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-muted">
+                    {item.text}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  className="h-8 shrink-0 px-2 text-xs"
+                  icon={
+                    copied === item.id ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )
+                  }
+                  onClick={() => void copy(item.text, item.id)}
+                >
+                  {copied === item.id ? 'Copiado' : 'Copiar'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-8 shrink-0 px-2 text-xs"
+                  onClick={() => void addSharedToLibrary(item)}
+                >
+                  Adicionar aos meus
+                </Button>
+              </div>
+            )
+          })}
         </div>
       ) : (
         <div className="space-y-2">
@@ -363,7 +480,14 @@ export function QuickPromptLibrary({
                 </button>
 
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-text">{item.name}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="truncate text-sm font-medium text-text">{item.name}</div>
+                    {item.isPublic ? (
+                      <span className="rounded-md bg-accent-dark px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                        Público
+                      </span>
+                    ) : null}
+                  </div>
                   {tabName || item.projectId ? (
                     <div className="text-xs text-muted-2">
                       {[tabName, item.projectId ? 'somente este projeto' : null]
@@ -457,6 +581,20 @@ export function QuickPromptLibrary({
             value={form.text}
             onChange={(e) => setForm({ ...form, text: e.target.value })}
           />
+          <label className="flex items-start gap-2 text-sm text-text">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={form.isPublic}
+              onChange={(e) => setForm({ ...form, isPublic: e.target.checked })}
+            />
+            <span>
+              <span className="font-medium">Tornar público</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                Outros usuários do Atlas veem este prompt na aba Públicos e podem copiar para a biblioteca deles.
+              </span>
+            </span>
+          </label>
         </div>
       </Modal>
 

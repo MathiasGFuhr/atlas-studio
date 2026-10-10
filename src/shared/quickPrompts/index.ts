@@ -2,6 +2,7 @@ export * from './stageContext'
 export * from './helpers'
 
 export * from './types'
+export * from './sharedCopyName'
 export * from './presets'
 export * from './sceneBlocks'
 export * from './composePrompt'

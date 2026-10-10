@@ -19,7 +19,7 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 14
+export const CURRENT_SCHEMA_VERSION = 15
 
 type SchemaStepResult = {
   historyCreated: number
@@ -126,6 +126,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'channel-folder',
     backup: false,
     up: applyChannelFolder,
+  },
+  {
+    version: 15,
+    name: 'quick-prompt-public',
+    backup: false,
+    up: applyQuickPromptPublic,
   },
 ]
 
@@ -325,6 +331,16 @@ function applyChannelFolder(database: AppDatabase): SchemaStepResult {
     .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'channels'`)
     .get() as { name: string } | undefined
   if (channels) ensureColumn(database, 'channels', 'folder_path', 'TEXT')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyQuickPromptPublic(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (tables.some((item) => item.name === 'quick_prompts')) {
+    ensureColumn(database, 'quick_prompts', 'is_public', 'INTEGER NOT NULL DEFAULT 0')
+  }
   return { historyCreated: 0, musicCreated: 0 }
 }
 

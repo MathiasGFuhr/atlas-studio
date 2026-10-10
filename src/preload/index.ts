@@ -46,7 +46,11 @@ import type {
 import type { ShortsAnalysisPlan } from '../shared/shorts/analysisPlan'
 import type { ShortsProjectListFilters } from '../shared/shortsProject'
 import type { ShortsImportResult } from '../shared/shortsProjectIdentity'
-import type { CustomPrompt, CustomPromptTab } from '../shared/quickPrompts/types'
+import type {
+  CustomPrompt,
+  CustomPromptTab,
+  SharedPromptCatalogSnapshot,
+} from '../shared/quickPrompts/types'
 import type {
   ChatAgentStatusSnapshot,
   ChatAttachment,
@@ -58,6 +62,12 @@ import type {
 } from '../shared/chat/types'
 import type { AppUpdateStatus } from '../shared/updates'
 import { IPC } from '../shared/types'
+import type {
+  AtlasAuthInput,
+  AtlasSession,
+  TeamChatMessage,
+  TeamChatPeer,
+} from '../shared/account'
 import type { WorkspaceCapabilities } from '../shared/workspaceCapabilities'
 import type { AgentModelSnapshot, AgentModelsBundle, AgentProviderId } from '../shared/agents/types'
 
@@ -178,6 +188,12 @@ const api = {
       ipcRenderer.invoke(IPC.quickPrompts.updateTab, id, patch) as Promise<CustomPromptTab | null>,
     removeTab: (id: string) =>
       ipcRenderer.invoke(IPC.quickPrompts.removeTab, id) as Promise<boolean>,
+    listShared: () =>
+      ipcRenderer.invoke(IPC.quickPrompts.listShared) as Promise<SharedPromptCatalogSnapshot>,
+    setPublic: (id: string, isPublic: boolean) =>
+      ipcRenderer.invoke(IPC.quickPrompts.setPublic, id, isPublic) as Promise<CustomPrompt>,
+    copyShared: (sharedId: string, input?: { tabId?: string | null }) =>
+      ipcRenderer.invoke(IPC.quickPrompts.copyShared, sharedId, input) as Promise<CustomPrompt>,
   },
   antigravity: {
     status: () => ipcRenderer.invoke(IPC.antigravity.status) as Promise<AntigravityStatus>,
@@ -325,6 +341,43 @@ const api = {
   workspace: {
     capabilities: () =>
       ipcRenderer.invoke(IPC.workspace.capabilities) as Promise<WorkspaceCapabilities>,
+  },
+  account: {
+    getSession: () => ipcRenderer.invoke(IPC.account.getSession) as Promise<AtlasSession>,
+    signIn: (input: AtlasAuthInput) =>
+      ipcRenderer.invoke(IPC.account.signIn, input) as Promise<AtlasSession>,
+    signUp: (input: AtlasAuthInput) =>
+      ipcRenderer.invoke(IPC.account.signUp, input) as Promise<AtlasSession>,
+    signOut: () => ipcRenderer.invoke(IPC.account.signOut) as Promise<AtlasSession>,
+    updateProfile: (name: string) =>
+      ipcRenderer.invoke(IPC.account.updateProfile, name) as Promise<AtlasSession>,
+    onChanged: (callback: (session: AtlasSession) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: AtlasSession) => callback(data)
+      ipcRenderer.on(IPC.account.changed, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.account.changed, listener)
+      }
+    },
+  },
+  teamChat: {
+    listMessages: () => ipcRenderer.invoke(IPC.teamChat.listMessages) as Promise<TeamChatMessage[]>,
+    sendMessage: (body: string) =>
+      ipcRenderer.invoke(IPC.teamChat.sendMessage, body) as Promise<TeamChatMessage>,
+    listOnline: () => ipcRenderer.invoke(IPC.teamChat.listOnline) as Promise<TeamChatPeer[]>,
+    onMessage: (callback: (message: TeamChatMessage) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: TeamChatMessage) => callback(data)
+      ipcRenderer.on(IPC.teamChat.message, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.teamChat.message, listener)
+      }
+    },
+    onPresence: (callback: (peers: TeamChatPeer[]) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: TeamChatPeer[]) => callback(data)
+      ipcRenderer.on(IPC.teamChat.presence, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.teamChat.presence, listener)
+      }
+    },
   },
   codex: {
     status: () => ipcRenderer.invoke(IPC.codex.status) as Promise<CodexStatus>,

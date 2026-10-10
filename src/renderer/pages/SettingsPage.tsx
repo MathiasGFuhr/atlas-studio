@@ -36,6 +36,7 @@ export function SettingsPage({
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [niches, setNiches] = useState<Array<{ id: string; name: string }>>([])
   const [confirmLogout, setConfirmLogout] = useState(false)
+  const [confirmAtlasLogout, setConfirmAtlasLogout] = useState(false)
   const [testing, setTesting] = useState(false)
   const [antigravity, setAntigravity] = useState<AntigravityStatus | null>(null)
   const [testingAgy, setTestingAgy] = useState(false)
@@ -154,11 +155,19 @@ export function SettingsPage({
     if (!settings) return
     const { notificationReadKeys, ...patch } = settings
     void notificationReadKeys
+    if (settings.accountName.trim()) {
+      await api.account.updateProfile(settings.accountName)
+    }
     const next = await api.settings.update(patch)
     setSettings(next)
     onSettingsSaved?.(next)
     notifySettingsChanged()
     push('Alterações salvas.', 'success')
+  }
+
+  async function handleAtlasLogout() {
+    setConfirmAtlasLogout(false)
+    await api.account.signOut()
   }
 
   if (!settings) {
@@ -399,10 +408,16 @@ export function SettingsPage({
             control={
               <Input
                 value={settings.accountEmail}
-                onChange={(e) => setSettings({ ...settings, accountEmail: e.target.value })}
+                readOnly
+                className="opacity-80"
               />
             }
           />
+          <div className="pt-1">
+            <Button variant="secondary" className="h-9 px-3 text-xs" onClick={() => setConfirmAtlasLogout(true)}>
+              Sair da conta
+            </Button>
+          </div>
         </SettingsCard>
 
         <SettingsCard title="Codex" icon={Bot} id="ia" highlight={aiHighlight}>
@@ -858,6 +873,15 @@ export function SettingsPage({
           Salvar alterações
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirmAtlasLogout}
+        title="Sair da conta"
+        message="Você volta para a tela de login. Os dados locais deste computador continuam aqui."
+        confirmLabel="Sair"
+        onConfirm={() => void handleAtlasLogout()}
+        onClose={() => setConfirmAtlasLogout(false)}
+      />
 
       <ConfirmDialog
         open={confirmLogout}

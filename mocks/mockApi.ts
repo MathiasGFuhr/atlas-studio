@@ -35,7 +35,13 @@ import { adviseCutsLocally, type MusicAdviseRequest } from '../src/shared/audio/
 import type { ShortsAnalyzeInput, ShortsJob, ShortsProgressEvent } from '../src/shared/shorts'
 import { TEXT_ONLY_CAPABILITIES } from '../src/shared/agents/capabilities'
 import type { ShortsImportResult } from '../src/shared/shortsProjectIdentity'
-import type { CustomPrompt, CustomPromptTab } from '../src/shared/quickPrompts/types'
+import type {
+  CustomPrompt,
+  CustomPromptTab,
+  SharedPrompt,
+  SharedPromptCatalogSnapshot,
+} from '../src/shared/quickPrompts/types'
+import { nextSharedCopyName } from '../src/shared/quickPrompts/sharedCopyName'
 import type {
   ChatAgentStatusSnapshot,
   ChatAttachment,
@@ -53,6 +59,13 @@ import {
   resolveWorkspaceCapabilities,
 } from '../src/shared/workspaceCapabilities'
 import type { AgentModelSnapshot, AgentModelsBundle, AgentProviderId } from '../src/shared/agents/types'
+import type {
+  AtlasAccount,
+  AtlasAuthInput,
+  AtlasSession,
+  TeamChatMessage,
+  TeamChatPeer,
+} from '../src/shared/account'
 
 /**
  * Mock API para preview no navegador (sem Electron).
@@ -66,6 +79,19 @@ const videos: ChannelVideo[] = []
 const prompts: ChannelPrompt[] = []
 const quickPrompts: CustomPrompt[] = []
 const quickPromptTabs: CustomPromptTab[] = []
+const sharedPrompts: SharedPrompt[] = []
+const MOCK_SHARED_AUTHOR_ID = 'mock-author'
+const mockAccount: AtlasAccount = {
+  id: MOCK_SHARED_AUTHOR_ID,
+  email: 'preview@atlas.local',
+  name: 'Preview',
+}
+let mockSession: AtlasSession = { user: mockAccount }
+const teamMessages: TeamChatMessage[] = []
+const teamChatListeners = {
+  message: new Set<(message: TeamChatMessage) => void>(),
+  presence: new Set<(peers: TeamChatPeer[]) => void>(),
+}
 const quickPromptFavorites = new Set<string>()
 const scripts: ScriptRecord[] = []
 const musicTracks: MusicTrack[] = []
@@ -653,6 +679,7 @@ export const mockApi = {
         text: input.text.trim(),
         tabId: tab?.id ?? null,
         projectId: input.projectId ?? null,
+        isPublic: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -732,6 +759,52 @@ export const mockApi = {
         }
       }
       return true
+    },
+    listShared: async (): Promise<SharedPromptCatalogSnapshot> => ({
+      configured: true,
+      authorId: MOCK_SHARED_AUTHOR_ID,
+      items: [...sharedPrompts],
+    }),
+    setPublic: async (id: string, isPublic: boolean) => {
+      const prompt = quickPrompts.find((item) => item.id === id)
+      if (!prompt) throw new Error('Prompt não encontrado.')
+      prompt.isPublic = isPublic
+      prompt.updatedAt = new Date().toISOString()
+      const existing = sharedPrompts.findIndex((item) => item.localPromptId === id)
+      if (isPublic) {
+        const tabName = prompt.tabId
+          ? (quickPromptTabs.find((tab) => tab.id === prompt.tabId)?.name ?? prompt.category)
+          : null
+        const next: SharedPrompt = {
+          id: existing >= 0 ? sharedPrompts[existing].id : crypto.randomUUID(),
+          localPromptId: prompt.id,
+          name: prompt.name,
+          text: prompt.text,
+          tabName,
+          authorId: MOCK_SHARED_AUTHOR_ID,
+          authorName: settings.accountName.trim() || 'Autor anônimo',
+          publishedAt: existing >= 0 ? sharedPrompts[existing].publishedAt : prompt.updatedAt,
+          updatedAt: prompt.updatedAt,
+        }
+        if (existing >= 0) sharedPrompts[existing] = next
+        else sharedPrompts.unshift(next)
+      } else if (existing >= 0) {
+        sharedPrompts.splice(existing, 1)
+      }
+      return prompt
+    },
+    copyShared: async (sharedId: string, input?: { tabId?: string | null }) => {
+      const shared = sharedPrompts.find((item) => item.id === sharedId)
+      if (!shared) throw new Error('Prompt público não encontrado.')
+      return mockApi.quickPrompts.create({
+        name: nextSharedCopyName(
+          shared.name,
+          quickPrompts.map((item) => item.name),
+        ),
+        text: shared.text,
+        tabId: input?.tabId ?? null,
+        category: shared.tabName ?? undefined,
+      })
     },
   },
   antigravity: {
@@ -874,6 +947,63 @@ export const mockApi = {
       settings.accountPhotoPath = ''
       settings.accountPhotoDataUrl = null
       return settings
+    },
+  },
+  account: {
+    getSession: async () => mockSession,
+    signIn: async (input: AtlasAuthInput): Promise<AtlasSession> => {
+      mockSession = {
+        user: {
+          id: MOCK_SHARED_AUTHOR_ID,
+          email: input.email.trim().toLowerCase(),
+          name: input.email.split('@')[0] || 'Preview',
+        },
+      }
+      settings.accountEmail = mockSession.user?.email ?? ''
+      settings.accountName = mockSession.user?.name ?? ''
+      return mockSession
+    },
+    signUp: async (input: AtlasAuthInput) => mockApi.account.signIn({
+      ...input,
+      password: input.password,
+    }),
+    signOut: async () => {
+      mockSession = { user: null }
+      return mockSession
+    },
+    updateProfile: async (name: string) => {
+      if (mockSession.user) mockSession = { user: { ...mockSession.user, name: name.trim() } }
+      settings.accountName = name.trim()
+      return mockSession
+    },
+    onChanged: () => () => undefined,
+  },
+  teamChat: {
+    listMessages: async () => [...teamMessages],
+    sendMessage: async (body: string) => {
+      const message: TeamChatMessage = {
+        id: crypto.randomUUID(),
+        authorId: mockSession.user?.id ?? MOCK_SHARED_AUTHOR_ID,
+        authorName: mockSession.user?.name ?? 'Preview',
+        body: body.trim(),
+        createdAt: new Date().toISOString(),
+      }
+      teamMessages.push(message)
+      teamChatListeners.message.forEach((listener) => listener(message))
+      return message
+    },
+    listOnline: async () => (mockSession.user ? [mockSession.user] : []),
+    onMessage: (callback: (message: TeamChatMessage) => void) => {
+      teamChatListeners.message.add(callback)
+      return () => {
+        teamChatListeners.message.delete(callback)
+      }
+    },
+    onPresence: (callback: (peers: TeamChatPeer[]) => void) => {
+      teamChatListeners.presence.add(callback)
+      return () => {
+        teamChatListeners.presence.delete(callback)
+      }
     },
   },
   workspace: {
