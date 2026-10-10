@@ -33,7 +33,7 @@ import { PRODUCT_TOUR_ACTIVE_EVENT } from '../lib/productTourEvents'
 type NavItem = {
   to: string
   label: string
-  icon: ComponentType<{ className?: string }>
+  icon: ComponentType<{ className?: string; strokeWidth?: number }>
   end?: boolean
 }
 

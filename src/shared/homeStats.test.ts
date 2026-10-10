@@ -62,8 +62,7 @@ describe('buildHomeModuleStats', () => {
       tracks: [track('t1', 'p1'), track('t2', null), track('t3', 'p2')],
       upcomingVideos: [
         video('v1', { channelType: 'music', projectId: 'p1' }),
-        video('v2', { channelType: 'history' }),
-        video('v3', { channelType: 'history', projectId: 'p2' }),
+        video('v3', { channelType: 'music', projectId: 'p2' }),
       ],
     })
     expect(stats.scheduledCount).toBe(2)
