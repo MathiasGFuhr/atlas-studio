@@ -73,7 +73,9 @@ export const settingsRepository = {
       value: string
     }>
     const settings = { ...DEFAULTS } as AppSettings & Record<string, unknown>
+    let hasWorldClocks = false
     for (const row of rows) {
+      if (row.key === 'worldClocks') hasWorldClocks = true
       try {
         settings[row.key] = JSON.parse(row.value)
       } catch {
@@ -114,12 +116,26 @@ export const settingsRepository = {
       : []
     settings.worldClocks = normalizeWorldClocks(settings.worldClocks)
 
+    // Bancos antigos sem a chave: grava uma vez para o fallback em memória não
+    // "ressuscitar" fusos padrão depois que o usuário apagar algum.
+    if (!hasWorldClocks) {
+      getDb()
+        .prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+        .run('worldClocks', JSON.stringify(settings.worldClocks))
+    }
+
     return settings
   },
 
   update(patch: Partial<AppSettings>): AppSettings {
     const current = this.get()
-    const next = { ...current, ...patch }
+    const next = {
+      ...current,
+      ...patch,
+      ...(patch.worldClocks !== undefined
+        ? { worldClocks: normalizeWorldClocks(patch.worldClocks) }
+        : {}),
+    }
 
     if (patch.skillLibraryRoot !== undefined) {
       next.skillsPath = patch.skillLibraryRoot

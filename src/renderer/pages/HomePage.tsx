@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, FolderKanban, ListTodo, Tv } from 'lucide-react'
 import type { AtlasTask, Channel, ChannelVideo, Project, ProjectType } from '@shared/types'
 import type { MusicTrack } from '@shared/musicAnalysis'
 import type { WorldClock } from '@shared/worldClocks'
-import { DEFAULT_WORLD_CLOCKS, normalizeWorldClocks } from '@shared/worldClocks'
+import { normalizeWorldClocks } from '@shared/worldClocks'
 import { dueDateState, pendingDueTodayCount, pendingTasksForHome } from '@shared/tasks'
 import { buildHomeActivity } from '@shared/homeActivity'
 import { buildHomeModuleStats } from '@shared/homeStats'
@@ -64,31 +64,37 @@ export function HomePage() {
   const [tracks, setTracks] = useState<MusicTrack[]>([])
   const [upcomingVideos, setUpcomingVideos] = useState<ChannelVideo[]>([])
   const [accountName, setAccountName] = useState('')
-  const [worldClocks, setWorldClocks] = useState<WorldClock[]>(() =>
-    DEFAULT_WORLD_CLOCKS.map((clock) => ({ ...clock })),
-  )
+  const [worldClocks, setWorldClocks] = useState<WorldClock[]>([])
   const [createType, setCreateType] = useState<ProjectType | null>(null)
   const [form, setForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
   const [saving, setSaving] = useState(false)
   const [savingClocks, setSavingClocks] = useState(false)
+  const loadSeq = useRef(0)
 
   const load = useCallback(async () => {
-    const [music, taskList, channelList, trackList, videoList, settings] = await Promise.all([
-      api.projects.list({ projectType: 'music' }),
-      api.tasks.list(),
-      api.channels.list(),
-      api.music.list(),
-      api.videos.list({ from: todayDateKey(), limit: HOME_UPCOMING_VIDEO_LIMIT, excludeStatus: 'publicado' }),
-      api.settings.get(),
-    ])
-    setProjects(music)
-    setTasks(taskList)
-    setChannels(channelList)
-    setTracks(trackList)
-    setUpcomingVideos(videoList)
-    setAccountName(settings.accountName?.trim() ?? '')
-    setWorldClocks(normalizeWorldClocks(settings.worldClocks))
-  }, [api])
+    const seq = ++loadSeq.current
+    try {
+      const [music, taskList, channelList, trackList, videoList, settings] = await Promise.all([
+        api.projects.list({ projectType: 'music' }),
+        api.tasks.list(),
+        api.channels.list(),
+        api.music.list(),
+        api.videos.list({ from: todayDateKey(), limit: HOME_UPCOMING_VIDEO_LIMIT, excludeStatus: 'publicado' }),
+        api.settings.get(),
+      ])
+      if (seq !== loadSeq.current) return
+      setProjects(music)
+      setTasks(taskList)
+      setChannels(channelList)
+      setTracks(trackList)
+      setUpcomingVideos(videoList)
+      setAccountName(settings.accountName?.trim() ?? '')
+      setWorldClocks(normalizeWorldClocks(settings.worldClocks))
+    } catch (error) {
+      if (seq !== loadSeq.current) return
+      pushError(error, 'Falha ao carregar o início')
+    }
+  }, [api, pushError])
 
   useEffect(() => {
     void load()
@@ -106,6 +112,7 @@ export function HomePage() {
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', refresh)
     return () => {
+      loadSeq.current += 1
       stopTasks()
       stopProjects()
       stopVideos()
@@ -192,10 +199,12 @@ export function HomePage() {
 
   async function saveWorldClocks(next: WorldClock[]) {
     const previous = worldClocks
-    setWorldClocks(next)
+    const normalizedNext = normalizeWorldClocks(next)
+    loadSeq.current += 1
+    setWorldClocks(normalizedNext)
     setSavingClocks(true)
     try {
-      const saved = await api.settings.update({ worldClocks: next })
+      const saved = await api.settings.update({ worldClocks: normalizedNext })
       setWorldClocks(normalizeWorldClocks(saved.worldClocks))
       notifySettingsChanged()
     } catch (error) {
