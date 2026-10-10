@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid, ExternalLink, Compass } from 'lucide-react'
+import { Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid, ExternalLink, Compass } from 'lucide-react'
 import type { AntigravityStatus, AppSettings } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
@@ -621,14 +621,6 @@ export function SettingsPage({
           }}
         />
       </div>
-
-      <Card className="mt-5 flex items-start gap-3" padding="sm">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-        <p className="text-sm text-muted">
-          O nicho escolhido carrega automaticamente a skill associada (caminho absoluto na sua
-          biblioteca). As skills continuam sendo editadas fora do Atlas Studio.
-        </p>
-      </Card>
 
       <div className="mt-5 flex justify-end gap-3">
         <Button

@@ -7,7 +7,9 @@ import {
   formatWorldClockDay,
   formatWorldClockOffset,
   formatWorldClockTime,
+  getWorldClockCountryCode,
   isWorldClockDaytime,
+  worldClockFlagUrl,
 } from '@shared/worldClocks'
 import { Card } from '../Card'
 import { Modal } from '../Modal'
@@ -106,47 +108,65 @@ export function HomeWorldClocks({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {clocks.map((clock) => {
               const daytime = isWorldClockDaytime(now, clock.timeZone)
+              const countryCode = getWorldClockCountryCode(clock.timeZone, clock.label)
               return (
                 <Card
                   key={clock.id}
                   padding="sm"
-                  className="group relative !px-4 !py-3.5"
+                  className="group relative overflow-hidden !px-4 !py-3.5"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <div
-                        className={cn(
-                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                          daytime ? 'bg-accent/10 text-accent' : 'bg-white/[0.04] text-muted',
-                        )}
+                  {countryCode ? (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 opacity-[0.22]"
+                      style={{
+                        backgroundImage: `url(${worldClockFlagUrl(countryCode)})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center right',
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-gradient-to-r from-card via-card/75 to-card/35"
+                  />
+                  <div className="relative z-[1]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <div
+                          className={cn(
+                            'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                            daytime ? 'bg-accent/10 text-accent' : 'bg-white/[0.04] text-muted',
+                          )}
+                        >
+                          {daytime ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-[11px] font-medium uppercase tracking-[0.14em] text-muted-2">
+                            {clock.label}
+                          </p>
+                          <p className="mt-1 text-[22px] font-semibold tabular-nums tracking-tight text-text">
+                            {formatWorldClockTime(now, clock.timeZone)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleRemove(clock.id)}
+                        disabled={saving}
+                        className="rounded-lg p-1.5 text-muted opacity-0 transition-opacity hover:bg-white/5 hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-40"
+                        aria-label={`Remover ${clock.label}`}
+                        title="Remover fuso"
                       >
-                        {daytime ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-[11px] font-medium uppercase tracking-[0.14em] text-muted-2">
-                          {clock.label}
-                        </p>
-                        <p className="mt-1 text-[22px] font-semibold tabular-nums tracking-tight text-text">
-                          {formatWorldClockTime(now, clock.timeZone)}
-                        </p>
-                      </div>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleRemove(clock.id)}
-                      disabled={saving}
-                      className="rounded-lg p-1.5 text-muted opacity-0 transition-opacity hover:bg-white/5 hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-40"
-                      aria-label={`Remover ${clock.label}`}
-                      title="Remover fuso"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-2">
-                    <span className="truncate">{formatWorldClockDay(now, clock.timeZone)}</span>
-                    <span className="shrink-0 tabular-nums">
-                      {formatWorldClockOffset(now, clock.timeZone)}
-                    </span>
+                    <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-2">
+                      <span className="truncate">{formatWorldClockDay(now, clock.timeZone)}</span>
+                      <span className="shrink-0 tabular-nums">
+                        {formatWorldClockOffset(now, clock.timeZone)}
+                      </span>
+                    </div>
                   </div>
                 </Card>
               )

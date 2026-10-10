@@ -11,6 +11,8 @@ export interface WorldClockCatalogItem {
   label: string
   timeZone: string
   region: string
+  /** Código ISO 3166-1 alpha-2 (ou `eu`) para bandeira de fundo. */
+  countryCode: string
 }
 
 export const DEFAULT_WORLD_CLOCKS: WorldClock[] = [
@@ -22,31 +24,51 @@ export const DEFAULT_WORLD_CLOCKS: WorldClock[] = [
 
 /** Opções comuns para o usuário adicionar fusos. */
 export const WORLD_CLOCK_CATALOG: WorldClockCatalogItem[] = [
-  { label: 'Brasil (Brasília)', timeZone: 'America/Sao_Paulo', region: 'América' },
-  { label: 'Argentina', timeZone: 'America/Argentina/Buenos_Aires', region: 'América' },
-  { label: 'México', timeZone: 'America/Mexico_City', region: 'América' },
-  { label: 'EUA (Nova York)', timeZone: 'America/New_York', region: 'América' },
-  { label: 'EUA (Chicago)', timeZone: 'America/Chicago', region: 'América' },
-  { label: 'EUA (Denver)', timeZone: 'America/Denver', region: 'América' },
-  { label: 'EUA (Los Angeles)', timeZone: 'America/Los_Angeles', region: 'América' },
-  { label: 'Canadá (Toronto)', timeZone: 'America/Toronto', region: 'América' },
-  { label: 'Canadá (Vancouver)', timeZone: 'America/Vancouver', region: 'América' },
-  { label: 'Reino Unido', timeZone: 'Europe/London', region: 'Europa' },
-  { label: 'Portugal', timeZone: 'Europe/Lisbon', region: 'Europa' },
-  { label: 'Alemanha', timeZone: 'Europe/Berlin', region: 'Europa' },
-  { label: 'França', timeZone: 'Europe/Paris', region: 'Europa' },
-  { label: 'Espanha', timeZone: 'Europe/Madrid', region: 'Europa' },
-  { label: 'Itália', timeZone: 'Europe/Rome', region: 'Europa' },
-  { label: 'Europa Central', timeZone: 'Europe/Amsterdam', region: 'Europa' },
-  { label: 'Turquia', timeZone: 'Europe/Istanbul', region: 'Europa' },
-  { label: 'Índia', timeZone: 'Asia/Kolkata', region: 'Ásia' },
-  { label: 'Emirados (Dubai)', timeZone: 'Asia/Dubai', region: 'Ásia' },
-  { label: 'Japão', timeZone: 'Asia/Tokyo', region: 'Ásia' },
-  { label: 'Coreia do Sul', timeZone: 'Asia/Seoul', region: 'Ásia' },
-  { label: 'Singapura', timeZone: 'Asia/Singapore', region: 'Ásia' },
-  { label: 'Austrália (Sydney)', timeZone: 'Australia/Sydney', region: 'Oceania' },
-  { label: 'Nova Zelândia', timeZone: 'Pacific/Auckland', region: 'Oceania' },
+  { label: 'Brasil (Brasília)', timeZone: 'America/Sao_Paulo', region: 'América', countryCode: 'br' },
+  { label: 'Argentina', timeZone: 'America/Argentina/Buenos_Aires', region: 'América', countryCode: 'ar' },
+  { label: 'México', timeZone: 'America/Mexico_City', region: 'América', countryCode: 'mx' },
+  { label: 'EUA (Nova York)', timeZone: 'America/New_York', region: 'América', countryCode: 'us' },
+  { label: 'EUA (Chicago)', timeZone: 'America/Chicago', region: 'América', countryCode: 'us' },
+  { label: 'EUA (Denver)', timeZone: 'America/Denver', region: 'América', countryCode: 'us' },
+  { label: 'EUA (Los Angeles)', timeZone: 'America/Los_Angeles', region: 'América', countryCode: 'us' },
+  { label: 'Canadá (Toronto)', timeZone: 'America/Toronto', region: 'América', countryCode: 'ca' },
+  { label: 'Canadá (Vancouver)', timeZone: 'America/Vancouver', region: 'América', countryCode: 'ca' },
+  { label: 'Reino Unido', timeZone: 'Europe/London', region: 'Europa', countryCode: 'gb' },
+  { label: 'Portugal', timeZone: 'Europe/Lisbon', region: 'Europa', countryCode: 'pt' },
+  { label: 'Alemanha', timeZone: 'Europe/Berlin', region: 'Europa', countryCode: 'de' },
+  { label: 'França', timeZone: 'Europe/Paris', region: 'Europa', countryCode: 'fr' },
+  { label: 'Espanha', timeZone: 'Europe/Madrid', region: 'Europa', countryCode: 'es' },
+  { label: 'Itália', timeZone: 'Europe/Rome', region: 'Europa', countryCode: 'it' },
+  { label: 'Europa Central', timeZone: 'Europe/Amsterdam', region: 'Europa', countryCode: 'eu' },
+  { label: 'Turquia', timeZone: 'Europe/Istanbul', region: 'Europa', countryCode: 'tr' },
+  { label: 'Índia', timeZone: 'Asia/Kolkata', region: 'Ásia', countryCode: 'in' },
+  { label: 'Emirados (Dubai)', timeZone: 'Asia/Dubai', region: 'Ásia', countryCode: 'ae' },
+  { label: 'Japão', timeZone: 'Asia/Tokyo', region: 'Ásia', countryCode: 'jp' },
+  { label: 'Coreia do Sul', timeZone: 'Asia/Seoul', region: 'Ásia', countryCode: 'kr' },
+  { label: 'Singapura', timeZone: 'Asia/Singapore', region: 'Ásia', countryCode: 'sg' },
+  { label: 'Austrália (Sydney)', timeZone: 'Australia/Sydney', region: 'Oceania', countryCode: 'au' },
+  { label: 'Nova Zelândia', timeZone: 'Pacific/Auckland', region: 'Oceania', countryCode: 'nz' },
 ]
+
+/** Resolve o código de país da bandeira a partir do fuso (e rótulo opcional). */
+export function getWorldClockCountryCode(timeZone: string, label?: string): string | null {
+  const zone = timeZone.trim()
+  if (!zone) return null
+
+  const fromCatalog = WORLD_CLOCK_CATALOG.find((item) => item.timeZone === zone)
+  if (fromCatalog) {
+    const normalizedLabel = label?.trim().toLowerCase() ?? ''
+    // "Europa" genérico usa bandeira da UE em vez da do Reino Unido.
+    if (normalizedLabel === 'europa' && zone === 'Europe/London') return 'eu'
+    return fromCatalog.countryCode
+  }
+
+  return null
+}
+
+export function worldClockFlagUrl(countryCode: string): string {
+  return `https://flagcdn.com/w640/${countryCode.toLowerCase()}.png`
+}
 
 export function isValidTimeZone(timeZone: string): boolean {
   const value = timeZone.trim()

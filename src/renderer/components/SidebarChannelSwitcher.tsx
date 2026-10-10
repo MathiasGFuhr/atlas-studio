@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent a
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Check, ChevronDown, Plus, Tv } from 'lucide-react'
 import type { Channel } from '@shared/types'
-import { PROJECT_TYPE_LABEL } from '@shared/types'
 import { channelCalendarPath } from '@shared/channelVideos'
 import {
   channelIdFromPath,
@@ -10,7 +9,6 @@ import {
   readLastSidebarChannelId,
   writeLastSidebarChannelId,
 } from '@shared/sidebarChannel'
-import { ENVIRONMENTS } from '../lib/environments'
 import { getAtlasApi } from '../lib/api'
 import { onChannelsChanged } from '../lib/channelEvents'
 import { cn } from '../lib/utils'
@@ -25,17 +23,14 @@ function ChannelAvatar({
   const color = channel?.color || '#35e58b'
   return (
     <div
-      className={cn(
-        'shrink-0 overflow-hidden rounded-full border border-border-soft',
-        sizeClass,
-      )}
-      style={{ background: `linear-gradient(145deg, ${color}55, #10161a)` }}
+      className={cn('shrink-0 overflow-hidden rounded-full', sizeClass)}
+      style={{ background: `linear-gradient(145deg, ${color}40, #0f1418)` }}
     >
       {channel?.avatarDataUrl ? (
         <img src={channel.avatarDataUrl} alt="" className="h-full w-full object-cover" />
       ) : (
         <div className="flex h-full w-full items-center justify-center">
-          <Tv className="h-3.5 w-3.5 text-muted" style={channel ? { color } : undefined} />
+          <Tv className="h-3.5 w-3.5 text-muted-2" style={channel ? { color } : undefined} />
         </div>
       )}
     </div>
@@ -55,13 +50,17 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
   const [activeIndex, setActiveIndex] = useState(0)
 
   const routeChannelId = channelIdFromPath(pathname)
+  const musicChannels = useMemo(
+    () => channels.filter((channel) => channel.channelType === 'music'),
+    [channels],
+  )
   const selected = useMemo(
-    () => pickSidebarChannel(channels, { routeChannelId, lastChannelId }),
-    [channels, routeChannelId, lastChannelId],
+    () => pickSidebarChannel(musicChannels, { routeChannelId, lastChannelId }),
+    [musicChannels, routeChannelId, lastChannelId],
   )
 
   const load = useCallback(async () => {
-    const list = await api.channels.list()
+    const list = await api.channels.list({ channelType: 'music' })
     setChannels(list)
   }, [api])
 
@@ -108,9 +107,9 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
 
   useEffect(() => {
     if (!open) return
-    const index = selected ? channels.findIndex((channel) => channel.id === selected.id) : 0
+    const index = selected ? musicChannels.findIndex((channel) => channel.id === selected.id) : 0
     setActiveIndex(index >= 0 ? index : 0)
-  }, [open, channels, selected])
+  }, [open, musicChannels, selected])
 
   function rememberAndOpen(channel: Channel) {
     writeLastSidebarChannelId(typeof localStorage === 'undefined' ? null : localStorage, channel.id)
@@ -141,26 +140,24 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
     if (!open) return
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setActiveIndex((index) => (channels.length === 0 ? 0 : (index + 1) % channels.length))
+      setActiveIndex((index) =>
+        musicChannels.length === 0 ? 0 : (index + 1) % musicChannels.length,
+      )
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
       setActiveIndex((index) =>
-        channels.length === 0 ? 0 : (index - 1 + channels.length) % channels.length,
+        musicChannels.length === 0
+          ? 0
+          : (index - 1 + musicChannels.length) % musicChannels.length,
       )
     } else if (event.key === 'Enter') {
       event.preventDefault()
-      const channel = channels[activeIndex]
+      const channel = musicChannels[activeIndex]
       if (channel) rememberAndOpen(channel)
       else openManage()
     }
   }
 
-  const typeLabel = selected
-    ? PROJECT_TYPE_LABEL[selected.channelType ?? 'history']
-    : 'Nenhum canal'
-  const typeColor = selected
-    ? ENVIRONMENTS[selected.channelType ?? 'history'].color
-    : undefined
   const triggerLabel = selected
     ? compact
       ? `Canal ${selected.name}. Abrir lista de canais.`
@@ -171,9 +168,8 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
     <div ref={rootRef} className={cn('relative', compact ? 'px-2' : 'px-3')}>
       <div
         className={cn(
-          'flex w-full items-center rounded-xl border border-transparent transition-colors',
-          'hover:border-border-soft hover:bg-white/[0.04]',
-          open && 'border-border-soft bg-white/[0.04]',
+          'flex w-full items-center rounded-lg transition-colors',
+          open ? 'bg-white/[0.04]' : 'hover:bg-white/[0.03]',
           compact ? 'justify-center' : '',
         )}
       >
@@ -187,20 +183,17 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
           onKeyDown={compact ? onTriggerKeyDown : undefined}
           className={cn(
             'flex min-w-0 items-center text-left',
-            compact ? 'justify-center px-0 py-2' : 'flex-1 gap-2.5 px-2 py-2',
+            compact ? 'justify-center px-0 py-2' : 'flex-1 gap-2.5 px-1.5 py-1.5',
           )}
         >
-          <ChannelAvatar channel={selected} sizeClass="h-9 w-9" />
+          <ChannelAvatar channel={selected} sizeClass="h-8 w-8" />
           {compact ? null : (
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-semibold leading-tight text-text">
+              <span className="block truncate text-[13px] font-medium tracking-[-0.01em] text-text">
                 {selected?.name ?? 'Escolher canal'}
               </span>
-              <span
-                className="mt-0.5 block truncate text-[11px] leading-tight text-muted"
-                style={typeColor ? { color: typeColor } : undefined}
-              >
-                {typeLabel}
+              <span className="mt-0.5 block truncate text-[11px] text-muted-2">
+                {selected ? (selected.active ? 'Canal ativo' : 'Canal inativo') : 'Sem canal'}
               </span>
             </span>
           )}
@@ -214,10 +207,10 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
             onKeyDown={onTriggerKeyDown}
-            className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-white/[0.06] hover:text-text"
+            className="mr-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-2 transition-colors hover:bg-white/[0.05] hover:text-text"
           >
             <ChevronDown
-              className={cn('h-4 w-4 transition-transform', open && 'rotate-180')}
+              className={cn('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')}
             />
           </button>
         )}
@@ -228,59 +221,72 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
           role="menu"
           aria-label="Canais"
           className={cn(
-            'z-50 overflow-hidden rounded-xl border border-border bg-card-2 shadow-[0_12px_28px_rgba(0,0,0,0.45)]',
+            'z-50 overflow-hidden rounded-xl border border-border/80 bg-[#10161a] shadow-[0_16px_40px_rgba(0,0,0,0.55)]',
             compact
-              ? 'absolute left-[calc(100%+10px)] top-0 w-[240px]'
-              : 'absolute left-3 right-3 top-[calc(100%+6px)]',
+              ? 'absolute left-[calc(100%+10px)] top-0 w-[248px]'
+              : 'absolute left-3 right-3 top-[calc(100%+8px)]',
           )}
         >
-          {channels.length === 0 ? (
+          <div className="border-b border-border-soft px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-2">
+              Canais
+            </p>
+          </div>
+
+          {musicChannels.length === 0 ? (
             <p className="px-3 py-3 text-xs leading-relaxed text-muted">
               Crie um canal para abrir o calendário daqui.
             </p>
           ) : (
-            <div className="max-h-[min(18rem,50vh)] overflow-y-auto p-1.5">
-              {channels.map((channel, index) => {
+            <div className="sidebar-channel-menu max-h-[min(16rem,46vh)] overflow-y-auto px-1.5 py-1.5">
+              {musicChannels.map((channel, index) => {
                 const active = index === activeIndex
                 const current = selected?.id === channel.id
-                const label = PROJECT_TYPE_LABEL[channel.channelType ?? 'history']
                 return (
                   <button
                     key={channel.id}
                     type="button"
                     role="menuitem"
                     className={cn(
-                      'flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors',
-                      active ? 'bg-accent-dark/55' : 'hover:bg-white/[0.04]',
+                      'flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors',
+                      current
+                        ? 'bg-white/[0.06]'
+                        : active
+                          ? 'bg-white/[0.04]'
+                          : 'hover:bg-white/[0.03]',
                     )}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => rememberAndOpen(channel)}
                   >
-                    <ChannelAvatar channel={channel} sizeClass="h-8 w-8" />
+                    <ChannelAvatar channel={channel} sizeClass="h-7 w-7" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium text-text">
+                      <span className="block truncate text-[13px] font-medium tracking-[-0.01em] text-text">
                         {channel.name}
                       </span>
-                      <span className="mt-0.5 block truncate text-[11px] text-muted">
-                        {label}
-                        {channel.active ? '' : ' · Inativo'}
-                      </span>
+                      {!channel.active ? (
+                        <span className="mt-0.5 block truncate text-[11px] text-muted-2">
+                          Inativo
+                        </span>
+                      ) : null}
                     </span>
-                    {current ? <Check className="h-3.5 w-3.5 shrink-0 text-accent" /> : null}
+                    {current ? (
+                      <Check className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2.5} />
+                    ) : null}
                   </button>
                 )
               })}
             </div>
           )}
+
           <div className="border-t border-border-soft p-1.5">
             <button
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[13px] font-medium text-muted transition-colors hover:bg-white/[0.04] hover:text-text"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[12px] font-medium text-muted-2 transition-colors hover:bg-white/[0.03] hover:text-text"
               onClick={openManage}
             >
               <Plus className="h-3.5 w-3.5" />
-              {channels.length === 0 ? 'Criar canal' : 'Gerenciar canais'}
+              {musicChannels.length === 0 ? 'Criar canal' : 'Gerenciar canais'}
             </button>
           </div>
         </div>

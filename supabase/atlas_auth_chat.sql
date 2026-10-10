@@ -111,8 +111,14 @@ create table if not exists public.team_room_members (
   user_id uuid not null references auth.users (id) on delete cascade,
   role text not null default 'member' check (role in ('admin', 'member')),
   joined_at timestamptz not null default now(),
+  hidden_at timestamptz,
+  cleared_before timestamptz,
   primary key (room_id, user_id)
 );
+
+alter table public.team_room_members
+  add column if not exists hidden_at timestamptz,
+  add column if not exists cleared_before timestamptz;
 
 create index if not exists team_room_members_user on public.team_room_members (user_id);
 create index if not exists team_rooms_updated on public.team_rooms (updated_at desc);
@@ -200,8 +206,16 @@ create policy "team_room_members_delete"
   to authenticated
   using (public.is_team_room_admin(room_id));
 
+drop policy if exists "team_room_members_update_self" on public.team_room_members;
+create policy "team_room_members_update_self"
+  on public.team_room_members
+  for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 grant select, insert, update on public.team_rooms to authenticated;
-grant select, insert, delete on public.team_room_members to authenticated;
+grant select, insert, update, delete on public.team_room_members to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Messages
@@ -273,6 +287,12 @@ begin
     update public.team_rooms
     set updated_at = coalesce(new.created_at, now())
     where id = new.room_id;
+
+    -- Nova mensagem traz a conversa de volta para quem tinha apagado pra si
+    update public.team_room_members
+    set hidden_at = null
+    where room_id = new.room_id
+      and hidden_at is not null;
   end if;
   return new;
 end;
@@ -357,6 +377,17 @@ begin
 
   select * into v_room from public.team_rooms where dm_key = v_key;
   if found then
+    insert into public.team_room_members (room_id, user_id, role)
+    values
+      (v_room.id, v_me, 'member'),
+      (v_room.id, p_other_user_id, 'member')
+    on conflict do nothing;
+
+    update public.team_room_members
+    set hidden_at = null
+    where room_id = v_room.id
+      and user_id = v_me;
+
     return v_room;
   end if;
 
@@ -370,6 +401,39 @@ begin
     (v_room.id, p_other_user_id, 'member');
 
   return v_room;
+end;
+$$;
+
+create or replace function public.team_chat_hide_for_me(p_room_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_me uuid := auth.uid();
+begin
+  if v_me is null then
+    raise exception 'Não autenticado.';
+  end if;
+  if p_room_id is null then
+    raise exception 'Conversa inválida.';
+  end if;
+  if not exists (
+    select 1
+    from public.team_room_members m
+    where m.room_id = p_room_id
+      and m.user_id = v_me
+  ) then
+    raise exception 'Você não participa desta conversa.';
+  end if;
+
+  update public.team_room_members
+  set
+    hidden_at = now(),
+    cleared_before = now()
+  where room_id = p_room_id
+    and user_id = v_me;
 end;
 $$;
 
@@ -471,6 +535,7 @@ end;
 $$;
 
 grant execute on function public.team_chat_open_dm(uuid) to authenticated;
+grant execute on function public.team_chat_hide_for_me(uuid) to authenticated;
 grant execute on function public.team_chat_create_group(text, uuid[]) to authenticated;
 grant execute on function public.team_chat_add_members(uuid, uuid[]) to authenticated;
 

@@ -141,3 +141,44 @@ body {
   font-style: normal;
   color: var(--color-text);
 }
+
+.sidebar-brand {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+.sidebar-nav,
+.sidebar-channel-menu {
+  scrollbar-width: thin;
+  scrollbar-color: #2a353c transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: #2a353c;
+  border-radius: 999px;
+}
+
+.sidebar-channel-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-channel-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-channel-menu::-webkit-scrollbar-thumb {
+  background: #2a353c;
+  border-radius: 999px;
+}
+
+.sidebar-channel-menu::-webkit-scrollbar-thumb:hover {
+  background: #3a474f;
+}

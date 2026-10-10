@@ -106,6 +106,8 @@ const mockPeer: TeamChatPeer = {
 const teamRooms: TeamChatRoom[] = []
 const teamMembers = new Map<string, TeamChatMember[]>()
 const teamMessages: TeamChatMessage[] = []
+const teamRoomsHiddenForMe = new Set<string>()
+const teamRoomsClearedBefore = new Map<string, string>()
 const lipSyncRefs: LipSyncRef[] = []
 const teamChatListeners = {
   message: new Set<(message: TeamChatMessage) => void>(),
@@ -1008,16 +1010,37 @@ export const mockApi = {
   },
   teamChat: {
     listRooms: async () =>
-      [...teamRooms].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      [...teamRooms]
+        .filter((room) => !teamRoomsHiddenForMe.has(room.id))
+        .map((room) => {
+          const clearedBefore = teamRoomsClearedBefore.get(room.id)
+          if (!clearedBefore) return room
+          const preview =
+            [...teamMessages]
+              .reverse()
+              .find((message) => message.roomId === room.id && message.createdAt > clearedBefore)
+              ?.body ?? null
+          return { ...room, lastMessagePreview: preview }
+        })
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     listDirectory: async () => [mockPeer],
     listMembers: async (roomId: string) => [...(teamMembers.get(roomId) ?? [])],
-    listMessages: async (roomId: string) =>
-      teamMessages.filter((message) => message.roomId === roomId),
+    listMessages: async (roomId: string) => {
+      const clearedBefore = teamRoomsClearedBefore.get(roomId)
+      return teamMessages.filter((message) => {
+        if (message.roomId !== roomId) return false
+        if (clearedBefore && message.createdAt <= clearedBefore) return false
+        return true
+      })
+    },
     openDm: async (userId: string) => {
       const existing = teamRooms.find(
         (room) => room.kind === 'dm' && room.peer?.id === userId,
       )
-      if (existing) return existing
+      if (existing) {
+        teamRoomsHiddenForMe.delete(existing.id)
+        return existing
+      }
       const peer = userId === mockPeer.id ? mockPeer : { id: userId, name: 'Usuário', email: '' }
       const me = mockSession.user ?? mockAccount
       const room: TeamChatRoom = {
@@ -1117,8 +1140,20 @@ export const mockApi = {
         room.lastMessagePreview = message.body
         room.updatedAt = message.createdAt
       }
+      // Nova mensagem traz a conversa de volta (como no Supabase)
+      teamRoomsHiddenForMe.delete(roomId)
       teamChatListeners.message.forEach((listener) => listener(message))
       return message
+    },
+    hideForMe: async (roomId: string) => {
+      const id = roomId.trim()
+      if (!id) throw new Error('Conversa inválida.')
+      if (!teamRooms.some((room) => room.id === id)) {
+        throw new Error('Você não participa desta conversa.')
+      }
+      const now = new Date().toISOString()
+      teamRoomsHiddenForMe.add(id)
+      teamRoomsClearedBefore.set(id, now)
     },
     listOnline: async () =>
       mockSession.user ? [mockSession.user, mockPeer] : [mockPeer],
@@ -1134,6 +1169,7 @@ export const mockApi = {
         teamChatListeners.presence.delete(callback)
       }
     },
+    setActiveRoom: async () => undefined,
     onPeerOnline: () => () => undefined,
     onOpenChat: () => () => undefined,
   },

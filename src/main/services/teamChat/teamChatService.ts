@@ -68,6 +68,8 @@ type TeamMemberRow = {
   user_id: string
   role: string
   joined_at: string
+  hidden_at?: string | null
+  cleared_before?: string | null
 }
 
 type ProfileRow = {
@@ -81,6 +83,7 @@ let getWindow: (() => BrowserWindow | null) | null = null
 let online: TeamChatPeer[] = []
 let presenceSelfId = ''
 let presenceReady = false
+let activeRoomId: string | null = null
 
 function onlineOthers(): TeamChatPeer[] {
   if (!presenceSelfId) return [...online]
@@ -95,6 +98,28 @@ function resolveNotifyIcon(): string | undefined {
   return candidates.find((candidate) => candidate && fs.existsSync(candidate))
 }
 
+function focusMainWindow() {
+  const win = getWindow?.()
+  if (!win || win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
+function isWindowActivelyViewed(): boolean {
+  const win = getWindow?.()
+  if (!win || win.isDestroyed()) return false
+  return win.isVisible() && !win.isMinimized() && win.isFocused()
+}
+
+function messageNotifyBody(message: TeamChatMessage): string {
+  const text = message.body.trim()
+  if (text) return text.length > 160 ? `${text.slice(0, 157)}...` : text
+  if (message.attachment?.kind === 'image') return 'Enviou uma imagem'
+  if (message.attachment) return `Enviou ${message.attachment.name}`
+  return 'Nova mensagem'
+}
+
 function showOnlineToast(peer: TeamChatPeer) {
   if (!Notification.isSupported()) return
   const toast = new Notification({
@@ -103,12 +128,26 @@ function showOnlineToast(peer: TeamChatPeer) {
     icon: resolveNotifyIcon(),
   })
   toast.on('click', () => {
-    const win = getWindow?.()
-    if (!win || win.isDestroyed()) return
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.focus()
+    focusMainWindow()
     emit(IPC.teamChat.openChat, null)
+  })
+  toast.show()
+}
+
+function showMessageToast(message: TeamChatMessage) {
+  if (!Notification.isSupported()) return
+  if (presenceSelfId && message.authorId === presenceSelfId) return
+  if (isWindowActivelyViewed() && activeRoomId === message.roomId) return
+
+  const author = message.authorName.trim() || 'Alguém'
+  const toast = new Notification({
+    title: author,
+    body: messageNotifyBody(message),
+    icon: resolveNotifyIcon(),
+  })
+  toast.on('click', () => {
+    focusMainWindow()
+    emit(IPC.teamChat.openChat, message.roomId)
   })
   toast.show()
 }
@@ -276,6 +315,10 @@ export const teamChatService = {
     getWindow = next
   },
 
+  setActiveRoom(roomId: string | null) {
+    activeRoomId = roomId?.trim() || null
+  },
+
   listOnline(): TeamChatPeer[] {
     return onlineOthers()
   },
@@ -302,12 +345,19 @@ export const teamChatService = {
 
     const { data: memberships, error: membershipError } = await supabase
       .from('team_room_members')
-      .select('room_id, user_id, role, joined_at')
+      .select('room_id, user_id, role, joined_at, hidden_at, cleared_before')
       .eq('user_id', session.user.id)
+      .is('hidden_at', null)
     if (membershipError) throw new Error(membershipError.message)
 
-    const roomIds = ((memberships ?? []) as TeamMemberRow[]).map((row) => row.room_id)
+    const myMemberships = (memberships ?? []) as TeamMemberRow[]
+    const roomIds = myMemberships.map((row) => row.room_id)
     if (roomIds.length === 0) return []
+    const clearedBeforeByRoom = new Map(
+      myMemberships
+        .filter((row) => row.cleared_before)
+        .map((row) => [row.room_id, row.cleared_before as string]),
+    )
 
     const { data: rooms, error: roomsError } = await supabase
       .from('team_rooms')
@@ -318,7 +368,7 @@ export const teamChatService = {
 
     const { data: allMembers, error: membersError } = await supabase
       .from('team_room_members')
-      .select('room_id, user_id, role, joined_at')
+      .select('room_id, user_id, role, joined_at, hidden_at, cleared_before')
       .in('room_id', roomIds)
     if (membersError) throw new Error(membersError.message)
 
@@ -332,12 +382,17 @@ export const teamChatService = {
       .select('room_id, body, created_at')
       .in('room_id', roomIds)
       .order('created_at', { ascending: false })
-      .limit(Math.max(roomIds.length * 3, 30))
+      .limit(Math.max(roomIds.length * 8, 40))
     if (messagesError) throw new Error(messagesError.message)
-    for (const row of (recentMessages ?? []) as Array<{ room_id: string; body: string }>) {
-      if (!previews.has(row.room_id)) {
-        previews.set(row.room_id, (row.body ?? '').trim())
-      }
+    for (const row of (recentMessages ?? []) as Array<{
+      room_id: string
+      body: string
+      created_at: string
+    }>) {
+      if (previews.has(row.room_id)) continue
+      const clearedBefore = clearedBeforeByRoom.get(row.room_id)
+      if (clearedBefore && row.created_at <= clearedBefore) continue
+      previews.set(row.room_id, (row.body ?? '').trim())
     }
 
     const membersByRoom = new Map<string, TeamMemberRow[]>()
@@ -384,18 +439,50 @@ export const teamChatService = {
   async listMessages(roomId: string): Promise<TeamChatMessage[]> {
     const supabase = getAtlasSupabase()
     if (!supabase) return []
+    const session = await accountService.getSession()
+    if (!session.user) return []
     const id = roomId.trim()
     if (!id) return []
-    const { data, error } = await supabase
+
+    const { data: membership, error: membershipError } = await supabase
+      .from('team_room_members')
+      .select('cleared_before')
+      .eq('room_id', id)
+      .eq('user_id', session.user.id)
+      .maybeSingle()
+    if (membershipError) throw new Error(membershipError.message)
+    const clearedBefore =
+      typeof membership?.cleared_before === 'string' ? membership.cleared_before : null
+
+    let query = supabase
       .from('team_messages')
       .select('*')
       .eq('room_id', id)
       .order('created_at', { ascending: true })
       .limit(200)
+    if (clearedBefore) {
+      query = query.gt('created_at', clearedBefore)
+    }
+    const { data, error } = await query
     if (error) throw new Error(error.message)
     return ((data ?? []) as TeamMessageRow[])
       .map(mapMessage)
       .filter((message): message is TeamChatMessage => Boolean(message))
+  },
+
+  async hideForMe(roomId: string): Promise<void> {
+    const supabase = getAtlasSupabase()
+    if (!supabase) throw new Error('O chat da equipe não está disponível.')
+    const session = await accountService.getSession()
+    if (!session.user) throw new Error('Entre com sua conta para conversar.')
+    const id = roomId.trim()
+    if (!id) throw new Error('Conversa inválida.')
+
+    const { error } = await supabase.rpc('team_chat_hide_for_me', {
+      p_room_id: id,
+    })
+    if (error) throw new Error(error.message || 'Não foi possível apagar a conversa.')
+    if (activeRoomId === id) activeRoomId = null
   },
 
   async openDm(userId: string): Promise<TeamChatRoom> {
@@ -526,7 +613,9 @@ export const teamChatService = {
       { event: 'INSERT', schema: 'public', table: 'team_messages' },
       (payload) => {
         const message = mapMessage(payload.new as TeamMessageRow)
-        if (message) emit(IPC.teamChat.message, message)
+        if (!message) return
+        emit(IPC.teamChat.message, message)
+        showMessageToast(message)
       },
     )
     channel.on('presence', { event: 'sync' }, () => {
@@ -559,6 +648,7 @@ export const teamChatService = {
     online = []
     presenceSelfId = ''
     presenceReady = false
+    activeRoomId = null
     emit(IPC.teamChat.presence, [])
   },
 }

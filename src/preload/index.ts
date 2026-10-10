@@ -354,9 +354,13 @@ const api = {
       ipcRenderer.invoke(IPC.teamChat.createGroup, input) as Promise<TeamChatRoom>,
     addGroupMembers: (roomId: string, memberIds: string[]) =>
       ipcRenderer.invoke(IPC.teamChat.addGroupMembers, roomId, memberIds) as Promise<TeamChatMember[]>,
+    hideForMe: (roomId: string) =>
+      ipcRenderer.invoke(IPC.teamChat.hideForMe, roomId) as Promise<void>,
     sendMessage: (input: TeamChatSendInput | string) =>
       ipcRenderer.invoke(IPC.teamChat.sendMessage, input) as Promise<TeamChatMessage>,
     listOnline: () => ipcRenderer.invoke(IPC.teamChat.listOnline) as Promise<TeamChatPeer[]>,
+    setActiveRoom: (roomId: string | null) =>
+      ipcRenderer.invoke(IPC.teamChat.setActiveRoom, roomId) as Promise<void>,
     onMessage: (callback: (message: TeamChatMessage) => void) => {
       const listener = (_: Electron.IpcRendererEvent, data: TeamChatMessage) => callback(data)
       ipcRenderer.on(IPC.teamChat.message, listener)
@@ -378,8 +382,8 @@ const api = {
         ipcRenderer.removeListener(IPC.teamChat.peerOnline, listener)
       }
     },
-    onOpenChat: (callback: () => void) => {
-      const listener = () => callback()
+    onOpenChat: (callback: (roomId?: string | null) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, roomId?: string | null) => callback(roomId)
       ipcRenderer.on(IPC.teamChat.openChat, listener)
       return () => {
         ipcRenderer.removeListener(IPC.teamChat.openChat, listener)

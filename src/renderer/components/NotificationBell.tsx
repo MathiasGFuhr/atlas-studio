@@ -46,9 +46,10 @@ export function NotificationBell() {
       const item = deriveOnlineNotification(peer)
       setOnlineItems((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 20))
     })
-    const offOpenChat = api.teamChat.onOpenChat(() => {
+    const offOpenChat = api.teamChat.onOpenChat((roomId) => {
       setOpen(false)
-      navigate('/equipe')
+      const id = typeof roomId === 'string' ? roomId.trim() : ''
+      navigate(id ? `/equipe?sala=${encodeURIComponent(id)}` : '/equipe')
     })
     return () => {
       offTasks()

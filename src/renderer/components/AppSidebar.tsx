@@ -1,6 +1,19 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useRef, useState } from 'react'
-import { CheckSquare, ChevronLeft, ChevronRight, Clapperboard, Home, Loader2, MessageSquareText, MessagesSquare, Mic2, Music2, Settings, Tv } from 'lucide-react'
+import { useEffect, useRef, useState, type ComponentType } from 'react'
+import {
+  CheckSquare,
+  ChevronLeft,
+  ChevronRight,
+  Clapperboard,
+  Home,
+  Loader2,
+  MessageSquareText,
+  MessagesSquare,
+  Mic2,
+  Music2,
+  Settings,
+  Tv,
+} from 'lucide-react'
 import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
 import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
@@ -16,32 +29,51 @@ import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useShortsGeneration } from '../hooks/useShortsGeneration'
 import { PRODUCT_TOUR_ACTIVE_EVENT } from '../lib/productTourEvents'
 
-const globalItems = [
-  { to: '/', label: 'Início', icon: Home, end: true, color: undefined },
+type NavItem = {
+  to: string
+  label: string
+  icon: ComponentType<{ className?: string }>
+  end?: boolean
+}
+
+type NavSection = {
+  id: string
+  label: string
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
   {
-    to: ENVIRONMENTS.music.basePath,
-    label: ENVIRONMENTS.music.label,
-    icon: Music2,
-    color: ENVIRONMENTS.music.color,
+    id: 'geral',
+    label: 'Geral',
+    items: [{ to: '/', label: 'Início', icon: Home, end: true }],
   },
   {
-    to: MUSIC_PROMPTS_PATH,
-    label: 'Prompts',
-    icon: MessageSquareText,
-    color: ENVIRONMENTS.music.color,
+    id: 'estudio',
+    label: 'Estúdio',
+    items: [
+      { to: ENVIRONMENTS.music.basePath, label: 'Projetos', icon: Music2 },
+      { to: MUSIC_PROMPTS_PATH, label: 'Prompts', icon: MessageSquareText },
+      { to: MUSIC_LIPSYNC_PATH, label: 'Lipsync', icon: Mic2 },
+      { to: '/shorts', label: 'Shorts', icon: Clapperboard },
+    ],
   },
   {
-    to: MUSIC_LIPSYNC_PATH,
-    label: 'Lipsync',
-    icon: Mic2,
-    color: ENVIRONMENTS.music.color,
+    id: 'operacao',
+    label: 'Operação',
+    items: [
+      { to: '/canais', label: 'Canais', icon: Tv },
+      { to: '/equipe', label: 'Chat', icon: MessagesSquare },
+      { to: '/tarefas', label: 'Tarefas', icon: CheckSquare },
+    ],
   },
-  { to: '/equipe', label: 'Chat', icon: MessagesSquare, color: undefined },
-  { to: '/canais', label: 'Canais', icon: Tv, color: undefined },
-  { to: '/shorts', label: 'Shorts Studio', icon: Clapperboard, color: undefined },
-  { to: '/tarefas', label: 'Tarefas', icon: CheckSquare, color: undefined },
-  { to: '/configuracoes', label: 'Configurações', icon: Settings, color: undefined },
 ]
+
+const settingsItem: NavItem = {
+  to: '/configuracoes',
+  label: 'Configurações',
+  icon: Settings,
+}
 
 function isSidebarLinkActive(to: string, pathname: string, matched: boolean): boolean {
   if (to === ENVIRONMENTS.music.basePath) {
@@ -91,7 +123,6 @@ export function AppSidebar({
     }
   })
   collapsedRef.current = collapsed
-  const items = globalItems
 
   useEffect(() => {
     function refresh() {
@@ -106,9 +137,7 @@ export function AppSidebar({
 
     function applyPeers(peers: { id: string }[]) {
       if (cancelled) return
-      setOnlineCount(
-        peers.filter((peer) => peer.id && peer.id !== accountId).length,
-      )
+      setOnlineCount(peers.filter((peer) => peer.id && peer.id !== accountId).length)
     }
 
     void api.teamChat.listOnline().then(applyPeers)
@@ -157,7 +186,8 @@ export function AppSidebar({
   }
 
   function openAiSettings() {
-    const onAiSection = pathname === '/configuracoes' && new URLSearchParams(search).get('secao') === 'ia'
+    const onAiSection =
+      pathname === '/configuracoes' && new URLSearchParams(search).get('secao') === 'ia'
     if (onAiSection) {
       document.getElementById('ia')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
@@ -167,12 +197,78 @@ export function AppSidebar({
 
   const collapseLabel = collapsed ? 'Expandir menu' : 'Recolher menu'
 
+  function renderNavLink(item: NavItem) {
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        end={item.end}
+        title={collapsed ? item.label : undefined}
+        className={({ isActive }) => {
+          const active = isSidebarLinkActive(item.to, pathname, isActive)
+          return cn(
+            'group relative flex items-center rounded-lg text-[13px] font-medium tracking-[-0.01em] transition-colors',
+            collapsed ? 'h-10 justify-center px-0' : 'h-9 gap-2.5 px-2.5',
+            active
+              ? 'bg-white/[0.06] text-text'
+              : 'text-muted-2 hover:bg-white/[0.03] hover:text-text',
+          )
+        }}
+      >
+        {({ isActive }) => {
+          const active = isSidebarLinkActive(item.to, pathname, isActive)
+          return (
+            <>
+              {active ? (
+                <span className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-accent" />
+              ) : null}
+              <item.icon
+                className={cn(
+                  'h-[17px] w-[17px] shrink-0 transition-colors',
+                  active ? 'text-accent' : 'text-muted-2 group-hover:text-muted',
+                )}
+              />
+              {collapsed ? (
+                item.to === '/tarefas' && pendingCount > 0 ? (
+                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+                ) : item.to === '/equipe' && onlineCount > 0 ? (
+                  <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-dark px-1 text-[10px] font-semibold leading-none text-accent">
+                    {onlineCount > 9 ? '9+' : onlineCount}
+                  </span>
+                ) : item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
+                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+                ) : null
+              ) : (
+                <>
+                  <span className="min-w-0 truncate">{item.label}</span>
+                  {item.to === '/tarefas' && pendingCount > 0 ? (
+                    <span className="ml-auto rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+                      {pendingCount}
+                    </span>
+                  ) : null}
+                  {item.to === '/equipe' && onlineCount > 0 ? (
+                    <span className="ml-auto text-[11px] font-semibold tabular-nums text-accent">
+                      {onlineCount}
+                    </span>
+                  ) : null}
+                  {item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
+                    <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
+                  ) : null}
+                </>
+              )}
+            </>
+          )
+        }}
+      </NavLink>
+    )
+  }
+
   return (
     <aside
       data-tour="sidebar"
       className={cn(
-        'relative z-10 flex h-full shrink-0 flex-col border-r border-border-soft bg-sidebar transition-[width] duration-200 ease-out',
-        collapsed ? 'w-[72px]' : 'w-[248px]',
+        'relative z-10 flex h-full shrink-0 flex-col border-r border-border-soft/80 bg-sidebar transition-[width] duration-200 ease-out',
+        collapsed ? 'w-[72px]' : 'w-[252px]',
       )}
     >
       <button
@@ -181,114 +277,48 @@ export function AppSidebar({
         aria-label={collapseLabel}
         aria-expanded={!collapsed}
         onClick={toggleCollapsed}
-        className="absolute right-0 top-[1.65rem] z-20 flex h-6 w-6 translate-x-1/2 items-center justify-center rounded-full border border-border-soft bg-sidebar text-muted shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition-colors hover:bg-card-2 hover:text-text"
+        className="absolute right-0 top-[1.55rem] z-20 flex h-6 w-6 translate-x-1/2 items-center justify-center rounded-full border border-border-soft bg-sidebar text-muted-2 shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition-colors hover:bg-card-2 hover:text-text"
       >
         {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
       </button>
-      <div className={cn('flex items-center pb-3 pt-5', collapsed ? 'justify-center px-2' : 'gap-3 px-5')}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-dark text-accent">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path
-              d="M4 18L12 4L20 18H15.5L12 11.5L8.5 18H4Z"
-              fill="currentColor"
-            />
+
+      <div className={cn('flex items-center pb-2 pt-5', collapsed ? 'justify-center px-2' : 'gap-3 px-4')}>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-dark text-accent ring-1 ring-accent/20">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M4 18L12 4L20 18H15.5L12 11.5L8.5 18H4Z" fill="currentColor" />
           </svg>
         </div>
         {collapsed ? null : (
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[15px] font-semibold tracking-tight text-text">
+            <div className="sidebar-brand truncate text-[17px] leading-none tracking-[-0.02em] text-text">
               Atlas Studio
             </div>
-            <div className="truncate text-[11px] text-muted">Produção musical com IA</div>
+            <div className="mt-1 truncate text-[11px] text-muted-2">Produção musical</div>
           </div>
         )}
       </div>
 
-      <SidebarChannelSwitcher compact={collapsed} />
+      <div className="pb-1">
+        <SidebarChannelSwitcher compact={collapsed} />
+      </div>
 
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pt-3">
-        {collapsed ? null : (
-          <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-2">
-            Principal
-          </p>
-        )}
-        {items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            title={collapsed ? item.label : undefined}
-            className={({ isActive }) => {
-              const active = isSidebarLinkActive(item.to, pathname, isActive)
-              return cn(
-                'group relative flex items-center rounded-xl py-2.5 text-sm font-medium transition-colors',
-                collapsed ? 'justify-center px-0' : 'gap-3 px-3',
-                active
-                  ? 'bg-accent-dark/55 text-accent'
-                  : 'text-muted hover:bg-white/[0.03] hover:text-text',
-              )
-            }}
-            style={({ isActive }) =>
-              isSidebarLinkActive(item.to, pathname, isActive) && item.color
-                ? { backgroundColor: `${item.color}1f` }
-                : {}
-            }
-          >
-            {({ isActive }) => {
-              const active = isSidebarLinkActive(item.to, pathname, isActive)
-              return (
-              <>
-                {active ? (
-                  <span
-                    className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-accent"
-                    style={item.color ? { backgroundColor: item.color } : undefined}
-                  />
-                ) : null}
-                <item.icon
-                  className={cn(
-                    'h-[18px] w-[18px] shrink-0',
-                    active ? 'text-accent' : 'text-muted group-hover:text-text',
-                  )}
-                  style={active && item.color ? { color: item.color } : undefined}
-                />
-                {collapsed ? (
-                  item.to === '/tarefas' && pendingCount > 0 ? (
-                    <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
-                  ) : item.to === '/equipe' && onlineCount > 0 ? (
-                    <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-dark px-1 text-[10px] font-bold leading-none text-accent">
-                      {onlineCount > 9 ? '9+' : onlineCount}
-                    </span>
-                  ) : item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
-                    <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
-                  ) : null
-                ) : (
-                  <>
-                    <span style={active && item.color ? { color: item.color } : undefined}>
-                      {item.label}
-                    </span>
-                    {item.to === '/tarefas' && pendingCount > 0 ? (
-                      <span className="ml-auto rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-semibold text-muted">
-                        {pendingCount}
-                      </span>
-                    ) : null}
-                    {item.to === '/equipe' && onlineCount > 0 ? (
-                      <span className="ml-auto text-[12px] font-semibold tabular-nums text-accent">
-                        {onlineCount}
-                      </span>
-                    ) : null}
-                    {item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
-                      <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
-                    ) : null}
-                  </>
-                )}
-              </>
-              )
-            }}
-          </NavLink>
+      <nav className="sidebar-nav flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2.5 pb-2 pt-3">
+        {navSections.map((section) => (
+          <div key={section.id} className="flex flex-col gap-0.5">
+            {collapsed ? (
+              <div className="mx-auto mb-1 h-px w-6 bg-border-soft" aria-hidden />
+            ) : (
+              <p className="px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-2/90">
+                {section.label}
+              </p>
+            )}
+            {section.items.map((item) => renderNavLink(item))}
+          </div>
         ))}
       </nav>
 
-      <div className="flex flex-col gap-2 px-3 pb-4 pt-2">
+      <div className="mt-auto flex flex-col gap-2 border-t border-border-soft/70 px-2.5 pb-3 pt-3">
+        <div className="flex flex-col gap-0.5">{renderNavLink(settingsItem)}</div>
         <SidebarUpdateCard compact={collapsed} />
         <AtlasAiStatusCard view={aiStatus} onClick={openAiSettings} compact={collapsed} />
       </div>

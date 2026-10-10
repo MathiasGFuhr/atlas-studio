@@ -415,10 +415,14 @@ export function registerIpcHandlers(deps: {
     IPC.teamChat.addGroupMembers,
     (_e, roomId: string, memberIds: string[]) => teamChatService.addGroupMembers(roomId, memberIds),
   )
+  ipcMain.handle(IPC.teamChat.hideForMe, (_e, roomId: string) => teamChatService.hideForMe(roomId))
   ipcMain.handle(IPC.teamChat.sendMessage, (_e, input: TeamChatSendInput | string) =>
     teamChatService.sendMessage(input),
   )
   ipcMain.handle(IPC.teamChat.listOnline, () => teamChatService.listOnline())
+  ipcMain.handle(IPC.teamChat.setActiveRoom, (_e, roomId: string | null) => {
+    teamChatService.setActiveRoom(roomId)
+  })
 
   ipcMain.handle(IPC.antigravity.status, () => antigravityService.getStatus())
   ipcMain.handle(IPC.antigravity.healthCheck, async () => {

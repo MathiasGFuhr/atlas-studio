@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileIcon, MessageSquarePlus, Paperclip, Smile, Users, X } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import {
+  FileIcon,
+  MessageSquarePlus,
+  MoreVertical,
+  Paperclip,
+  Smile,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react'
 import type {
   AtlasAccount,
   TeamChatAttachment,
@@ -36,7 +46,9 @@ type ComposerMode = 'dm' | 'group' | 'add' | null
 
 export function TeamChatPage({ account }: { account: AtlasAccount }) {
   const api = getAtlasApi()
-  const { pushError } = useToast()
+  const { push, pushError } = useToast()
+  const [searchParams] = useSearchParams()
+  const requestedRoomId = searchParams.get('sala')?.trim() || null
   const [rooms, setRooms] = useState<TeamChatRoom[]>([])
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null)
   const [messages, setMessages] = useState<TeamChatMessage[]>([])
@@ -48,6 +60,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
   const [attachmentPath, setAttachmentPath] = useState<string | null>(null)
   const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null)
   const [emojiOpen, setEmojiOpen] = useState(false)
+  const [roomMenuOpen, setRoomMenuOpen] = useState(false)
   const [lightbox, setLightbox] = useState<TeamChatAttachment | null>(null)
   const [composer, setComposer] = useState<ComposerMode>(null)
   const [groupName, setGroupName] = useState('')
@@ -56,7 +69,10 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
   const scroller = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const emojiRef = useRef<HTMLDivElement>(null)
+  const roomMenuRef = useRef<HTMLDivElement>(null)
   const activeRoomIdRef = useRef<string | null>(null)
+  const requestedRoomIdRef = useRef(requestedRoomId)
+  requestedRoomIdRef.current = requestedRoomId
 
   const activeRoom = useMemo(
     () => rooms.find((room) => room.id === activeRoomId) ?? null,
@@ -73,6 +89,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
     async (roomId: string) => {
       activeRoomIdRef.current = roomId
       setActiveRoomId(roomId)
+      void api.teamChat.setActiveRoom(roomId)
       const [nextMessages, nextMembers] = await Promise.all([
         api.teamChat.listMessages(roomId),
         api.teamChat.listMembers(roomId),
@@ -85,6 +102,12 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
   )
 
   useEffect(() => {
+    return () => {
+      void api.teamChat.setActiveRoom(null)
+    }
+  }, [api])
+
+  useEffect(() => {
     void Promise.all([
       refreshRooms(),
       api.teamChat.listDirectory(),
@@ -92,7 +115,10 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
     ]).then(([nextRooms, nextDirectory, nextOnline]) => {
       setDirectory(nextDirectory)
       setOnline(nextOnline)
-      if (nextRooms[0]) void loadRoom(nextRooms[0].id)
+      const requested = requestedRoomIdRef.current
+      const preferred =
+        (requested && nextRooms.find((room) => room.id === requested)?.id) || nextRooms[0]?.id
+      if (preferred) void loadRoom(preferred)
     }).catch((error) => pushError(error, 'Não foi possível carregar o chat.'))
 
     const offMessage = api.teamChat.onMessage((message) => {
@@ -127,6 +153,11 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
   }, [api, loadRoom, pushError, refreshRooms])
 
   useEffect(() => {
+    if (!requestedRoomId || requestedRoomId === activeRoomIdRef.current) return
+    void loadRoom(requestedRoomId)
+  }, [loadRoom, requestedRoomId])
+
+  useEffect(() => {
     const node = scroller.current
     if (node) node.scrollTop = node.scrollHeight
   }, [messages])
@@ -146,6 +177,26 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [emojiOpen])
+
+  useEffect(() => {
+    if (!roomMenuOpen) return
+    function onPointerDown(event: MouseEvent) {
+      if (!roomMenuRef.current?.contains(event.target as Node)) setRoomMenuOpen(false)
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setRoomMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [roomMenuOpen])
+
+  useEffect(() => {
+    setRoomMenuOpen(false)
+  }, [activeRoomId])
 
   useEffect(() => {
     if (!lightbox) return
@@ -236,6 +287,36 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
       closeComposer()
     } catch (error) {
       pushError(error, 'Não foi possível abrir a conversa.')
+    } finally {
+      setBusyAction(false)
+    }
+  }
+
+  async function hideConversation(roomId: string) {
+    const room = rooms.find((item) => item.id === roomId)
+    const title = room?.title || 'esta conversa'
+    const confirmed = window.confirm(
+      `Apagar a conversa com ${title} só para você?\n\nO outro usuário continua vendo o histórico normalmente.`,
+    )
+    if (!confirmed || busyAction) return
+
+    setBusyAction(true)
+    setRoomMenuOpen(false)
+    try {
+      await api.teamChat.hideForMe(roomId)
+      const nextRooms = await refreshRooms()
+      if (activeRoomIdRef.current === roomId) {
+        activeRoomIdRef.current = null
+        setActiveRoomId(null)
+        setMessages([])
+        setMembers([])
+        void api.teamChat.setActiveRoom(null)
+        const fallback = nextRooms.find((item) => item.id !== roomId)?.id
+        if (fallback) void loadRoom(fallback)
+      }
+      push('Conversa apagada só para você.', 'success')
+    } catch (error) {
+      pushError(error, 'Não foi possível apagar a conversa.')
     } finally {
       setBusyAction(false)
     }
@@ -366,27 +447,44 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
             ) : (
               <ul className="space-y-1">
                 {rooms.map((room) => (
-                  <li key={room.id} className="min-w-0">
-                    <button
-                      type="button"
+                  <li key={room.id} className="group min-w-0">
+                    <div
                       className={cn(
-                        'w-full min-w-0 rounded-xl px-3 py-2.5 text-left transition-colors',
+                        'flex min-w-0 items-stretch rounded-xl transition-colors',
                         room.id === activeRoomId
                           ? 'bg-accent/15 text-text'
                           : 'hover:bg-white/5 text-text',
                       )}
-                      onClick={() => void loadRoom(room.id)}
                     >
-                      <div className="flex min-w-0 items-center justify-between gap-2">
-                        <span className="truncate text-sm font-medium">{room.title}</span>
-                        <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-2">
-                          {room.kind === 'dm' ? 'DM' : 'Grupo'}
-                        </span>
-                      </div>
-                      {room.lastMessagePreview ? (
-                        <p className="mt-0.5 truncate text-xs text-muted">{room.lastMessagePreview}</p>
-                      ) : null}
-                    </button>
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 px-3 py-2.5 text-left"
+                        onClick={() => void loadRoom(room.id)}
+                      >
+                        <div className="flex min-w-0 items-center justify-between gap-2">
+                          <span className="truncate text-sm font-medium">{room.title}</span>
+                          <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-2">
+                            {room.kind === 'dm' ? 'DM' : 'Grupo'}
+                          </span>
+                        </div>
+                        {room.lastMessagePreview ? (
+                          <p className="mt-0.5 truncate text-xs text-muted">{room.lastMessagePreview}</p>
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        className="mr-1.5 hidden shrink-0 self-center rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-danger group-hover:inline-flex"
+                        aria-label={`Apagar conversa ${room.title} só para mim`}
+                        title="Apagar só para mim"
+                        disabled={busyAction}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void hideConversation(room.id)
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -429,19 +527,45 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                       : `${members.length} membro(s) no grupo`}
                   </p>
                 </div>
-                {activeRoom.kind === 'group' && activeRoom.myRole === 'admin' ? (
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10 @[980px]:hidden"
-                    onClick={() => {
-                      setComposer('add')
-                      setSelectedIds([])
-                      setGroupName('')
-                    }}
-                  >
-                    Adicionar
-                  </button>
-                ) : null}
+                <div className="flex shrink-0 items-center gap-1">
+                  {activeRoom.kind === 'group' && activeRoom.myRole === 'admin' ? (
+                    <button
+                      type="button"
+                      className="rounded-lg px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10 @[980px]:hidden"
+                      onClick={() => {
+                        setComposer('add')
+                        setSelectedIds([])
+                        setGroupName('')
+                      }}
+                    >
+                      Adicionar
+                    </button>
+                  ) : null}
+                  <div ref={roomMenuRef} className="relative">
+                    <button
+                      type="button"
+                      className="rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-text"
+                      aria-label="Mais opções da conversa"
+                      aria-expanded={roomMenuOpen}
+                      disabled={busyAction}
+                      onClick={() => setRoomMenuOpen((open) => !open)}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                    {roomMenuOpen ? (
+                      <div className="absolute right-0 top-full z-30 mt-1 min-w-[12.5rem] rounded-xl border border-border bg-card-2 py-1 shadow-lg">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-danger hover:bg-white/5"
+                          onClick={() => void hideConversation(activeRoom.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                          Apagar conversa pra mim
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
               <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
                 {messages.length === 0 ? (
