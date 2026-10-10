@@ -39,12 +39,9 @@ import { onSettingsChanged } from '../lib/settingsEvents'
 import { useToast } from '../components/Toast'
 import { formatRelativeDate } from '../lib/utils'
 
-function homeGreeting(name?: string | null, now = new Date()): string {
+function homeHello(now = new Date()): string {
   const hour = now.getHours()
-  const hello = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
-  const trimmed = name?.trim()
-  if (!trimmed) return hello
-  return `${hello}, ${trimmed}`
+  return hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
 }
 
 function homeDateLabel(now = new Date()): string {
@@ -222,7 +219,16 @@ export function HomePage() {
         <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-2">Início</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-text sm:text-[32px]">{homeGreeting(accountName)}</h1>
+            <h1 className="home-greeting mt-2 text-[1.75rem] leading-[1.15] text-text sm:text-[2.15rem]">
+              {accountName.trim() ? (
+                <>
+                  <span className="home-greeting__hello">{homeHello()},</span>{' '}
+                  <span className="home-greeting__name">{accountName.trim()}</span>
+                </>
+              ) : (
+                <span className="home-greeting__hello">{homeHello()}</span>
+              )}
+            </h1>
             <p className="mt-1.5 text-sm text-muted">{homeDateLabel()}</p>
           </div>
           <p className="max-w-sm text-sm leading-relaxed text-pretty text-muted-2 sm:text-right">

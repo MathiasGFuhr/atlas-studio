@@ -16,6 +16,7 @@
   --color-danger: #ef6464;
   --color-warning: #e5b94f;
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+  --font-display: "Instrument Serif", "Times New Roman", Times, serif;
 }
 
 * {
@@ -123,4 +124,20 @@ body {
     animation: none;
     transition: none;
   }
+}
+
+.home-greeting {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.home-greeting__hello {
+  font-style: italic;
+  color: var(--color-muted);
+}
+
+.home-greeting__name {
+  font-style: normal;
+  color: var(--color-text);
 }
