@@ -10,6 +10,12 @@ export function shortsAnalyzeProgressLabel(event: ShortsProgressEvent | null | u
   return event.message || SHORTS_PROGRESS_LABEL[event.stage]
 }
 
+export function shortsExportProgressLabel(percent: number | null | undefined): string {
+  if (percent == null || !Number.isFinite(percent)) return 'Gerando Short...'
+  const rounded = Math.max(0, Math.min(100, Math.round(percent)))
+  return `Gerando Short... ${rounded}%`
+}
+
 export function shortsAnalyzeResultToast(
   job: ShortsJob,
   preservedCount = 0,

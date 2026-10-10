@@ -29,6 +29,12 @@ import {
   verticalFramingMode,
   type ShortsFramingMode,
 } from '@shared/shortsFraming'
+import {
+  DEFAULT_LOGO_SETTINGS,
+  applyLogoPosition,
+  normalizeLogoSettings,
+  type ShortsLogoSettings,
+} from '@shared/shortsLogo'
 import type { ShortsAnalysisPlan } from '@shared/shorts/analysisPlan'
 import {
   SHORTS_CONTENT_LANGUAGE_OPTIONS,
@@ -58,6 +64,7 @@ import { Input } from '../components/Input'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { ShortsAdjustModal } from '../components/shorts/ShortsAdjustModal'
 import { ShortsFramingPanel } from '../components/shorts/ShortsFramingPanel'
+import { ShortsLogoPanel } from '../components/shorts/ShortsLogoPanel'
 import { ShortsResultCard } from '../components/shorts/ShortsResultCard'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
@@ -124,6 +131,7 @@ export function ShortsStudioPage() {
   const [allowExternalVideoAnalysis, setAllowExternalVideoAnalysis] = useState(false)
   const [analysisPlan, setAnalysisPlan] = useState<ShortsAnalysisPlan | null>(null)
   const [modelChoiceOpen, setModelChoiceOpen] = useState(false)
+  const [placingLogo, setPlacingLogo] = useState(false)
 
   const analyzingJob = Boolean(jobId && generation.isAnalyzing(jobId))
   const analyzeProgress = jobId ? generation.progressFor(jobId) : null
@@ -213,6 +221,7 @@ export function ShortsStudioPage() {
       durationMode: ShortsDurationMode
       aspectMode: ShortsAspectMode
       framingSettings: ShortsJob['framingSettings']
+      logoSettings: ShortsLogoSettings
       captionsEnabled: boolean
       languageOverride: string | null
     }>,
@@ -227,6 +236,45 @@ export function ShortsStudioPage() {
     const framingSettings = { ...(job.framingSettings ?? DEFAULT_FRAMING_SETTINGS), ...patch }
     setJob({ ...job, framingSettings })
     void persistSettings({ framingSettings })
+  }
+
+  function persistLogo(patch: Partial<ShortsLogoSettings>) {
+    if (!job) return
+    let logoSettings = normalizeLogoSettings({ ...(job.logoSettings ?? DEFAULT_LOGO_SETTINGS), ...patch })
+    if (patch.position) logoSettings = applyLogoPosition(logoSettings, patch.position)
+    setJob({ ...job, logoSettings })
+    void persistSettings({ logoSettings })
+  }
+
+  async function pickLogo() {
+    if (!job) return
+    try {
+      const file = await api.dialog.selectImage()
+      if (!file) return
+      const next = await api.shorts.setLogo(job.id, file)
+      if (next) {
+        setJob(next)
+        push('Logo adicionada. Ela será gravada no Short gerado.', 'success')
+      }
+    } catch (error) {
+      pushError(error, 'Falha ao importar a logo')
+    }
+  }
+
+  async function clearLogo() {
+    if (!job) return
+    try {
+      const next = await api.shorts.clearLogo(job.id)
+      if (next) setJob(next)
+      setPlacingLogo(false)
+    } catch (error) {
+      pushError(error, 'Falha ao remover a logo')
+    }
+  }
+
+  function placeLogo(x: number, y: number) {
+    persistLogo({ position: 'custom', x, y, enabled: true })
+    setPlacingLogo(false)
   }
 
   function persistFramingMode(mode: ShortsFramingMode) {
@@ -380,18 +428,33 @@ export function ShortsStudioPage() {
   async function exportClip(clip: ShortsClip) {
     if (!job) return
     setBusy(true)
-    setProgress({ jobId: job.id, stage: 'exporting', message: SHORTS_PROGRESS_LABEL.exporting })
+    setProgress({
+      jobId: job.id,
+      clipId: clip.id,
+      stage: 'exporting',
+      message: SHORTS_PROGRESS_LABEL.exporting,
+      percent: null,
+    })
     try {
       const output = await api.shorts.export({ jobId: job.id, clipId: clip.id })
       if (!output) return
       const latest = await api.shorts.get(job.id)
       if (latest) setJob(latest)
-      push('Short exportado em MP4. O vídeo original não foi alterado.', 'success')
+      push('Short gerado. Use Abrir pasta para ver o arquivo.', 'success')
     } catch (error) {
       pushError(error, 'Falha ao exportar o Short')
     } finally {
       setBusy(false)
       setProgress(null)
+    }
+  }
+
+  async function openClipFolder(clip: ShortsClip) {
+    if (!job) return
+    try {
+      await api.shorts.openExportsFolder(job.id, clip.id)
+    } catch (error) {
+      pushError(error, 'Não foi possível abrir a pasta do Short')
     }
   }
 
@@ -746,6 +809,16 @@ export function ShortsStudioPage() {
                 onSettingsChange={persistFraming}
               />
             ) : null}
+            <ShortsLogoPanel
+              settings={job?.logoSettings ?? DEFAULT_LOGO_SETTINGS}
+              logoUrl={job?.logoUrl ?? null}
+              placing={placingLogo}
+              disabled={pageBusy}
+              onPick={() => void pickLogo()}
+              onClear={() => void clearLogo()}
+              onChange={persistLogo}
+              onTogglePlacing={() => setPlacingLogo((value) => !value)}
+            />
             <label className="flex items-start gap-3 md:col-span-2">
               <input
                 type="checkbox"
@@ -824,32 +897,42 @@ export function ShortsStudioPage() {
                 {formatDistinctCountSummary(job.clips.length, job.clipCount)}
                 {job.clips.length < job.clipCount ? ' · geramos menos para evitar repetições.' : ''}
               </p>
-              {job.clips.map((clip) => (
-                <ShortsResultCard
-                  key={clip.id}
-                  clip={clip}
-                  mediaUrl={mediaUrl}
-                  aspectMode={aspectMode}
-                  sourceWidth={probe?.width ?? 1920}
-                  sourceHeight={probe?.height ?? 1080}
-                  framingPlan={clipFramingPlan(clip)}
-                  picking={Boolean(job.framingSettings?.picking)}
-                  playing={playingClipId === clip.id && previewClip?.id !== clip.id}
-                  busy={pageBusy || Boolean(copyBusyId)}
-                  regenerating={copyBusyId === clip.id}
-                  onPlayingChange={(playing) => setPlayingClipId(playing ? clip.id : null)}
-                  onAssignPoint={(x, y, time) => assignFramingPoint(clip, x, y, time)}
-                  onAdjust={() => {
-                    setPlayingClipId(null)
-                    setPreviewClip(clip)
-                  }}
-                  onExport={() => void exportClip(clip)}
-                  onPersist={(patch) => void persistClip(clip, patch)}
-                  onCopy={(part) => void copyClip(clip, part)}
-                  onRegenerate={(fields) => void regenerateClip(clip, fields)}
-                  onDelete={() => setDeletingClip(clip)}
-                />
-              ))}
+              {job.clips.map((clip) => {
+                const exporting = progress?.stage === 'exporting' && progress.clipId === clip.id
+                return (
+                  <ShortsResultCard
+                    key={clip.id}
+                    clip={clip}
+                    mediaUrl={mediaUrl}
+                    aspectMode={aspectMode}
+                    sourceWidth={probe?.width ?? 1920}
+                    sourceHeight={probe?.height ?? 1080}
+                    framingPlan={clipFramingPlan(clip)}
+                    picking={Boolean(job.framingSettings?.picking)}
+                    placingLogo={placingLogo}
+                    logo={job.logoSettings}
+                    logoUrl={job.logoUrl}
+                    playing={playingClipId === clip.id && previewClip?.id !== clip.id}
+                    busy={pageBusy || Boolean(copyBusyId)}
+                    regenerating={copyBusyId === clip.id}
+                    exporting={exporting}
+                    exportPercent={exporting ? (progress?.percent ?? null) : null}
+                    onPlayingChange={(playing) => setPlayingClipId(playing ? clip.id : null)}
+                    onAssignPoint={(x, y, time) => assignFramingPoint(clip, x, y, time)}
+                    onPlaceLogo={placeLogo}
+                    onAdjust={() => {
+                      setPlayingClipId(null)
+                      setPreviewClip(clip)
+                    }}
+                    onExport={() => void exportClip(clip)}
+                    onOpenFolder={() => void openClipFolder(clip)}
+                    onPersist={(patch) => void persistClip(clip, patch)}
+                    onCopy={(part) => void copyClip(clip, part)}
+                    onRegenerate={(fields) => void regenerateClip(clip, fields)}
+                    onDelete={() => setDeletingClip(clip)}
+                  />
+                )
+              })}
             </div>
           ) : (
             <Card className="flex flex-col items-center py-14 text-center">
@@ -910,9 +993,18 @@ export function ShortsStudioPage() {
         aspectMode={aspectMode}
         framingPlan={previewClip ? clipFramingPlan(previewClip) : null}
         picking={Boolean(job?.framingSettings?.picking)}
+        placingLogo={placingLogo}
+        logo={job?.logoSettings}
+        logoUrl={job?.logoUrl}
         playing={Boolean(previewClip && playingClipId === previewClip.id)}
         busy={pageBusy}
         regenerating={Boolean(previewClip && copyBusyId === previewClip.id)}
+        exporting={Boolean(previewClip && progress?.stage === 'exporting' && progress.clipId === previewClip.id)}
+        exportPercent={
+          previewClip && progress?.stage === 'exporting' && progress.clipId === previewClip.id
+            ? (progress.percent ?? null)
+            : null
+        }
         onClose={() => {
           setPreviewClip(null)
           setPlayingClipId(null)
@@ -925,6 +1017,7 @@ export function ShortsStudioPage() {
           if (!previewClip) return
           assignFramingPoint(previewClip, x, y, time)
         }}
+        onPlaceLogo={placeLogo}
         onChange={async (patch) => {
           if (!previewClip) return
           await persistClip(previewClip, patch)
@@ -937,6 +1030,9 @@ export function ShortsStudioPage() {
         }}
         onExport={() => {
           if (previewClip) void exportClip(previewClip)
+        }}
+        onOpenFolder={() => {
+          if (previewClip) void openClipFolder(previewClip)
         }}
         onDelete={() => {
           if (previewClip) setDeletingClip(previewClip)

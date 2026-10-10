@@ -65,8 +65,12 @@ import { IPC } from '../shared/types'
 import type {
   AtlasAuthInput,
   AtlasSession,
+  TeamChatCreateGroupInput,
+  TeamChatMember,
   TeamChatMessage,
   TeamChatPeer,
+  TeamChatRoom,
+  TeamChatSendInput,
 } from '../shared/account'
 import type { WorkspaceCapabilities } from '../shared/workspaceCapabilities'
 import type { AgentModelSnapshot, AgentModelsBundle, AgentProviderId } from '../shared/agents/types'
@@ -267,10 +271,23 @@ const api = {
       patch: Partial<
         Pick<
           ShortsJob,
-          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'framingSettings' | 'captionsEnabled' | 'languageOverride'
+          | 'name'
+          | 'profile'
+          | 'clipCount'
+          | 'requestedDuration'
+          | 'durationMode'
+          | 'aspectMode'
+          | 'framingSettings'
+          | 'logoSettings'
+          | 'captionsEnabled'
+          | 'languageOverride'
         >
       >,
     ) => ipcRenderer.invoke(IPC.shorts.updateSettings, jobId, patch) as Promise<ShortsJob | null>,
+    setLogo: (jobId: string, sourcePath: string) =>
+      ipcRenderer.invoke(IPC.shorts.setLogo, jobId, sourcePath) as Promise<ShortsJob | null>,
+    clearLogo: (jobId: string) =>
+      ipcRenderer.invoke(IPC.shorts.clearLogo, jobId) as Promise<ShortsJob | null>,
     export: (payload: { jobId: string; clipId: string }) =>
       ipcRenderer.invoke(IPC.shorts.export, payload) as Promise<string | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.shorts.remove, id) as Promise<boolean>,
@@ -278,8 +295,8 @@ const api = {
     thumbnailUrl: (jobId: string) =>
       ipcRenderer.invoke(IPC.shorts.thumbnailUrl, jobId) as Promise<string | null>,
     relink: (jobId: string) => ipcRenderer.invoke(IPC.shorts.relink, jobId) as Promise<ShortsJob | null>,
-    openExportsFolder: (jobId: string) =>
-      ipcRenderer.invoke(IPC.shorts.openExportsFolder, jobId) as Promise<boolean>,
+    openExportsFolder: (jobId: string, clipId?: string) =>
+      ipcRenderer.invoke(IPC.shorts.openExportsFolder, jobId, clipId) as Promise<boolean>,
     onProgress: (callback: (event: ShortsProgressEvent) => void) => {
       const listener = (_: Electron.IpcRendererEvent, data: ShortsProgressEvent) => callback(data)
       ipcRenderer.on(IPC.shorts.progress, listener)
@@ -319,9 +336,20 @@ const api = {
     },
   },
   teamChat: {
-    listMessages: () => ipcRenderer.invoke(IPC.teamChat.listMessages) as Promise<TeamChatMessage[]>,
-    sendMessage: (body: string) =>
-      ipcRenderer.invoke(IPC.teamChat.sendMessage, body) as Promise<TeamChatMessage>,
+    listRooms: () => ipcRenderer.invoke(IPC.teamChat.listRooms) as Promise<TeamChatRoom[]>,
+    listDirectory: () => ipcRenderer.invoke(IPC.teamChat.listDirectory) as Promise<TeamChatPeer[]>,
+    listMembers: (roomId: string) =>
+      ipcRenderer.invoke(IPC.teamChat.listMembers, roomId) as Promise<TeamChatMember[]>,
+    listMessages: (roomId: string) =>
+      ipcRenderer.invoke(IPC.teamChat.listMessages, roomId) as Promise<TeamChatMessage[]>,
+    openDm: (userId: string) =>
+      ipcRenderer.invoke(IPC.teamChat.openDm, userId) as Promise<TeamChatRoom>,
+    createGroup: (input: TeamChatCreateGroupInput) =>
+      ipcRenderer.invoke(IPC.teamChat.createGroup, input) as Promise<TeamChatRoom>,
+    addGroupMembers: (roomId: string, memberIds: string[]) =>
+      ipcRenderer.invoke(IPC.teamChat.addGroupMembers, roomId, memberIds) as Promise<TeamChatMember[]>,
+    sendMessage: (input: TeamChatSendInput | string) =>
+      ipcRenderer.invoke(IPC.teamChat.sendMessage, input) as Promise<TeamChatMessage>,
     listOnline: () => ipcRenderer.invoke(IPC.teamChat.listOnline) as Promise<TeamChatPeer[]>,
     onMessage: (callback: (message: TeamChatMessage) => void) => {
       const listener = (_: Electron.IpcRendererEvent, data: TeamChatMessage) => callback(data)

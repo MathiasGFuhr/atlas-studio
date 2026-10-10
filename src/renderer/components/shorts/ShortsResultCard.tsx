@@ -1,7 +1,10 @@
+import { FolderOpen } from 'lucide-react'
 import type { ShortsAspectMode, ShortsClip, ShortsClipPatch, ShortsCopyFields } from '@shared/shorts'
 import type { ShortsFramingPlan } from '@shared/shortsFraming'
+import type { ShortsLogoSettings } from '@shared/shortsLogo'
 import { clipDuration, formatShortsTimecode, shortsClipPreviewKey } from '@shared/shorts'
 import { formatClipLength } from '@shared/shortsDuration'
+import { shortsExportProgressLabel } from '@shared/shortsGeneration'
 import { Button } from '../Button'
 import { Card } from '../Card'
 import { ShortsClipCopyEditor } from './ShortsClipCopyEditor'
@@ -16,13 +19,20 @@ export function ShortsResultCard({
   sourceHeight,
   framingPlan,
   picking,
+  placingLogo,
+  logo,
+  logoUrl,
   playing,
   busy,
   regenerating,
+  exporting,
+  exportPercent,
   onPlayingChange,
   onAssignPoint,
+  onPlaceLogo,
   onAdjust,
   onExport,
+  onOpenFolder,
   onPersist,
   onCopy,
   onRegenerate,
@@ -35,19 +45,27 @@ export function ShortsResultCard({
   sourceHeight: number
   framingPlan?: ShortsFramingPlan | null
   picking?: boolean
+  placingLogo?: boolean
+  logo?: ShortsLogoSettings | null
+  logoUrl?: string | null
   playing: boolean
   busy: boolean
   regenerating: boolean
+  exporting?: boolean
+  exportPercent?: number | null
   onPlayingChange: (playing: boolean) => void
   onAssignPoint?: (x: number, y: number, time: number) => void
+  onPlaceLogo?: (x: number, y: number) => void
   onAdjust: () => void
   onExport: () => void
+  onOpenFolder?: () => void
   onPersist: (patch: ShortsClipPatch) => void
   onCopy: (part: 'title' | 'description' | 'all') => void
   onRegenerate: (fields: ShortsCopyFields) => void
   onDelete: () => void
 }) {
   const vertical = aspectMode !== 'original'
+  const canOpenFolder = Boolean(clip.exportedPath && onOpenFolder)
 
   return (
     <Card className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start">
@@ -67,11 +85,15 @@ export function ShortsResultCard({
           sourceHeight={sourceHeight}
           framingPlan={framingPlan}
           picking={picking}
+          placingLogo={placingLogo}
+          logo={logo}
+          logoUrl={logoUrl}
           active={playing}
           resetToken={shortsClipPreviewKey(clip)}
           posterUrl={clip.posterUrl}
           onPlayingChange={onPlayingChange}
           onAssignPoint={onAssignPoint}
+          onPlaceLogo={onPlaceLogo}
         />
       </div>
       <div className="min-w-0 flex-1 space-y-4">
@@ -96,6 +118,20 @@ export function ShortsResultCard({
           onCopy={onCopy}
           onRegenerate={onRegenerate}
         />
+        {exporting ? (
+          <div className="space-y-1.5" role="status" aria-live="polite">
+            <p className="text-xs text-muted">{shortsExportProgressLabel(exportPercent)}</p>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                className={cn(
+                  'h-full rounded-full bg-accent transition-[width] duration-200',
+                  exportPercent == null && 'w-full animate-pulse opacity-50',
+                )}
+                style={exportPercent == null ? undefined : { width: `${Math.max(0, Math.min(100, exportPercent))}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" className="h-9 px-3 text-xs" onClick={() => onPlayingChange(!playing)}>
             {playing ? 'Pausar' : 'Assistir'}
@@ -104,8 +140,19 @@ export function ShortsResultCard({
             Ajustar
           </Button>
           <Button className="h-9 px-3 text-xs" disabled={busy} onClick={onExport}>
-            Gerar Short
+            {clip.exportedPath ? 'Gerar novamente' : 'Gerar Short'}
           </Button>
+          {canOpenFolder ? (
+            <Button
+              variant="secondary"
+              className="h-9 px-3 text-xs"
+              disabled={busy}
+              icon={<FolderOpen className="h-3.5 w-3.5" />}
+              onClick={onOpenFolder}
+            >
+              Abrir pasta
+            </Button>
+          ) : null}
           <Button variant="ghost" className="h-9 px-3 text-xs" disabled={busy} onClick={onDelete}>
             Excluir
           </Button>

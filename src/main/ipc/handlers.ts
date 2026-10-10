@@ -45,7 +45,11 @@ import type { CustomPrompt } from '../../shared/quickPrompts/types'
 import { sharedPromptService } from '../services/quickPrompts/sharedPromptService'
 import { accountService } from '../services/account/accountService'
 import { teamChatService } from '../services/teamChat/teamChatService'
-import type { AtlasAuthInput } from '../../shared/account'
+import type {
+  AtlasAuthInput,
+  TeamChatCreateGroupInput,
+  TeamChatSendInput,
+} from '../../shared/account'
 import { musicRepository } from '../repositories/musicRepository'
 import { shortsRepository } from '../repositories/shortsRepository'
 import { analyzeShortsJob, regenerateShortsClipCopy } from '../services/shorts/ShortsPipeline'
@@ -54,17 +58,28 @@ import { exportVideoClip, probeVideo } from '../services/media/ffmpegVideo'
 import { toAtlasMediaUrl } from '../services/media/atlasMediaProtocol'
 import { ensureShortsClipPoster, ensureShortsClipPosters, ensureShortsThumbnail, presentShortsJob } from '../services/shorts/shortsThumbnail'
 import {
+  clearProjectLogo,
   createFromSourceVideo,
   deleteProject as deleteShortsProject,
   markClipExported,
   removeClip as removeShortsClip,
+  setProjectLogo,
   toImportResult,
   updateClip as updateShortsClip,
   updateProjectSettings,
 } from '../services/shorts/ShortsProjectService'
 import { buildSrt, buildVerticalCropPlan, buildClipFramingPlan, cuesForClip } from '../../shared/shortsExport'
 import { buildFramingExportFilter } from '../../shared/shortsFraming'
-import { SHORTS_VIDEO_EXTENSIONS, shortsExportWindow, type ShortsAnalyzeInput, type ShortsClipPatch, type ShortsCopyFields, type ShortsJob } from '../../shared/shorts'
+import {
+  SHORTS_OUTPUT_WIDTH,
+  SHORTS_VIDEO_EXTENSIONS,
+  shortsExportWindow,
+  type ShortsAnalyzeInput,
+  type ShortsClipPatch,
+  type ShortsCopyFields,
+  type ShortsJob,
+} from '../../shared/shorts'
+import { activeLogoSettings } from '../../shared/shortsLogo'
 import type { ShortsProjectListFilters } from '../../shared/shortsProject'
 import { taskRepository } from '../repositories/taskRepository'
 import { logger } from '../services/logging/logger'
@@ -382,8 +397,21 @@ export function registerIpcHandlers(deps: {
     void teamChatService.start()
     return session
   })
-  ipcMain.handle(IPC.teamChat.listMessages, () => teamChatService.listMessages())
-  ipcMain.handle(IPC.teamChat.sendMessage, (_e, body: string) => teamChatService.sendMessage(body))
+  ipcMain.handle(IPC.teamChat.listRooms, () => teamChatService.listRooms())
+  ipcMain.handle(IPC.teamChat.listDirectory, () => teamChatService.listDirectory())
+  ipcMain.handle(IPC.teamChat.listMembers, (_e, roomId: string) => teamChatService.listMembers(roomId))
+  ipcMain.handle(IPC.teamChat.listMessages, (_e, roomId: string) => teamChatService.listMessages(roomId))
+  ipcMain.handle(IPC.teamChat.openDm, (_e, userId: string) => teamChatService.openDm(userId))
+  ipcMain.handle(IPC.teamChat.createGroup, (_e, input: TeamChatCreateGroupInput) =>
+    teamChatService.createGroup(input),
+  )
+  ipcMain.handle(
+    IPC.teamChat.addGroupMembers,
+    (_e, roomId: string, memberIds: string[]) => teamChatService.addGroupMembers(roomId, memberIds),
+  )
+  ipcMain.handle(IPC.teamChat.sendMessage, (_e, input: TeamChatSendInput | string) =>
+    teamChatService.sendMessage(input),
+  )
   ipcMain.handle(IPC.teamChat.listOnline, () => teamChatService.listOnline())
 
   ipcMain.handle(IPC.antigravity.status, () => antigravityService.getStatus())
@@ -711,7 +739,16 @@ export function registerIpcHandlers(deps: {
       patch: Partial<
         Pick<
           ShortsJob,
-          'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'framingSettings' | 'captionsEnabled' | 'languageOverride'
+          | 'name'
+          | 'profile'
+          | 'clipCount'
+          | 'requestedDuration'
+          | 'durationMode'
+          | 'aspectMode'
+          | 'framingSettings'
+          | 'logoSettings'
+          | 'captionsEnabled'
+          | 'languageOverride'
         >
       >,
     ) => {
@@ -719,6 +756,14 @@ export function registerIpcHandlers(deps: {
       return updated ? presentShortsJob(updated) : null
     },
   )
+  ipcMain.handle(IPC.shorts.setLogo, (_e, jobId: string, sourcePath: string) => {
+    const updated = setProjectLogo(jobId, sourcePath)
+    return updated ? presentShortsJob(updated) : null
+  })
+  ipcMain.handle(IPC.shorts.clearLogo, (_e, jobId: string) => {
+    const updated = clearProjectLogo(jobId)
+    return updated ? presentShortsJob(updated) : null
+  })
   ipcMain.handle(IPC.shorts.export, async (_e, payload: { jobId: string; clipId: string }) => {
     const job = shortsRepository.get(payload.jobId)
     if (!job) throw new Error('Projeto de Shorts não encontrado.')
@@ -734,11 +779,16 @@ export function registerIpcHandlers(deps: {
     })
     if (result.canceled || !result.filePath) return null
 
-    win?.webContents.send(IPC.shorts.progress, {
-      jobId: job.id,
-      stage: 'exporting',
-      message: 'Exportando...',
-    })
+    const emitExportProgress = (percent: number | null, message = 'Gerando Short...') => {
+      win?.webContents.send(IPC.shorts.progress, {
+        jobId: job.id,
+        clipId: clip.id,
+        stage: 'exporting',
+        message,
+        percent,
+      })
+    }
+    emitExportProgress(null)
 
     const framingPlan = buildClipFramingPlan(job, clip)
     const framingFilter = framingPlan ? buildFramingExportFilter(framingPlan, clip.start) : {}
@@ -765,6 +815,9 @@ export function registerIpcHandlers(deps: {
       end: window.end,
       duration: window.duration,
     })
+    const logo = activeLogoSettings(job.logoSettings)
+    const outputWidth =
+      job.aspectMode === 'original' ? job.probe?.width || SHORTS_OUTPUT_WIDTH : SHORTS_OUTPUT_WIDTH
     try {
       await exportVideoClip({
         sourcePath: job.sourcePath,
@@ -774,12 +827,16 @@ export function registerIpcHandlers(deps: {
         videoFilter: framingFilter.videoFilter ?? crop?.filter,
         filterComplex: framingFilter.filterComplex,
         subtitlePath,
+        logo,
+        outputWidth,
+        onProgress: (percent) => emitExportProgress(percent, `Gerando Short... ${percent}%`),
       })
     } finally {
       if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true })
     }
 
     markClipExported(job.id, clip.id, result.filePath)
+    emitExportProgress(100, 'Short gerado.')
     return result.filePath
   })
   ipcMain.handle(IPC.shorts.remove, (_e, id: string) => deleteShortsProject(id))
@@ -818,11 +875,20 @@ export function registerIpcHandlers(deps: {
     await ensureShortsThumbnail(updated)
     return presentShortsJob(shortsRepository.get(jobId) ?? updated)
   })
-  ipcMain.handle(IPC.shorts.openExportsFolder, async (_e, jobId: string) => {
+  ipcMain.handle(IPC.shorts.openExportsFolder, async (_e, jobId: string, clipId?: string) => {
     const job = shortsRepository.get(jobId)
     if (!job) throw new Error('Projeto de Shorts não encontrado.')
+    if (clipId) {
+      const clip = job.clips.find((item) => item.id === clipId)
+      const exportPath = clip?.exportedPath
+      if (!exportPath || !fs.existsSync(exportPath)) {
+        throw new Error('Este Short ainda não foi gerado ou o arquivo foi movido.')
+      }
+      shell.showItemInFolder(exportPath)
+      return true
+    }
     const exportPaths = job.clips
-      .map((clip) => clip.exportedPath)
+      .map((item) => item.exportedPath)
       .filter((item): item is string => Boolean(item))
       .filter((item) => fs.existsSync(item))
     if (exportPaths.length === 0) {

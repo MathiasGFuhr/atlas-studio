@@ -11,6 +11,7 @@ import {
   type ShortsCropWindow,
   type ShortsFramingPlan,
 } from '@shared/shortsFraming'
+import { logoPreviewStyle, type ShortsLogoSettings } from '@shared/shortsLogo'
 import { cn } from '../../lib/utils'
 
 function mediaStyleFrom(frame: {
@@ -40,9 +41,13 @@ export function ShortsClipPreview({
   sourceHeight,
   framingPlan,
   picking,
+  placingLogo,
+  logo,
+  logoUrl,
   active,
   onPlayingChange,
   onAssignPoint,
+  onPlaceLogo,
   resetToken,
   posterUrl,
   className,
@@ -56,9 +61,13 @@ export function ShortsClipPreview({
   sourceHeight: number
   framingPlan?: ShortsFramingPlan | null
   picking?: boolean
+  placingLogo?: boolean
+  logo?: ShortsLogoSettings | null
+  logoUrl?: string | null
   active: boolean
   onPlayingChange: (playing: boolean) => void
   onAssignPoint?: (x: number, y: number, time: number) => void
+  onPlaceLogo?: (x: number, y: number) => void
   resetToken?: string
   posterUrl?: string | null
   className?: string
@@ -203,10 +212,22 @@ export function ShortsClipPreview({
     onAssignPoint(point.x, point.y, current)
   }
 
+  function placeLogoFromClick(event: MouseEvent<HTMLElement>) {
+    if (!onPlaceLogo) return
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+    const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
+    onPlaceLogo(x, y)
+  }
+
   function onPaneClick(
     event: MouseEvent<HTMLElement>,
     crop: ShortsCropWindow,
   ) {
+    if (placingLogo) return
     if (picking && onAssignPoint) {
       event.preventDefault()
       event.stopPropagation()
@@ -215,6 +236,9 @@ export function ShortsClipPreview({
     }
     onPlayingChange(!active)
   }
+
+  const showLogo = Boolean(logo?.enabled && logoUrl)
+  const logoStyle = logo ? logoPreviewStyle(logo) : null
 
   const videoNode = (ref: typeof videoRef, style: typeof mediaStyle, extraClass?: string) =>
     clipSrc ? (
@@ -236,7 +260,10 @@ export function ShortsClipPreview({
   return (
     <div className={cn('space-y-2', className)}>
       <div
-        className={cn('relative overflow-hidden rounded-xl bg-black', picking && 'ring-2 ring-accent')}
+        className={cn(
+          'relative overflow-hidden rounded-xl bg-black',
+          (picking || placingLogo) && 'ring-2 ring-accent',
+        )}
         style={{ aspectRatio: String(frame.aspectRatio) }}
       >
         {split && frame.top && frame.bottom ? (
@@ -268,12 +295,28 @@ export function ShortsClipPreview({
             ) : null}
           </div>
         )}
+        {showLogo && logoUrl && logoStyle ? (
+          <img
+            src={logoUrl}
+            alt=""
+            className="pointer-events-none absolute z-[8] max-w-none object-contain"
+            style={logoStyle}
+          />
+        ) : null}
+        {placingLogo ? (
+          <button
+            type="button"
+            className="absolute inset-0 z-[9] cursor-crosshair bg-transparent"
+            aria-label="Posicionar logo"
+            onClick={placeLogoFromClick}
+          />
+        ) : null}
         <button
           type="button"
           className={cn(
             'absolute z-10 flex items-center justify-center rounded-full bg-black/55 p-2.5 text-white',
             active ? 'bottom-2 left-2' : 'left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2',
-            picking && 'pointer-events-none opacity-0',
+            (picking || placingLogo) && 'pointer-events-none opacity-0',
           )}
           onClick={() => onPlayingChange(!active)}
           aria-label={active ? 'Pausar' : 'Assistir'}
@@ -283,6 +326,11 @@ export function ShortsClipPreview({
         {picking ? (
           <p className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-white">
             Clique na pessoa para definir o foco
+          </p>
+        ) : null}
+        {placingLogo ? (
+          <p className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-white">
+            Clique para posicionar a logo
           </p>
         ) : null}
       </div>

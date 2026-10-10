@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { parseFfmpegProbe, parseSceneTimes, parseSilenceRegions } from './ffmpegParse'
+import {
+  ffmpegProgressPercent,
+  parseFfmpegProbe,
+  parseFfmpegProgressTime,
+  parseSceneTimes,
+  parseSilenceRegions,
+} from './ffmpegParse'
 
 describe('ffmpegVideo parsers', () => {
   it('lê duração, resolução, fps e proporção do stderr do FFmpeg', () => {
@@ -24,5 +30,14 @@ Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'show.mp4':
     expect(parseSilenceRegions('silence_start: 10.0\nsilence_end: 12.2 | silence_duration: 2.2')).toEqual([
       { start: 10, end: 12.2 },
     ])
+  })
+
+  it('lê o progresso de encode pelo time= do stderr', () => {
+    expect(parseFfmpegProgressTime('frame=10 fps=30 time=00:00:12.50 bitrate=1000k')).toBeCloseTo(12.5, 2)
+    expect(parseFfmpegProgressTime('time=00:01:00.00\ntime=00:01:20.25')).toBeCloseTo(80.25, 2)
+    expect(parseFfmpegProgressTime('sem progresso')).toBeNull()
+    expect(ffmpegProgressPercent(29, 58)).toBe(50)
+    expect(ffmpegProgressPercent(58, 58)).toBe(99)
+    expect(ffmpegProgressPercent(-1, 58)).toBe(0)
   })
 })

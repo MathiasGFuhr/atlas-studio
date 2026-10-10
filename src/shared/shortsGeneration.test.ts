@@ -6,6 +6,7 @@ import {
   mergeShortsJobSnapshot,
   shortsAnalyzeProgressLabel,
   shortsAnalyzeResultToast,
+  shortsExportProgressLabel,
 } from './shortsGeneration'
 
 function clip(partial: Partial<ShortsClip> = {}): ShortsClip {
@@ -41,6 +42,7 @@ function job(partial: Partial<ShortsJob> = {}): ShortsJob {
     aspectMode: 'auto',
     framingSettings: DEFAULT_FRAMING_SETTINGS,
     framingTrack: [],
+    logoSettings: { enabled: false, imagePath: null, position: 'center', x: 0.5, y: 0.5, opacity: 0.42, scale: 0.34 },
     captionsEnabled: true,
     clips: [],
     probe: null,
@@ -60,6 +62,7 @@ function job(partial: Partial<ShortsJob> = {}): ShortsJob {
     updatedAt: '2026-10-01T00:00:00.000Z',
     sourceExists: true,
     thumbnailUrl: null,
+    logoUrl: null,
     ...partial,
   }
 }
@@ -82,6 +85,12 @@ describe('shorts generation helpers', () => {
     expect(shortsAnalyzeProgressLabel({ jobId: 'job-1', stage: 'preparing_video', message: '' })).toBe(
       'Preparando vídeo...',
     )
+  })
+
+  it('formata o rótulo da barra de geração do Short', () => {
+    expect(shortsExportProgressLabel(null)).toBe('Gerando Short...')
+    expect(shortsExportProgressLabel(64)).toBe('Gerando Short... 64%')
+    expect(shortsExportProgressLabel(100)).toBe('Gerando Short... 100%')
   })
 
   it('monta o toast de sucesso e de erro', () => {

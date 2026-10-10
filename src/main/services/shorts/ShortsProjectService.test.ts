@@ -68,6 +68,7 @@ function createStore(): ShortsProjectStore & { projects: Map<string, ShortsJob> 
         aspectMode: 'center_9_16',
         framingTrack: [],
         framingSettings: DEFAULT_FRAMING_SETTINGS,
+        logoSettings: { enabled: false, imagePath: null, position: 'center', x: 0.5, y: 0.5, opacity: 0.42, scale: 0.34 },
         captionsEnabled: true,
         probe: input.probe ?? null,
         clips: [],
@@ -82,6 +83,7 @@ function createStore(): ShortsProjectStore & { projects: Map<string, ShortsJob> 
         updatedAt: now,
         sourceExists: true,
         thumbnailUrl: null,
+        logoUrl: null,
       }
       projects.set(created.id, created)
       return created

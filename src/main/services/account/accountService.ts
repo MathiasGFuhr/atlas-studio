@@ -33,14 +33,36 @@ function persistLocalProfile(account: AtlasAccount) {
   })
 }
 
+async function upsertAtlasProfile(account: AtlasAccount) {
+  const supabase = getAtlasSupabase()
+  if (!supabase) return
+  const { error } = await supabase.from('atlas_profiles').upsert(
+    {
+      id: account.id,
+      email: account.email,
+      name: account.name,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'id' },
+  )
+  if (error) {
+    console.warn('[account] falha ao sincronizar perfil:', error.message)
+  }
+}
+
 export const accountService = {
+  async syncProfile(account: AtlasAccount): Promise<void> {
+    persistLocalProfile(account)
+    await upsertAtlasProfile(account)
+  },
+
   async getSession(): Promise<AtlasSession> {
     const supabase = getAtlasSupabase()
     if (!supabase) return { user: null }
     const { data, error } = await supabase.auth.getUser()
     if (error || !data.user) return { user: null }
     const user = mapAtlasAccount(data.user)
-    persistLocalProfile(user)
+    await this.syncProfile(user)
     return { user }
   },
 
@@ -52,7 +74,7 @@ export const accountService = {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.user) throw new Error(translateAuthError(error?.message || 'Falha ao entrar.'))
     const user = mapAtlasAccount(data.user)
-    persistLocalProfile(user)
+    await this.syncProfile(user)
     return { user }
   },
 
@@ -73,7 +95,7 @@ export const accountService = {
       return this.signIn({ email, password })
     }
     const user = mapAtlasAccount(data.user)
-    persistLocalProfile(user)
+    await this.syncProfile(user)
     return { user }
   },
 
@@ -90,7 +112,7 @@ export const accountService = {
     const { data, error } = await supabase.auth.updateUser({ data: { name: trimmed } })
     if (error || !data.user) throw new Error(error?.message || 'Não foi possível atualizar o nome.')
     const user = mapAtlasAccount(data.user)
-    persistLocalProfile(user)
+    await this.syncProfile(user)
     return { user }
   },
 }

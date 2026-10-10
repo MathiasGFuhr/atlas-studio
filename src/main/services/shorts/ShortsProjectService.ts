@@ -22,8 +22,10 @@ import {
   languageFieldsFromResolution,
   resolveContentLanguage,
 } from '../../../shared/shortsLanguage'
+import { DEFAULT_LOGO_SETTINGS, normalizeLogoSettings, type ShortsLogoSettings } from '../../../shared/shortsLogo'
 import { shortsRepository } from '../../repositories/shortsRepository'
 import { resolveShortsLanguageFields } from './editorialContext'
+import { clearShortsLogoFiles, importShortsLogo } from './shortsLogoStorage'
 import { shortsJobCacheDir } from './shortsThumbnail'
 
 export type ShortsProjectStore = {
@@ -206,6 +208,7 @@ export function updateProjectSettings(
       | 'durationMode'
       | 'aspectMode'
       | 'framingSettings'
+      | 'logoSettings'
       | 'captionsEnabled'
       | 'languageOverride'
     >
@@ -217,6 +220,9 @@ export function updateProjectSettings(
   if (nextPatch.requestedDuration != null) {
     const capped = capRequestedDuration(nextPatch.requestedDuration, job.probe?.duration)
     nextPatch.requestedDuration = capped.requested
+  }
+  if (nextPatch.logoSettings) {
+    nextPatch.logoSettings = normalizeLogoSettings(nextPatch.logoSettings)
   }
   if ('languageOverride' in patch) {
     Object.assign(
@@ -230,13 +236,43 @@ export function updateProjectSettings(
   return liveStore.update(jobId, nextPatch)
 }
 
+export function setProjectLogo(jobId: string, sourcePath: string): ShortsJob | null {
+  const job = liveStore.get(jobId)
+  if (!job) return null
+  const imagePath = importShortsLogo(jobId, sourcePath)
+  const logoSettings: ShortsLogoSettings = normalizeLogoSettings({
+    ...job.logoSettings,
+    enabled: true,
+    imagePath,
+  })
+  return liveStore.update(jobId, { logoSettings })
+}
+
+export function clearProjectLogo(jobId: string): ShortsJob | null {
+  const job = liveStore.get(jobId)
+  if (!job) return null
+  clearShortsLogoFiles(jobId)
+  return liveStore.update(jobId, {
+    logoSettings: { ...DEFAULT_LOGO_SETTINGS, enabled: false, imagePath: null },
+  })
+}
+
 export function updateProjectSettingsWith(
   store: ShortsProjectStore,
   jobId: string,
   patch: Partial<
     Pick<
       ShortsJob,
-      'name' | 'profile' | 'clipCount' | 'requestedDuration' | 'durationMode' | 'aspectMode' | 'framingSettings' | 'captionsEnabled' | 'languageOverride'
+      | 'name'
+      | 'profile'
+      | 'clipCount'
+      | 'requestedDuration'
+      | 'durationMode'
+      | 'aspectMode'
+      | 'framingSettings'
+      | 'logoSettings'
+      | 'captionsEnabled'
+      | 'languageOverride'
     >
   >,
 ): ShortsJob | null {
@@ -349,6 +385,7 @@ export type ShortsProjectSettingsPatch = Partial<{
   durationMode: ShortsDurationMode
   aspectMode: ShortsAspectMode
   framingSettings: ShortsJob['framingSettings']
+  logoSettings: ShortsJob['logoSettings']
   captionsEnabled: boolean
   languageOverride: string | null
 }>

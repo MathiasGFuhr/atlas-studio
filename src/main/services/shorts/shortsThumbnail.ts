@@ -21,10 +21,12 @@ export function shortsClipPosterFile(jobId: string, clipId: string, atSeconds: n
 
 export function presentShortsJob(job: ShortsJob): ShortsJob {
   const thumb = shortsThumbnailFile(job.id)
+  const logoPath = job.logoSettings?.imagePath
   return {
     ...job,
     sourceExists: fs.existsSync(job.sourcePath),
     thumbnailUrl: fs.existsSync(thumb) ? toAtlasMediaUrl(thumb) : null,
+    logoUrl: logoPath && fs.existsSync(logoPath) ? toAtlasMediaUrl(logoPath) : null,
     clips: job.clips.map((clip) => {
       const poster = shortsClipPosterFile(job.id, clip.id, clipPosterSeekSeconds(clip))
       return {

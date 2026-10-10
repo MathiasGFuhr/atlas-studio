@@ -25,6 +25,7 @@ export type FfmpegRunOptions = {
   timeoutMessage?: string
   failMessage?: string
   allowNonZero?: boolean
+  onStderr?: (chunk: string) => void
 }
 
 export function runFfmpegResult(
@@ -45,7 +46,9 @@ export function runFfmpegResult(
       stdout += buf.toString('utf8')
     })
     child.stderr?.on('data', (buf: Buffer) => {
-      stderr += buf.toString('utf8')
+      const chunk = buf.toString('utf8')
+      stderr += chunk
+      options.onStderr?.(chunk)
     })
     child.on('error', (error) => {
       clearTimeout(timer)

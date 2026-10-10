@@ -1,11 +1,26 @@
 import path from 'node:path'
 import { formatAspectRatio, type VideoProbeInfo } from '../../../shared/shorts'
 
-function parseClock(value: string): number {
+export function parseClock(value: string): number {
   const parts = value.split(':').map((part) => Number(part))
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
   if (parts.length === 2) return parts[0] * 60 + parts[1]
   return Number(value) || 0
+}
+
+/** Último `time=HH:MM:SS.ms` do stderr do FFmpeg durante encode. */
+export function parseFfmpegProgressTime(chunk: string): number | null {
+  const matches = chunk.matchAll(/time=\s*(-?(\d+:)?\d+:\d+(?:\.\d+)?|-?[\d.]+)/gi)
+  let last: string | null = null
+  for (const match of matches) last = match[1]
+  if (!last || last.startsWith('-')) return null
+  const seconds = parseClock(last)
+  return Number.isFinite(seconds) ? seconds : null
+}
+
+export function ffmpegProgressPercent(currentSeconds: number, durationSeconds: number): number {
+  if (!(durationSeconds > 0) || !(currentSeconds >= 0)) return 0
+  return Math.max(0, Math.min(99, Math.round((currentSeconds / durationSeconds) * 100)))
 }
 
 export function parseFfmpegProbe(stderr: string, filePath: string): VideoProbeInfo {

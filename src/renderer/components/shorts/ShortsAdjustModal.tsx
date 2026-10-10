@@ -1,13 +1,16 @@
-import { Pause, Play } from 'lucide-react'
+import { FolderOpen, Pause, Play } from 'lucide-react'
 import type { ShortsAspectMode, ShortsClip, ShortsClipPatch, ShortsJob } from '@shared/shorts'
 import type { ShortsFramingPlan } from '@shared/shortsFraming'
+import type { ShortsLogoSettings } from '@shared/shortsLogo'
 import { clipDuration, formatShortsTimecode, shortsClipPreviewKey } from '@shared/shorts'
 import { formatClipLength } from '@shared/shortsDuration'
+import { shortsExportProgressLabel } from '@shared/shortsGeneration'
 import { Button } from '../Button'
 import { Input } from '../Input'
 import { Modal } from '../Modal'
 import { ShortsClipCopyEditor } from './ShortsClipCopyEditor'
 import { ShortsClipPreview } from './ShortsClipPreview'
+import { cn } from '../../lib/utils'
 
 export function ShortsAdjustModal({
   open,
@@ -17,16 +20,23 @@ export function ShortsAdjustModal({
   aspectMode,
   framingPlan,
   picking,
+  placingLogo,
+  logo,
+  logoUrl,
   playing,
   busy,
   regenerating,
+  exporting,
+  exportPercent,
   onClose,
   onPlayingChange,
   onAssignPoint,
+  onPlaceLogo,
   onChange,
   onCopy,
   onRegenerate,
   onExport,
+  onOpenFolder,
   onDelete,
 }: {
   open: boolean
@@ -36,16 +46,23 @@ export function ShortsAdjustModal({
   aspectMode: ShortsAspectMode
   framingPlan?: ShortsFramingPlan | null
   picking?: boolean
+  placingLogo?: boolean
+  logo?: ShortsLogoSettings | null
+  logoUrl?: string | null
   playing: boolean
   busy: boolean
   regenerating: boolean
+  exporting?: boolean
+  exportPercent?: number | null
   onClose: () => void
   onPlayingChange: (playing: boolean) => void
   onAssignPoint?: (x: number, y: number, time: number) => void
+  onPlaceLogo?: (x: number, y: number) => void
   onChange: (patch: ShortsClipPatch) => Promise<void>
   onCopy: (part: 'title' | 'description' | 'all') => void
   onRegenerate: (fields: 'title' | 'description' | 'all') => void
   onExport: () => void
+  onOpenFolder?: () => void
   onDelete: () => void
 }) {
   const duration = job?.probe?.duration ?? clip?.end ?? 0
@@ -69,8 +86,18 @@ export function ShortsAdjustModal({
           <Button variant="secondary" onClick={onClose}>
             Fechar
           </Button>
+          {clip?.exportedPath && onOpenFolder ? (
+            <Button
+              variant="secondary"
+              disabled={busy}
+              icon={<FolderOpen className="h-4 w-4" />}
+              onClick={onOpenFolder}
+            >
+              Abrir pasta
+            </Button>
+          ) : null}
           <Button disabled={busy} onClick={onExport}>
-            Gerar Short
+            {clip?.exportedPath ? 'Gerar novamente' : 'Gerar Short'}
           </Button>
         </>
       }
@@ -89,11 +116,15 @@ export function ShortsAdjustModal({
                 sourceHeight={sourceHeight}
                 framingPlan={framingPlan}
                 picking={picking}
+                placingLogo={placingLogo}
+                logo={logo}
+                logoUrl={logoUrl}
                 active={playing}
                 resetToken={shortsClipPreviewKey({ id: clip.id, start, end })}
                 posterUrl={clip.posterUrl}
                 onPlayingChange={onPlayingChange}
                 onAssignPoint={onAssignPoint}
+                onPlaceLogo={onPlaceLogo}
               />
               <div className="mt-3 flex items-center gap-2">
                 <Button
@@ -141,6 +172,24 @@ export function ShortsAdjustModal({
                 onCopy={onCopy}
                 onRegenerate={onRegenerate}
               />
+              {exporting ? (
+                <div className="space-y-1.5" role="status" aria-live="polite">
+                  <p className="text-xs text-muted">{shortsExportProgressLabel(exportPercent)}</p>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className={cn(
+                        'h-full rounded-full bg-accent transition-[width] duration-200',
+                        exportPercent == null && 'w-full animate-pulse opacity-50',
+                      )}
+                      style={
+                        exportPercent == null
+                          ? undefined
+                          : { width: `${Math.max(0, Math.min(100, exportPercent))}%` }
+                      }
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="space-y-2">

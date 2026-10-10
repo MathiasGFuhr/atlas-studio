@@ -64,8 +64,12 @@ import type {
   AtlasAccount,
   AtlasAuthInput,
   AtlasSession,
+  TeamChatCreateGroupInput,
+  TeamChatMember,
   TeamChatMessage,
   TeamChatPeer,
+  TeamChatRoom,
+  TeamChatSendInput,
 } from '../src/shared/account'
 
 /**
@@ -88,10 +92,23 @@ const mockAccount: AtlasAccount = {
   name: 'Preview',
 }
 let mockSession: AtlasSession = { user: mockAccount }
+const mockPeer: TeamChatPeer = {
+  id: 'mock-peer',
+  email: 'colega@atlas.local',
+  name: 'Colega',
+}
+const teamRooms: TeamChatRoom[] = []
+const teamMembers = new Map<string, TeamChatMember[]>()
 const teamMessages: TeamChatMessage[] = []
 const teamChatListeners = {
   message: new Set<(message: TeamChatMessage) => void>(),
   presence: new Set<(peers: TeamChatPeer[]) => void>(),
+}
+
+function upsertMockRoom(room: TeamChatRoom) {
+  const index = teamRooms.findIndex((item) => item.id === room.id)
+  if (index >= 0) teamRooms[index] = room
+  else teamRooms.unshift(room)
 }
 const quickPromptFavorites = new Set<string>()
 const scripts: ScriptRecord[] = []
@@ -888,6 +905,8 @@ export const mockApi = {
       throw new Error('Regenerar título/descrição indisponível no modo mock. Use o Electron.')
     },
     updateSettings: async () => null,
+    setLogo: async () => null,
+    clearLogo: async () => null,
     export: async () => null,
     remove: async () => false,
     mediaUrl: async () => {
@@ -895,7 +914,7 @@ export const mockApi = {
     },
     thumbnailUrl: async () => null,
     relink: async () => null,
-    openExportsFolder: async () => {
+    openExportsFolder: async (_jobId: string, _clipId?: string) => {
       throw new Error('Pasta de exports indisponível no modo mock. Use o Electron.')
     },
     onProgress: (_callback: (event: ShortsProgressEvent) => void) => () => undefined,
@@ -981,20 +1000,121 @@ export const mockApi = {
     onChanged: () => () => undefined,
   },
   teamChat: {
-    listMessages: async () => [...teamMessages],
-    sendMessage: async (body: string) => {
+    listRooms: async () =>
+      [...teamRooms].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    listDirectory: async () => [mockPeer],
+    listMembers: async (roomId: string) => [...(teamMembers.get(roomId) ?? [])],
+    listMessages: async (roomId: string) =>
+      teamMessages.filter((message) => message.roomId === roomId),
+    openDm: async (userId: string) => {
+      const existing = teamRooms.find(
+        (room) => room.kind === 'dm' && room.peer?.id === userId,
+      )
+      if (existing) return existing
+      const peer = userId === mockPeer.id ? mockPeer : { id: userId, name: 'Usuário', email: '' }
+      const me = mockSession.user ?? mockAccount
+      const room: TeamChatRoom = {
+        id: crypto.randomUUID(),
+        kind: 'dm',
+        name: '',
+        title: peer.name,
+        createdBy: me.id,
+        updatedAt: new Date().toISOString(),
+        myRole: 'member',
+        memberCount: 2,
+        lastMessagePreview: null,
+        peer,
+      }
+      teamMembers.set(room.id, [
+        { ...me, role: 'member' },
+        { ...peer, role: 'member' },
+      ])
+      upsertMockRoom(room)
+      return room
+    },
+    createGroup: async (input: TeamChatCreateGroupInput) => {
+      const name = input.name.trim()
+      if (!name) throw new Error('Informe o nome do grupo.')
+      const me = mockSession.user ?? mockAccount
+      const selected = (input.memberIds ?? [])
+        .map((id) => (id === mockPeer.id ? mockPeer : { id, name: 'Usuário', email: '' }))
+        .filter((peer) => peer.id !== me.id)
+      const room: TeamChatRoom = {
+        id: crypto.randomUUID(),
+        kind: 'group',
+        name,
+        title: name,
+        createdBy: me.id,
+        updatedAt: new Date().toISOString(),
+        myRole: 'admin',
+        memberCount: 1 + selected.length,
+        lastMessagePreview: null,
+        peer: null,
+      }
+      teamMembers.set(room.id, [
+        { ...me, role: 'admin' },
+        ...selected.map((peer) => ({ ...peer, role: 'member' as const })),
+      ])
+      upsertMockRoom(room)
+      return room
+    },
+    addGroupMembers: async (roomId: string, memberIds: string[]) => {
+      const room = teamRooms.find((item) => item.id === roomId)
+      if (!room || room.kind !== 'group') throw new Error('Grupo não encontrado.')
+      if (room.myRole !== 'admin') throw new Error('Só o admin do grupo pode adicionar pessoas.')
+      const current = teamMembers.get(roomId) ?? []
+      const known = new Set(current.map((member) => member.id))
+      for (const id of memberIds) {
+        if (!id || known.has(id)) continue
+        const peer = id === mockPeer.id ? mockPeer : { id, name: 'Usuário', email: '' }
+        current.push({ ...peer, role: 'member' })
+        known.add(id)
+      }
+      teamMembers.set(roomId, current)
+      room.memberCount = current.length
+      room.updatedAt = new Date().toISOString()
+      return [...current]
+    },
+    sendMessage: async (input: TeamChatSendInput | string) => {
+      const payload: TeamChatSendInput =
+        typeof input === 'string' ? { roomId: '', body: input } : input ?? { roomId: '' }
+      const roomId = payload.roomId?.trim() || ''
+      const text = (payload.body ?? '').trim()
+      const attachmentPath = payload.attachmentPath?.trim() || ''
+      if (!roomId) throw new Error('Selecione uma conversa.')
+      if (!text && !attachmentPath) throw new Error('Escreva uma mensagem ou anexe um arquivo.')
+      const fileName = attachmentPath ? attachmentPath.split(/[/\\]/).pop() || 'arquivo' : ''
+      const ext = fileName.includes('.') ? `.${fileName.split('.').pop()?.toLowerCase()}` : ''
+      const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].includes(ext)
       const message: TeamChatMessage = {
         id: crypto.randomUUID(),
+        roomId,
         authorId: mockSession.user?.id ?? MOCK_SHARED_AUTHOR_ID,
         authorName: mockSession.user?.name ?? 'Preview',
-        body: body.trim(),
+        body: text || fileName,
         createdAt: new Date().toISOString(),
+        attachment: attachmentPath
+          ? {
+              name: fileName,
+              mime: isImage ? 'image/png' : 'application/octet-stream',
+              url: isImage
+                ? 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="%231a1a1a"/><text x="50%" y="50%" fill="%2388ff99" font-size="18" text-anchor="middle" dy=".3em">Preview</text></svg>'
+                : `file://${attachmentPath.replace(/\\/g, '/')}`,
+              kind: isImage ? 'image' : 'file',
+            }
+          : null,
       }
       teamMessages.push(message)
+      const room = teamRooms.find((item) => item.id === roomId)
+      if (room) {
+        room.lastMessagePreview = message.body
+        room.updatedAt = message.createdAt
+      }
       teamChatListeners.message.forEach((listener) => listener(message))
       return message
     },
-    listOnline: async () => (mockSession.user ? [mockSession.user] : []),
+    listOnline: async () =>
+      mockSession.user ? [mockSession.user, mockPeer] : [mockPeer],
     onMessage: (callback: (message: TeamChatMessage) => void) => {
       teamChatListeners.message.add(callback)
       return () => {

@@ -14,18 +14,66 @@ export type AtlasAuthInput = {
   name?: string
 }
 
+export type TeamChatAttachmentKind = 'image' | 'file'
+
+export type TeamChatAttachment = {
+  name: string
+  mime: string
+  url: string
+  kind: TeamChatAttachmentKind
+}
+
+export type TeamChatRoomKind = 'dm' | 'group'
+
+export type TeamChatMemberRole = 'admin' | 'member'
+
+export type TeamChatSendInput = {
+  roomId: string
+  body?: string
+  attachmentPath?: string | null
+}
+
+export type TeamChatCreateGroupInput = {
+  name: string
+  memberIds?: string[]
+}
+
+export type TeamChatAddMembersInput = {
+  roomId: string
+  memberIds: string[]
+}
+
 export type TeamChatMessage = {
   id: string
+  roomId: string
   authorId: string
   authorName: string
   body: string
   createdAt: string
+  attachment?: TeamChatAttachment | null
 }
 
 export type TeamChatPeer = {
   id: string
   name: string
   email: string
+}
+
+export type TeamChatMember = TeamChatPeer & {
+  role: TeamChatMemberRole
+}
+
+export type TeamChatRoom = {
+  id: string
+  kind: TeamChatRoomKind
+  name: string
+  title: string
+  createdBy: string
+  updatedAt: string
+  myRole: TeamChatMemberRole
+  memberCount: number
+  lastMessagePreview: string | null
+  peer?: TeamChatPeer | null
 }
 
 export function peersWhoJoined(

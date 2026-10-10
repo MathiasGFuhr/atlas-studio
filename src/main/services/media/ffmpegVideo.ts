@@ -2,10 +2,23 @@ import path from 'node:path'
 import fs from 'node:fs'
 import type { VideoProbeInfo } from '../../../shared/shorts'
 import { buildAnalysisProxyArgs, buildClipProxyArgs, buildKeyframeArgs } from '../../../shared/shorts/analysisProxy'
+import { activeLogoSettings, buildLogoOverlayFilter, type ShortsLogoSettings } from '../../../shared/shortsLogo'
 import { runFfmpegResult } from '../audio/ffmpeg'
-import { parseFfmpegProbe, parseSceneTimes, parseSilenceRegions } from './ffmpegParse'
+import {
+  ffmpegProgressPercent,
+  parseFfmpegProbe,
+  parseFfmpegProgressTime,
+  parseSceneTimes,
+  parseSilenceRegions,
+} from './ffmpegParse'
 
-export { parseFfmpegProbe, parseSceneTimes, parseSilenceRegions } from './ffmpegParse'
+export {
+  ffmpegProgressPercent,
+  parseFfmpegProbe,
+  parseFfmpegProgressTime,
+  parseSceneTimes,
+  parseSilenceRegions,
+} from './ffmpegParse'
 export { buildAnalysisProxyArgs, buildClipProxyArgs, buildKeyframeArgs } from '../../../shared/shorts/analysisProxy'
 
 export async function probeVideo(filePath: string): Promise<VideoProbeInfo> {
@@ -77,6 +90,9 @@ export async function exportVideoClip(input: {
   videoFilter?: string
   filterComplex?: string
   subtitlePath?: string | null
+  logo?: ShortsLogoSettings | null
+  outputWidth?: number
+  onProgress?: (percent: number) => void
 }): Promise<void> {
   const duration = Math.max(0.4, input.end - input.start)
   fs.mkdirSync(path.dirname(input.outputPath), { recursive: true })
@@ -84,6 +100,11 @@ export async function exportVideoClip(input: {
     input.subtitlePath && fs.existsSync(input.subtitlePath)
       ? `subtitles='${input.subtitlePath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'")}':force_style='FontName=Arial,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BackColour=&H80000000,BorderStyle=3,Outline=1,Shadow=0,Alignment=2,MarginV=80'`
       : null
+  const logo = activeLogoSettings(input.logo)
+  if (logo && (!logo.imagePath || !fs.existsSync(logo.imagePath))) {
+    throw new Error('A logo do Short não foi encontrada. Escolha a imagem de novo.')
+  }
+
   const args = [
     '-y',
     '-ss',
@@ -93,20 +114,40 @@ export async function exportVideoClip(input: {
     '-t',
     duration.toFixed(3),
   ]
-  if (input.filterComplex) {
-    let graph = input.filterComplex
-    let videoMap = '[vout]'
-    if (subtitleFilter) {
-      graph = `${graph};[vout]${subtitleFilter}[vsub]`
-      videoMap = '[vsub]'
+  if (logo?.imagePath) args.push('-i', logo.imagePath)
+
+  const useGraph = Boolean(input.filterComplex || logo)
+  if (useGraph) {
+    let graph = input.filterComplex || '[0:v]format=yuv420p[vout]'
+    let label = 'vout'
+    if (!input.filterComplex && input.videoFilter) {
+      graph = `[0:v]${input.videoFilter}[vout]`
     }
-    args.push('-filter_complex', graph, '-map', videoMap, '-map', '0:a?')
+    if (subtitleFilter) {
+      graph = `${graph};[${label}]${subtitleFilter}[vsub]`
+      label = 'vsub'
+    }
+    if (logo) {
+      graph = `${graph};${buildLogoOverlayFilter({
+        baseLabel: label,
+        logoInputIndex: 1,
+        outputLabel: 'vlogo',
+        opacity: logo.opacity,
+        x: logo.x,
+        y: logo.y,
+        scale: logo.scale,
+        outputWidth: Math.max(320, Math.round(input.outputWidth || 1080)),
+      })}`
+      label = 'vlogo'
+    }
+    args.push('-filter_complex', graph, '-map', `[${label}]`, '-map', '0:a?')
   } else {
     const filters: string[] = []
     if (input.videoFilter) filters.push(input.videoFilter)
     if (subtitleFilter) filters.push(subtitleFilter)
     if (filters.length > 0) args.push('-vf', filters.join(','))
   }
+
   args.push(
     '-c:v',
     'libx264',
@@ -124,12 +165,24 @@ export async function exportVideoClip(input: {
     '+faststart',
     input.outputPath,
   )
+  let lastPercent = -1
+  const reportProgress = (chunk: string) => {
+    if (!input.onProgress) return
+    const current = parseFfmpegProgressTime(chunk)
+    if (current == null) return
+    const percent = ffmpegProgressPercent(current, duration)
+    if (percent === lastPercent) return
+    lastPercent = percent
+    input.onProgress(percent)
+  }
   try {
     await runFfmpegResult(args, {
       timeoutMs: 15 * 60_000,
       timeoutMessage: 'O FFmpeg demorou demais para exportar o Short.',
       failMessage: 'Falha ao exportar o Short.',
+      onStderr: reportProgress,
     })
+    input.onProgress?.(100)
   } catch (error) {
     if (input.subtitlePath) {
       await exportVideoClip({ ...input, subtitlePath: null })

@@ -19,7 +19,7 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 15
+export const CURRENT_SCHEMA_VERSION = 16
 
 type SchemaStepResult = {
   historyCreated: number
@@ -133,6 +133,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyQuickPromptPublic,
   },
+  {
+    version: 16,
+    name: 'shorts-logo-watermark',
+    backup: false,
+    up: applyShortsLogoWatermark,
+  },
 ]
 
 /**
@@ -240,6 +246,15 @@ function applyShortsAnalysisMode(database: AppDatabase): SchemaStepResult {
 function applyShortsVerticalFraming(database: AppDatabase): SchemaStepResult {
   ensureColumn(database, 'shorts_jobs', 'framing_track_json', "TEXT NOT NULL DEFAULT '[]'")
   ensureColumn(database, 'shorts_jobs', 'framing_settings_json', "TEXT NOT NULL DEFAULT '{}'")
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyShortsLogoWatermark(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'shorts_jobs')) return { historyCreated: 0, musicCreated: 0 }
+  ensureColumn(database, 'shorts_jobs', 'logo_settings_json', "TEXT NOT NULL DEFAULT '{}'")
   return { historyCreated: 0, musicCreated: 0 }
 }
 

@@ -1,6 +1,16 @@
 import type { ProjectType } from './types'
 import type { ContentLanguageSource } from './shortsLanguage'
 import type { ShortsFramingSample, ShortsFramingSettings } from './shortsFraming'
+import type { ShortsLogoSettings } from './shortsLogo'
+
+export type { ShortsLogoPosition, ShortsLogoSettings } from './shortsLogo'
+export {
+  DEFAULT_LOGO_SETTINGS,
+  SHORTS_LOGO_POSITIONS,
+  activeLogoSettings,
+  applyLogoPosition,
+  normalizeLogoSettings,
+} from './shortsLogo'
 
 export type ShortsProfile = ProjectType
 export type ShortsClipCount = 3 | 5 | 10
@@ -189,6 +199,7 @@ export interface ShortsJob {
   aspectMode: ShortsAspectMode
   framingTrack: ShortsFramingSample[]
   framingSettings: ShortsFramingSettings
+  logoSettings: ShortsLogoSettings
   captionsEnabled: boolean
   probe: VideoProbeInfo | null
   clips: ShortsClip[]
@@ -215,12 +226,18 @@ export interface ShortsJob {
   sourceExists: boolean
   /** URL atlas-media da thumbnail em cache, se já gerada. */
   thumbnailUrl: string | null
+  /** URL atlas-media da logo, se configurada. */
+  logoUrl: string | null
 }
 
 export interface ShortsProgressEvent {
   jobId: string
   stage: ShortsProgressStage
   message: string
+  /** Preenchido na exportação de um Short específico. */
+  clipId?: string
+  /** 0–100 durante a exportação; omitido nas etapas de análise. */
+  percent?: number | null
 }
 
 export interface ShortsAnalyzeInput {

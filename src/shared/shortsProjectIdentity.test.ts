@@ -44,6 +44,7 @@ function job(partial: Partial<ShortsJob> = {}): ShortsJob {
     aspectMode: 'center_9_16',
     framingTrack: [],
     framingSettings: DEFAULT_FRAMING_SETTINGS,
+    logoSettings: { enabled: false, imagePath: null, position: 'center', x: 0.5, y: 0.5, opacity: 0.42, scale: 0.34 },
     captionsEnabled: true,
     probe: { name: 'GEGEN DEN TAKT.mp4', path: '', duration: 287, width: 1920, height: 1080, fps: 30, aspectRatio: '16:9', format: 'mp4', hasAudio: true },
     clips: [],
@@ -63,6 +64,7 @@ function job(partial: Partial<ShortsJob> = {}): ShortsJob {
     updatedAt: '2026-09-17T12:00:00.000Z',
     sourceExists: true,
     thumbnailUrl: null,
+    logoUrl: null,
     ...partial,
   }
 }
