@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, MoreHorizontal, Music2 } from 'lucide-react'
+import { MoreHorizontal, Music2 } from 'lucide-react'
 import type { ChannelVideo } from '@shared/types'
 import { PROJECT_TYPE_LABEL } from '@shared/types'
 import { formatScheduledDateLabel, parseDateKey } from '@shared/channelVideos'
@@ -57,12 +57,14 @@ export function HomeScheduledVideoCard({
         }
       }}
       className={cn(
-        'group flex min-w-0 cursor-pointer gap-4 rounded-2xl border border-border-soft bg-card p-3.5',
-        'transition-[border-color,background-color] duration-200 hover:border-[#334049] hover:bg-card-2/40',
+        'group flex min-w-0 cursor-pointer gap-4 rounded-2xl border border-border-soft/90 bg-card/78 p-3.5',
+        'shadow-[0_8px_24px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl',
+        'transition-[border-color,transform,box-shadow] duration-200',
+        'hover:-translate-y-px hover:border-[#334049] hover:shadow-[0_14px_36px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.05)]',
       )}
     >
       <div
-        className="relative h-[84px] w-[148px] shrink-0 overflow-hidden rounded-xl bg-card-2"
+        className="relative h-[88px] w-[152px] shrink-0 overflow-hidden rounded-xl border border-white/[0.05] bg-card-2"
         style={
           !video.thumbnailDataUrl && video.channelColor
             ? { background: `linear-gradient(145deg, ${video.channelColor}28, #151c21)` }
@@ -76,10 +78,13 @@ export function HomeScheduledVideoCard({
             <TypeIcon className="h-5 w-5" />
           </div>
         )}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
         {date ? (
-          <div className="absolute left-2 top-2 rounded-md bg-black/55 px-1.5 py-1 text-center backdrop-blur-sm">
+          <div className="absolute left-2 top-2 rounded-lg border border-white/10 bg-black/60 px-1.5 py-1 text-center backdrop-blur-md">
             <p className="text-[11px] font-semibold leading-none tabular-nums text-text">{date.day}</p>
-            <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-muted">{date.month}</p>
+            <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-muted">
+              {date.month}
+            </p>
           </div>
         ) : null}
       </div>
@@ -87,17 +92,17 @@ export function HomeScheduledVideoCard({
       <div className="min-w-0 flex-1 py-0.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-muted-2">
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-2">
               {formatScheduledDateLabel(video.scheduledDate)}
             </p>
-            <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-snug tracking-tight text-text">
+            <h3 className="mt-1.5 line-clamp-2 text-[14px] font-semibold leading-snug tracking-tight text-text">
               {video.title}
             </h3>
           </div>
           <div className="relative shrink-0" ref={menuRef}>
             <button
               type="button"
-              className="rounded-md p-1 text-muted-2 opacity-0 transition-opacity hover:bg-white/5 hover:text-text group-hover:opacity-100 focus-visible:opacity-100"
+              className="rounded-lg p-1.5 text-muted-2 opacity-0 transition-all hover:bg-white/5 hover:text-text group-hover:opacity-100 focus-visible:opacity-100"
               aria-label="Ações rápidas"
               onClick={(event) => {
                 event.stopPropagation()
@@ -109,13 +114,13 @@ export function HomeScheduledVideoCard({
             {menuOpen ? (
               <div
                 role="menu"
-                className="absolute right-0 z-20 mt-1 min-w-[168px] rounded-xl border border-border-soft bg-card-2 py-1 shadow-lg"
+                className="absolute right-0 z-20 mt-1 min-w-[168px] overflow-hidden rounded-xl border border-border-soft/90 bg-card-2/95 py-1 shadow-xl backdrop-blur-xl"
                 onClick={(event) => event.stopPropagation()}
               >
                 <button
                   type="button"
                   role="menuitem"
-                  className="block w-full px-3 py-1.5 text-left text-xs text-text hover:bg-white/5"
+                  className="block w-full px-3 py-2 text-left text-xs text-text hover:bg-white/5"
                   onClick={() => {
                     setMenuOpen(false)
                     onOpen()
@@ -127,7 +132,7 @@ export function HomeScheduledVideoCard({
                   <button
                     type="button"
                     role="menuitem"
-                    className="block w-full px-3 py-1.5 text-left text-xs text-text hover:bg-white/5"
+                    className="block w-full px-3 py-2 text-left text-xs text-text hover:bg-white/5"
                     onClick={() => {
                       setMenuOpen(false)
                       onOpenProject()
@@ -139,7 +144,7 @@ export function HomeScheduledVideoCard({
                 <button
                   type="button"
                   role="menuitem"
-                  className="block w-full px-3 py-1.5 text-left text-xs text-text hover:bg-white/5"
+                  className="block w-full px-3 py-2 text-left text-xs text-text hover:bg-white/5"
                   onClick={() => {
                     setMenuOpen(false)
                     onCopyTitle()
@@ -150,7 +155,7 @@ export function HomeScheduledVideoCard({
                 <button
                   type="button"
                   role="menuitem"
-                  className="block w-full px-3 py-1.5 text-left text-xs text-text hover:bg-white/5"
+                  className="block w-full px-3 py-2 text-left text-xs text-text hover:bg-white/5"
                   onClick={() => {
                     setMenuOpen(false)
                     onCopyDescription()
@@ -162,7 +167,7 @@ export function HomeScheduledVideoCard({
             ) : null}
           </div>
         </div>
-        <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted">
+        <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted">
           <span className="truncate font-medium text-muted">{video.channelName ?? 'Canal'}</span>
           {channelType ? (
             <span className="text-muted-2">{PROJECT_TYPE_LABEL[channelType]}</span>

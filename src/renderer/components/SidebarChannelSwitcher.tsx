@@ -7,10 +7,10 @@ import {
   channelIdFromPath,
   pickSidebarChannel,
   readLastSidebarChannelId,
-  writeLastSidebarChannelId,
 } from '@shared/sidebarChannel'
 import { getAtlasApi } from '../lib/api'
 import { onChannelsChanged } from '../lib/channelEvents'
+import { notifySidebarChannelChanged } from '../lib/sidebarChannelEvents'
 import { cn } from '../lib/utils'
 
 function ChannelAvatar({
@@ -74,7 +74,7 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
   useEffect(() => {
     if (!selected) return
     if (lastChannelId === selected.id) return
-    writeLastSidebarChannelId(typeof localStorage === 'undefined' ? null : localStorage, selected.id)
+    notifySidebarChannelChanged(selected.id)
     setLastChannelId(selected.id)
   }, [selected, lastChannelId])
 
@@ -111,16 +111,22 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
     setActiveIndex(index >= 0 ? index : 0)
   }, [open, musicChannels, selected])
 
-  function rememberAndOpen(channel: Channel) {
-    writeLastSidebarChannelId(typeof localStorage === 'undefined' ? null : localStorage, channel.id)
+  function setPrincipalChannel(channel: Channel, openCalendar: boolean) {
+    notifySidebarChannelChanged(channel.id)
     setLastChannelId(channel.id)
     close()
-    navigate(channelCalendarPath(channel.id))
+    if (openCalendar) navigate(channelCalendarPath(channel.id))
+  }
+
+  function rememberAndOpen(channel: Channel) {
+    // No Início, só define o canal principal (a agenda da home atualiza).
+    // Nas demais telas, abre o calendário do canal.
+    setPrincipalChannel(channel, pathname !== '/')
   }
 
   function openSelected() {
     if (selected) {
-      rememberAndOpen(selected)
+      setPrincipalChannel(selected, true)
       return
     }
     openManage()
@@ -193,7 +199,11 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
                 {selected?.name ?? 'Escolher canal'}
               </span>
               <span className="mt-0.5 block truncate text-[11px] text-muted-2">
-                {selected ? (selected.active ? 'Canal ativo' : 'Canal inativo') : 'Sem canal'}
+                {selected
+                  ? selected.active
+                    ? 'Canal principal'
+                    : 'Canal principal · inativo'
+                  : 'Sem canal'}
               </span>
             </span>
           )}
@@ -229,7 +239,10 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
         >
           <div className="border-b border-border-soft px-3 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-2">
-              Canais
+              Canal principal
+            </p>
+            <p className="mt-1 text-[11px] leading-snug text-muted">
+              Define qual agenda aparece no Início.
             </p>
           </div>
 

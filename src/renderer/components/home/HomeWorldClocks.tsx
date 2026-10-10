@@ -128,7 +128,7 @@ export function HomeWorldClocks({
                   ) : null}
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 bg-gradient-to-r from-card via-card/75 to-card/35"
+                    className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#11181d]/92 via-[#11181d]/70 to-[#11181d]/25"
                   />
                   <div className="relative z-[1]">
                     <div className="flex items-start justify-between gap-2">

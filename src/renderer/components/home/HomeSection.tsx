@@ -18,14 +18,16 @@ export function HomeSection({
       <div className="mb-4 flex items-end justify-between gap-4">
         <div className="min-w-0">
           {kicker ? (
-            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-2">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.2em] text-muted-2">
               {kicker}
             </p>
           ) : null}
           <div className="flex items-baseline gap-2.5">
-            <h2 className="text-[17px] font-semibold tracking-tight text-text">{title}</h2>
+            <h2 className="text-[18px] font-semibold tracking-tight text-text">{title}</h2>
             {count != null ? (
-              <span className="text-[13px] tabular-nums text-muted-2">{count}</span>
+              <span className="inline-flex min-w-[1.5rem] items-center justify-center rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted">
+                {count}
+              </span>
             ) : null}
           </div>
         </div>

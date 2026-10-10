@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { AtlasSession } from '@shared/account'
+import { AtlasLogo } from '../components/AtlasLogo'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { getAtlasApi } from '../lib/api'
@@ -35,20 +36,17 @@ export function LoginPage({
   }
 
   return (
-    <div className="flex h-full w-full items-center justify-center bg-bg px-4 text-text">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card-2 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-dark text-accent">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M4 18L12 4L20 18H15.5L12 11.5L8.5 18H4Z" fill="currentColor" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Atlas Studio</h1>
-            <p className="text-xs text-muted">
-              {mode === 'signup' ? 'Crie sua conta para continuar' : 'Entre para continuar'}
-            </p>
-          </div>
+    <div className="atlas-shell flex h-full w-full items-center justify-center px-4 text-text">
+      <div className="w-full max-w-md rounded-2xl border border-border-soft/90 bg-card/78 p-6 shadow-[0_8px_32px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
+        <div className="mb-6">
+          <AtlasLogo
+            variant="horizontal"
+            className="h-10 w-auto"
+            alt="Atlas Studio — Produção musical com IA"
+          />
+          <p className="mt-3 text-xs text-muted">
+            {mode === 'signup' ? 'Crie sua conta para continuar' : 'Entre para continuar'}
+          </p>
         </div>
 
         <form

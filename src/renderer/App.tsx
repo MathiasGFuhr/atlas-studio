@@ -37,6 +37,7 @@ import { AppUpdateProvider } from './hooks/useAppUpdate'
 import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
 import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { version as appVersion } from '../../package.json'
+import { AtlasLogo } from './components/AtlasLogo'
 
 /** Mantém links antigos funcionando sem duplicar telas. */
 function LegacyRedirect({ to }: { to: (id: string) => string }) {
@@ -120,7 +121,8 @@ export default function App() {
 
   if (session === 'loading') {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-bg text-sm text-muted">
+      <div className="atlas-shell flex h-full w-full flex-col items-center justify-center gap-4 text-sm text-muted">
+        <AtlasLogo variant="mark" className="h-14 w-14 rounded-2xl shadow-[0_0_28px_rgba(53,229,139,0.22)]" />
         Abrindo o Atlas...
       </div>
     )
@@ -141,11 +143,11 @@ export default function App() {
         <WorkspaceCapabilitiesProvider>
         <CreateActionsProvider>
         <ShortsGenerationProvider>
-        <div className="flex h-full w-full overflow-hidden bg-bg text-text">
+        <div className="atlas-shell flex h-full w-full overflow-hidden text-text">
           <AppSidebar codexStatus={codexAuth.status} accountId={session.user.id} />
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col bg-transparent">
             <TopBar settings={settings} />
-            <main className="min-h-0 flex-1 overflow-hidden">
+            <main className="min-h-0 flex-1 overflow-hidden bg-transparent">
               <Routes>
                 <Route path="/" element={<HomePage />} />
 

@@ -18,6 +18,7 @@ import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
 import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { AtlasAiStatusCard } from './AtlasAiStatusCard'
+import { AtlasLogo } from './AtlasLogo'
 import { SidebarChannelSwitcher } from './SidebarChannelSwitcher'
 import { SidebarUpdateCard } from './SidebarUpdateCard'
 import { ENVIRONMENTS } from '../lib/environments'
@@ -207,11 +208,9 @@ export function AppSidebar({
         className={({ isActive }) => {
           const active = isSidebarLinkActive(item.to, pathname, isActive)
           return cn(
-            'group relative flex items-center rounded-lg text-[13px] font-medium tracking-[-0.01em] transition-colors',
-            collapsed ? 'h-10 justify-center px-0' : 'h-9 gap-2.5 px-2.5',
-            active
-              ? 'bg-white/[0.06] text-text'
-              : 'text-muted-2 hover:bg-white/[0.03] hover:text-text',
+            'group relative flex items-center rounded-xl text-[13px] font-medium tracking-[-0.01em] transition-colors',
+            collapsed ? 'h-12 justify-center px-0' : 'h-12 gap-3 px-1.5',
+            active ? 'text-text' : 'text-[#d7dde3] hover:text-text',
           )
         }}
       >
@@ -219,41 +218,46 @@ export function AppSidebar({
           const active = isSidebarLinkActive(item.to, pathname, isActive)
           return (
             <>
-              {active ? (
-                <span className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-accent" />
-              ) : null}
-              <item.icon
+              <span
                 className={cn(
-                  'h-[17px] w-[17px] shrink-0 transition-colors',
-                  active ? 'text-accent' : 'text-muted-2 group-hover:text-muted',
+                  'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border transition-colors',
+                  active
+                    ? 'border-accent/35 bg-accent/10 text-accent shadow-[0_0_16px_rgba(53,229,139,0.16),inset_0_1px_0_rgba(255,255,255,0.08)]'
+                    : 'border-white/[0.08] bg-[#12181d] text-[#e8edf2] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_0_1px_rgba(0,0,0,0.25)] group-hover:border-white/[0.14] group-hover:bg-[#161d23]',
                 )}
-              />
-              {collapsed ? (
-                item.to === '/tarefas' && pendingCount > 0 ? (
-                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
-                ) : item.to === '/equipe' && onlineCount > 0 ? (
-                  <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-dark px-1 text-[10px] font-semibold leading-none text-accent">
+              >
+                <item.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                {collapsed && item.to === '/tarefas' && pendingCount > 0 ? (
+                  <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
+                ) : null}
+                {collapsed && item.to === '/equipe' && onlineCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-dark px-1 text-[10px] font-semibold leading-none text-accent">
                     {onlineCount > 9 ? '9+' : onlineCount}
                   </span>
-                ) : item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
-                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
-                ) : null
-              ) : (
+                ) : null}
+                {collapsed && item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
+                  <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
+                ) : null}
+              </span>
+
+              {collapsed ? null : (
                 <>
-                  <span className="min-w-0 truncate">{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   {item.to === '/tarefas' && pendingCount > 0 ? (
-                    <span className="ml-auto rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+                    <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
                       {pendingCount}
                     </span>
                   ) : null}
                   {item.to === '/equipe' && onlineCount > 0 ? (
-                    <span className="ml-auto text-[11px] font-semibold tabular-nums text-accent">
+                    <span className="text-[11px] font-semibold tabular-nums text-accent">
                       {onlineCount}
                     </span>
                   ) : null}
                   {item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
-                    <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
-                  ) : null}
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-2/80 transition-colors group-hover:text-muted" />
+                  )}
                 </>
               )}
             </>
@@ -282,18 +286,30 @@ export function AppSidebar({
         {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
       </button>
 
-      <div className={cn('flex items-center pb-2 pt-5', collapsed ? 'justify-center px-2' : 'gap-3 px-4')}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-dark text-accent ring-1 ring-accent/20">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M4 18L12 4L20 18H15.5L12 11.5L8.5 18H4Z" fill="currentColor" />
-          </svg>
-        </div>
-        {collapsed ? null : (
-          <div className="min-w-0 flex-1">
-            <div className="sidebar-brand truncate text-[17px] leading-none tracking-[-0.02em] text-text">
-              Atlas Studio
-            </div>
-            <div className="mt-1 truncate text-[11px] text-muted-2">Produção musical</div>
+      <div
+        className={cn(
+          'relative flex items-center overflow-hidden pb-3 pt-5',
+          collapsed ? 'justify-center px-2' : 'px-3',
+        )}
+      >
+        {!collapsed ? (
+          <div
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_20%_30%,rgba(53,229,139,0.12),transparent_55%)]"
+            aria-hidden
+          />
+        ) : null}
+        {collapsed ? (
+          <AtlasLogo
+            variant="mark"
+            className="relative h-10 w-10 rounded-[11px] shadow-[0_0_18px_rgba(53,229,139,0.22)]"
+          />
+        ) : (
+          <div className="relative min-w-0 flex-1">
+            <AtlasLogo
+              variant="horizontal"
+              className="h-12 w-auto max-w-full drop-shadow-[0_0_18px_rgba(53,229,139,0.28)]"
+              alt="Atlas Studio — Produção musical com IA"
+            />
           </div>
         )}
       </div>
@@ -302,25 +318,36 @@ export function AppSidebar({
         <SidebarChannelSwitcher compact={collapsed} />
       </div>
 
-      <nav className="sidebar-nav flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2.5 pb-2 pt-3">
+      <nav className="sidebar-nav flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-2 pt-3">
         {navSections.map((section) => (
-          <div key={section.id} className="flex flex-col gap-0.5">
+          <div key={section.id} className="flex flex-col gap-1.5">
             {collapsed ? (
-              <div className="mx-auto mb-1 h-px w-6 bg-border-soft" aria-hidden />
+              <div className="mx-auto mb-0.5 h-px w-6 bg-border-soft" aria-hidden />
             ) : (
-              <p className="px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-2/90">
-                {section.label}
-              </p>
+              <div className="flex items-center gap-2.5 px-1.5 pb-0.5">
+                <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-2">
+                  {section.label}
+                </p>
+                <span className="h-px flex-1 bg-white/[0.08]" aria-hidden />
+              </div>
             )}
             {section.items.map((item) => renderNavLink(item))}
           </div>
         ))}
       </nav>
 
-      <div className="mt-auto flex flex-col gap-2 border-t border-border-soft/70 px-2.5 pb-3 pt-3">
-        <div className="flex flex-col gap-0.5">{renderNavLink(settingsItem)}</div>
-        <SidebarUpdateCard compact={collapsed} />
-        <AtlasAiStatusCard view={aiStatus} onClick={openAiSettings} compact={collapsed} />
+      <div className="relative mt-auto flex flex-col gap-2.5 border-t border-white/[0.06] px-3 pb-3 pt-3">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-accent/[0.04] to-transparent"
+          aria-hidden
+        />
+        <div className="relative flex flex-col gap-1.5">{renderNavLink(settingsItem)}</div>
+        <div className="relative">
+          <SidebarUpdateCard compact={collapsed} />
+        </div>
+        <div className="relative">
+          <AtlasAiStatusCard view={aiStatus} onClick={openAiSettings} compact={collapsed} />
+        </div>
       </div>
     </aside>
   )

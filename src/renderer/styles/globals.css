@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0b0f12;
-  --color-sidebar: #0d1216;
-  --color-card: #11171b;
-  --color-card-2: #151c21;
-  --color-border: #263038;
-  --color-border-soft: #1c252b;
+  --color-bg: #070b0e;
+  --color-sidebar: #0a1014;
+  --color-card: #11181d;
+  --color-card-2: #151d23;
+  --color-border: #2a353d;
+  --color-border-soft: #1a2329;
   --color-text: #f5f7f8;
   --color-muted: #a5adb5;
   --color-muted-2: #7a848d;
@@ -38,6 +38,38 @@ body,
 
 body {
   overflow: hidden;
+}
+
+/* Atmosfera premium — somente último plano (atrás de tudo) */
+.atlas-shell {
+  position: relative;
+  isolation: isolate;
+  background: var(--color-bg);
+}
+
+.atlas-shell::before,
+.atlas-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.atlas-shell::before {
+  background:
+    radial-gradient(ellipse 70% 55% at 12% -8%, rgba(53, 229, 139, 0.14), transparent 58%),
+    radial-gradient(ellipse 55% 45% at 92% 8%, rgba(56, 140, 160, 0.11), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 78% 92%, rgba(53, 229, 139, 0.07), transparent 60%),
+    radial-gradient(ellipse 45% 40% at 8% 88%, rgba(90, 120, 140, 0.08), transparent 55%),
+    linear-gradient(165deg, #0c1216 0%, #070b0e 42%, #06090c 100%);
+}
+
+.atlas-shell::after {
+  opacity: 0.28;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  mix-blend-mode: overlay;
 }
 
 ::-webkit-scrollbar {

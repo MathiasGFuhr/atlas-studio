@@ -3,8 +3,10 @@ import { useSearchParams } from 'react-router-dom'
 import {
   FileIcon,
   MessageSquarePlus,
+  MessagesSquare,
   MoreVertical,
   Paperclip,
+  SendHorizontal,
   Smile,
   Trash2,
   Users,
@@ -18,7 +20,6 @@ import type {
   TeamChatPeer,
   TeamChatRoom,
 } from '@shared/account'
-import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { getAtlasApi } from '../lib/api'
@@ -40,6 +41,62 @@ function isImagePath(filePath: string) {
 
 function fileNameFromPath(filePath: string) {
   return filePath.split(/[/\\]/).pop() || 'arquivo'
+}
+
+function peerInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase()
+}
+
+function formatRoomTime(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const now = new Date()
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  }
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+}
+
+function formatMessageClock(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function ChatAvatar({
+  name,
+  size = 'md',
+  online,
+  tone = 'neutral',
+}: {
+  name: string
+  size?: 'sm' | 'md' | 'lg'
+  online?: boolean
+  tone?: 'neutral' | 'accent' | 'group'
+}) {
+  const sizeClass =
+    size === 'sm' ? 'h-9 w-9 text-[10px]' : size === 'lg' ? 'h-11 w-11 text-sm' : 'h-10 w-10 text-xs'
+  return (
+    <div className={cn('relative shrink-0', sizeClass)}>
+      <div
+        className={cn(
+          'flex h-full w-full items-center justify-center rounded-full border font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]',
+          tone === 'accent' && 'border-accent/25 bg-accent/15 text-accent',
+          tone === 'group' && 'border-white/[0.08] bg-gradient-to-br from-[#2a3a44] to-[#141b20] text-muted',
+          tone === 'neutral' &&
+            'border-white/[0.08] bg-gradient-to-br from-white/[0.12] to-white/[0.03] text-text',
+        )}
+      >
+        {tone === 'group' ? <Users className="h-4 w-4" /> : peerInitials(name)}
+      </div>
+      {online ? (
+        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#0f1519] bg-accent shadow-[0_0_0_1px_rgba(53,229,139,0.35)]" />
+      ) : null}
+    </div>
+  )
 }
 
 type ComposerMode = 'dm' | 'group' | 'add' | null
@@ -401,137 +458,528 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
           ? selectedIds.length > 0
           : false
 
-  return (
-    <PageShell scroll={false} className="flex min-w-0 flex-col">
-      <PageHeader
-        breadcrumb="Equipe"
-        title="Chat"
-        subtitle="Conversas privadas e grupos em tempo real."
-      />
-      <div className="@container min-h-0 min-w-0 flex-1">
-        <div className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 @[640px]:grid-cols-[minmax(0,220px)_minmax(0,1fr)] @[980px]:grid-cols-[minmax(0,240px)_minmax(0,1fr)_minmax(0,200px)]">
-        <aside className="flex max-h-[42%] min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card-2 @[640px]:max-h-none">
-          <div className="flex shrink-0 flex-col gap-1 border-b border-border p-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-9 w-full justify-start gap-2 px-2.5 text-xs"
-              onClick={() => {
-                setComposer('dm')
-                setSelectedIds([])
-                setGroupName('')
-              }}
-            >
-              <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Nova conversa</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-9 w-full justify-start gap-2 px-2.5 text-xs"
-              onClick={() => {
-                setComposer('group')
-                setSelectedIds([])
-                setGroupName('')
-              }}
-            >
-              <Users className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Novo grupo</span>
-            </Button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2">
-            {rooms.length === 0 ? (
-              <p className="px-2 py-6 text-center text-xs text-muted">
-                Nenhuma conversa ainda. Inicie um DM ou crie um grupo.
-              </p>
-            ) : (
-              <ul className="space-y-1">
-                {rooms.map((room) => (
-                  <li key={room.id} className="group min-w-0">
-                    <div
-                      className={cn(
-                        'flex min-w-0 items-stretch rounded-xl transition-colors',
-                        room.id === activeRoomId
-                          ? 'bg-accent/15 text-text'
-                          : 'hover:bg-white/5 text-text',
-                      )}
-                    >
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 px-3 py-2.5 text-left"
-                        onClick={() => void loadRoom(room.id)}
-                      >
-                        <div className="flex min-w-0 items-center justify-between gap-2">
-                          <span className="truncate text-sm font-medium">{room.title}</span>
-                          <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-2">
-                            {room.kind === 'dm' ? 'DM' : 'Grupo'}
-                          </span>
-                        </div>
-                        {room.lastMessagePreview ? (
-                          <p className="mt-0.5 truncate text-xs text-muted">{room.lastMessagePreview}</p>
-                        ) : null}
-                      </button>
-                      <button
-                        type="button"
-                        className="mr-1.5 hidden shrink-0 self-center rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-danger group-hover:inline-flex"
-                        aria-label={`Apagar conversa ${room.title} só para mim`}
-                        title="Apagar só para mim"
-                        disabled={busyAction}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          void hideConversation(room.id)
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="shrink-0 border-t border-border p-3 @[980px]:hidden">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-2">
-              Online · {onlineOthers.length}
-            </p>
-            {onlineOthers.length === 0 ? (
-              <p className="mt-2 text-xs text-muted">Ninguém online no momento</p>
-            ) : (
-              <ul className="mt-2 max-h-28 space-y-1.5 overflow-y-auto">
-                {onlineOthers.map((peer) => (
-                  <li key={peer.id} className="min-w-0">
-                    <button
-                      type="button"
-                      className="w-full truncate text-left text-xs text-text hover:text-accent"
-                      onClick={() => void openDmWith(peer.id)}
-                      title="Abrir conversa privada"
-                    >
-                      {peer.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </aside>
+  const onlineIds = useMemo(() => new Set(onlineOthers.map((peer) => peer.id)), [onlineOthers])
+  const activePeerOnline =
+    activeRoom?.kind === 'dm' && activeRoom.peer ? onlineIds.has(activeRoom.peer.id) : false
 
-        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card-2">
-          {activeRoom ? (
-            <>
-              <div className="flex min-w-0 items-start justify-between gap-3 border-b border-border px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-text">{activeRoom.title}</p>
-                  <p className="truncate text-xs text-muted">
-                    {activeRoom.kind === 'dm'
-                      ? 'Conversa privada — só vocês dois veem.'
-                      : `${members.length} membro(s) no grupo`}
+  const panelClass =
+    'overflow-hidden rounded-2xl border border-border-soft/90 bg-card/70 shadow-[0_8px_32px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl'
+
+  return (
+    <PageShell scroll={false} className="flex min-w-0 flex-col !px-3 !py-3 sm:!px-5 sm:!py-4 lg:!px-6">
+      <header className="mb-3 flex min-w-0 shrink-0 items-end justify-between gap-3 sm:mb-4">
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-2">Equipe</p>
+          <h1 className="mt-1 text-[1.45rem] font-semibold tracking-tight text-text sm:text-[1.7rem]">
+            Chat
+          </h1>
+          <p className="mt-0.5 text-sm text-muted">Conversas privadas e grupos em tempo real.</p>
+        </div>
+        <div className="hidden items-center gap-2 sm:flex">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-[11px] text-muted">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_0_3px_rgba(53,229,139,0.15)]" />
+            {onlineOthers.length} online
+          </span>
+        </div>
+      </header>
+
+      <div className="@container min-h-0 min-w-0 flex-1">
+        <div className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 @[720px]:grid-cols-[minmax(0,280px)_minmax(0,1fr)] @[1100px]:grid-cols-[minmax(0,300px)_minmax(0,1fr)_minmax(0,240px)]">
+          {/* Lista de conversas */}
+          <aside className={cn(panelClass, 'flex max-h-[38%] min-h-0 flex-col @[720px]:max-h-none')}>
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.05] px-3 py-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+                  Conversas
+                </p>
+                <p className="mt-0.5 truncate text-xs text-muted">
+                  {rooms.length === 0
+                    ? 'Nenhuma ainda'
+                    : `${rooms.length} sala${rooms.length === 1 ? '' : 's'}`}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-muted transition-colors hover:border-accent/30 hover:bg-accent/10 hover:text-accent"
+                  title="Nova conversa"
+                  aria-label="Nova conversa"
+                  onClick={() => {
+                    setComposer('dm')
+                    setSelectedIds([])
+                    setGroupName('')
+                  }}
+                >
+                  <MessageSquarePlus className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-muted transition-colors hover:border-accent/30 hover:bg-accent/10 hover:text-accent"
+                  title="Novo grupo"
+                  aria-label="Novo grupo"
+                  onClick={() => {
+                    setComposer('group')
+                    setSelectedIds([])
+                    setGroupName('')
+                  }}
+                >
+                  <Users className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2">
+              {rooms.length === 0 ? (
+                <div className="flex h-full min-h-[140px] flex-col items-center justify-center px-4 text-center">
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] text-muted-2">
+                    <MessagesSquare className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-medium text-text">Comece uma conversa</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-2">
+                    Abra um DM ou crie um grupo com a equipe.
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+              ) : (
+                <ul className="space-y-0.5">
+                  {rooms.map((room) => {
+                    const active = room.id === activeRoomId
+                    const peerOnline =
+                      room.kind === 'dm' && room.peer ? onlineIds.has(room.peer.id) : false
+                    return (
+                      <li key={room.id} className="group/room min-w-0">
+                        <div
+                          className={cn(
+                            'flex min-w-0 items-stretch rounded-xl transition-colors',
+                            active
+                              ? 'bg-accent/12 ring-1 ring-accent/20'
+                              : 'hover:bg-white/[0.035]',
+                          )}
+                        >
+                          <button
+                            type="button"
+                            className="flex min-w-0 flex-1 items-center gap-3 px-2.5 py-2.5 text-left"
+                            onClick={() => void loadRoom(room.id)}
+                          >
+                            <ChatAvatar
+                              name={room.title}
+                              size="md"
+                              online={peerOnline}
+                              tone={room.kind === 'group' ? 'group' : 'neutral'}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 items-center justify-between gap-2">
+                                <span className="truncate text-[13px] font-semibold text-text">
+                                  {room.title}
+                                </span>
+                                <span className="shrink-0 text-[10px] tabular-nums text-muted-2">
+                                  {formatRoomTime(room.updatedAt)}
+                                </span>
+                              </div>
+                              <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                                <p className="min-w-0 flex-1 truncate text-xs text-muted">
+                                  {room.lastMessagePreview ||
+                                    (room.kind === 'dm' ? 'Conversa privada' : 'Grupo')}
+                                </p>
+                                <span className="shrink-0 rounded-md border border-white/[0.05] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-2">
+                                  {room.kind === 'dm' ? 'DM' : 'Grupo'}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            className="mr-1.5 hidden shrink-0 self-center rounded-lg p-1.5 text-muted opacity-0 transition-all hover:bg-danger/10 hover:text-danger group-hover/room:inline-flex group-hover/room:opacity-100"
+                            aria-label={`Apagar conversa ${room.title} só para mim`}
+                            title="Apagar só para mim"
+                            disabled={busyAction}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void hideConversation(room.id)
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="shrink-0 border-t border-white/[0.05] p-3 @[1100px]:hidden">
+              <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+                Online · {onlineOthers.length}
+              </p>
+              {onlineOthers.length === 0 ? (
+                <p className="mt-2 text-xs text-muted">Ninguém online no momento</p>
+              ) : (
+                <ul className="mt-2.5 max-h-28 space-y-1 overflow-y-auto">
+                  {onlineOthers.map((peer) => (
+                    <li key={peer.id} className="min-w-0">
+                      <button
+                        type="button"
+                        className="flex w-full min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+                        onClick={() => void openDmWith(peer.id)}
+                        title="Abrir conversa privada"
+                      >
+                        <ChatAvatar name={peer.name} size="sm" online />
+                        <span className="truncate text-xs font-medium text-text">{peer.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </aside>
+
+          {/* Painel principal */}
+          <section className={cn(panelClass, 'flex min-h-0 min-w-0 flex-col')}>
+            {activeRoom ? (
+              <>
+                <div className="flex min-w-0 items-center justify-between gap-3 border-b border-white/[0.05] px-4 py-3.5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ChatAvatar
+                      name={activeRoom.title}
+                      size="lg"
+                      online={activePeerOnline}
+                      tone={activeRoom.kind === 'group' ? 'group' : 'neutral'}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-[15px] font-semibold tracking-tight text-text">
+                        {activeRoom.title}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {activeRoom.kind === 'dm'
+                          ? activePeerOnline
+                            ? 'Online agora · conversa privada'
+                            : 'Conversa privada · só vocês dois'
+                          : `${members.length} membro${members.length === 1 ? '' : 's'} no grupo`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {activeRoom.kind === 'group' && activeRoom.myRole === 'admin' ? (
+                      <button
+                        type="button"
+                        className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/10 @[1100px]:hidden"
+                        onClick={() => {
+                          setComposer('add')
+                          setSelectedIds([])
+                          setGroupName('')
+                        }}
+                      >
+                        Adicionar
+                      </button>
+                    ) : null}
+                    <div ref={roomMenuRef} className="relative">
+                      <button
+                        type="button"
+                        className="rounded-xl p-2 text-muted transition-colors hover:bg-white/[0.05] hover:text-text"
+                        aria-label="Mais opções da conversa"
+                        aria-expanded={roomMenuOpen}
+                        disabled={busyAction}
+                        onClick={() => setRoomMenuOpen((open) => !open)}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                      {roomMenuOpen ? (
+                        <div className="absolute right-0 top-full z-30 mt-1.5 min-w-[13rem] overflow-hidden rounded-xl border border-border-soft/90 bg-card-2/95 py-1 shadow-xl backdrop-blur-xl">
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-danger hover:bg-danger/10"
+                            onClick={() => void hideConversation(activeRoom.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                            Apagar conversa pra mim
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  ref={scroller}
+                  className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(ellipse_at_top,rgba(53,229,139,0.035),transparent_55%)] px-4 py-5"
+                >
+                  {messages.length === 0 ? (
+                    <div className="flex h-full min-h-[180px] flex-col items-center justify-center text-center">
+                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] text-muted-2">
+                        <MessagesSquare className="h-5 w-5" />
+                      </div>
+                      <p className="text-sm font-medium text-text">Nenhuma mensagem ainda</p>
+                      <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-2">
+                        Envie a primeira mensagem para começar a conversa.
+                      </p>
+                    </div>
+                  ) : (
+                    messages.map((message, index) => {
+                      const mine = message.authorId === account.id
+                      const attachment = message.attachment
+                      const showBody =
+                        Boolean(message.body.trim()) &&
+                        !(attachment && message.body.trim() === attachment.name)
+                      const previous = messages[index - 1]
+                      const stacked =
+                        previous &&
+                        previous.authorId === message.authorId &&
+                        Math.abs(
+                          new Date(message.createdAt).getTime() -
+                            new Date(previous.createdAt).getTime(),
+                        ) < 5 * 60 * 1000
+                      return (
+                        <div
+                          key={message.id}
+                          className={cn(
+                            'flex gap-2.5',
+                            mine ? 'justify-end' : 'justify-start',
+                            index === 0 ? '' : stacked ? 'mt-1' : 'mt-3.5',
+                          )}
+                        >
+                          {!mine && !stacked ? (
+                            <ChatAvatar name={message.authorName} size="sm" />
+                          ) : !mine ? (
+                            <div className="w-9 shrink-0" />
+                          ) : null}
+                          <div
+                            className={cn(
+                              'max-w-[min(78%,34rem)] rounded-2xl px-3.5 py-2.5 text-sm shadow-[0_4px_16px_rgba(0,0,0,0.18)]',
+                              mine
+                                ? 'rounded-br-md border border-accent/20 bg-accent/14 text-text'
+                                : 'rounded-bl-md border border-white/[0.06] bg-white/[0.04] text-text',
+                            )}
+                          >
+                            {!mine && !stacked ? (
+                              <p className="mb-1 text-[11px] font-semibold text-muted">
+                                {message.authorName}
+                              </p>
+                            ) : null}
+                            {attachment?.kind === 'image' ? (
+                              <button
+                                type="button"
+                                className="mb-1.5 block overflow-hidden rounded-xl border border-white/10 bg-black/25 text-left"
+                                onClick={() => setLightbox(attachment)}
+                                title="Ampliar imagem"
+                              >
+                                <img
+                                  src={attachment.url}
+                                  alt={attachment.name}
+                                  className="max-h-56 max-w-full object-contain"
+                                />
+                              </button>
+                            ) : null}
+                            {attachment && attachment.kind !== 'image' ? (
+                              <a
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mb-1.5 inline-flex max-w-full items-center gap-2 rounded-xl border border-white/[0.08] bg-black/20 px-2.5 py-2 text-[12px] text-text transition-colors hover:border-accent/40"
+                              >
+                                <FileIcon className="h-3.5 w-3.5 shrink-0 text-muted" />
+                                <span className="truncate">{attachment.name}</span>
+                              </a>
+                            ) : null}
+                            {showBody ? (
+                              <p className="whitespace-pre-wrap break-words leading-relaxed">
+                                {message.body}
+                              </p>
+                            ) : null}
+                            <p
+                              className={cn(
+                                'mt-1.5 text-[10px] tabular-nums',
+                                mine ? 'text-right text-muted' : 'text-muted-2',
+                              )}
+                            >
+                              {formatMessageClock(message.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                <form
+                  className="min-w-0 border-t border-white/[0.05] bg-black/15 px-3 py-3 sm:px-4"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void send()
+                  }}
+                >
+                  {attachmentPath ? (
+                    <div className="mb-2.5 flex items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2.5 py-2">
+                      {attachmentPreview ? (
+                        <img
+                          src={attachmentPreview}
+                          alt=""
+                          className="h-11 w-11 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/[0.06] bg-card-2">
+                          <FileIcon className="h-4 w-4 text-muted" />
+                        </div>
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-xs text-text">
+                        {fileNameFromPath(attachmentPath)}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-text"
+                        aria-label="Remover anexo"
+                        onClick={clearAttachment}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="flex items-end gap-2">
+                    <div className="relative flex min-w-0 flex-1 items-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus-within:border-accent/45">
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-xl p-2.5 text-muted transition-colors hover:bg-white/[0.05] hover:text-text"
+                        title="Anexar imagem ou arquivo"
+                        onClick={() => void pickAttachment()}
+                        disabled={sending}
+                      >
+                        <Paperclip className="h-4 w-4" />
+                      </button>
+                      <div className="relative shrink-0" ref={emojiRef}>
+                        <button
+                          type="button"
+                          className="rounded-xl p-2.5 text-muted transition-colors hover:bg-white/[0.05] hover:text-text"
+                          title="Emoji"
+                          onClick={() => setEmojiOpen((open) => !open)}
+                          disabled={sending}
+                        >
+                          <Smile className="h-4 w-4" />
+                        </button>
+                        {emojiOpen ? (
+                          <div className="absolute bottom-[calc(100%+10px)] left-0 z-20 grid w-[232px] grid-cols-6 gap-1 rounded-2xl border border-border-soft/90 bg-card/95 p-2 shadow-2xl backdrop-blur-xl">
+                            {EMOJIS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                className="rounded-lg p-1.5 text-lg leading-none transition-colors hover:bg-white/[0.06]"
+                                onClick={() => insertEmoji(emoji)}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                      <input
+                        ref={inputRef}
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        placeholder={
+                          activeRoom.kind === 'dm'
+                            ? `Mensagem para ${activeRoom.title}...`
+                            : 'Escreva no grupo...'
+                        }
+                        className="h-12 min-w-0 flex-1 bg-transparent px-1.5 text-sm text-text placeholder:text-muted-2 focus:outline-none"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={sending || !canSend}
+                      className="h-12 w-12 !rounded-2xl !px-0"
+                      aria-label="Enviar mensagem"
+                    >
+                      <SendHorizontal className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] text-muted-2">
+                  <MessagesSquare className="h-6 w-6" />
+                </div>
+                <p className="text-base font-semibold text-text">Selecione uma conversa</p>
+                <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-muted">
+                  Escolha alguém na lista ou inicie um DM / grupo para começar a falar com a equipe.
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-10"
+                    onClick={() => {
+                      setComposer('dm')
+                      setSelectedIds([])
+                      setGroupName('')
+                    }}
+                  >
+                    <MessageSquarePlus className="h-4 w-4" />
+                    Nova conversa
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-10"
+                    onClick={() => {
+                      setComposer('group')
+                      setSelectedIds([])
+                      setGroupName('')
+                    }}
+                  >
+                    <Users className="h-4 w-4" />
+                    Novo grupo
+                  </Button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Painel lateral */}
+          <aside className="hidden min-h-0 min-w-0 flex-col gap-3 overflow-hidden @[1100px]:flex">
+            <div className={cn(panelClass, 'shrink-0 p-4')}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+                  Online
+                </p>
+                <span className="rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[11px] tabular-nums text-muted">
+                  {onlineOthers.length}
+                </span>
+              </div>
+              <p className="mt-1.5 text-sm text-muted">
+                {onlineOthers.length === 0
+                  ? 'Ninguém online no momento'
+                  : onlineOthers.length === 1
+                    ? '1 pessoa no Atlas'
+                    : `${onlineOthers.length} pessoas no Atlas`}
+              </p>
+              {onlineOthers.length > 0 ? (
+                <ul className="mt-3.5 max-h-44 space-y-1 overflow-y-auto">
+                  {onlineOthers.map((peer) => (
+                    <li key={peer.id} className="min-w-0">
+                      <button
+                        type="button"
+                        className="flex w-full min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-2 text-left transition-colors hover:bg-white/[0.04]"
+                        onClick={() => void openDmWith(peer.id)}
+                        title="Abrir conversa privada"
+                      >
+                        <ChatAvatar name={peer.name} size="sm" online />
+                        <span className="truncate text-sm font-medium text-text">{peer.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            {activeRoom ? (
+              <div className={cn(panelClass, 'min-h-0 flex-1 overflow-y-auto p-4')}>
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <p className="truncate text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+                    {activeRoom.kind === 'dm' ? 'Participantes' : 'Membros'}
+                  </p>
                   {activeRoom.kind === 'group' && activeRoom.myRole === 'admin' ? (
                     <button
                       type="button"
-                      className="rounded-lg px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10 @[980px]:hidden"
+                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-accent transition-colors hover:bg-accent/10"
                       onClick={() => {
                         setComposer('add')
                         setSelectedIds([])
@@ -541,275 +989,65 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                       Adicionar
                     </button>
                   ) : null}
-                  <div ref={roomMenuRef} className="relative">
-                    <button
-                      type="button"
-                      className="rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-text"
-                      aria-label="Mais opções da conversa"
-                      aria-expanded={roomMenuOpen}
-                      disabled={busyAction}
-                      onClick={() => setRoomMenuOpen((open) => !open)}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
-                    {roomMenuOpen ? (
-                      <div className="absolute right-0 top-full z-30 mt-1 min-w-[12.5rem] rounded-xl border border-border bg-card-2 py-1 shadow-lg">
-                        <button
-                          type="button"
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-danger hover:bg-white/5"
-                          onClick={() => void hideConversation(activeRoom.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                          Apagar conversa pra mim
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
                 </div>
-              </div>
-              <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-                {messages.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-muted">
-                    Nenhuma mensagem ainda. Diga oi.
-                  </p>
-                ) : (
-                  messages.map((message) => {
-                    const mine = message.authorId === account.id
-                    const attachment = message.attachment
-                    const showBody =
-                      Boolean(message.body.trim()) &&
-                      !(attachment && message.body.trim() === attachment.name)
-                    return (
-                      <div key={message.id} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
-                        <div
-                          className={cn(
-                            'max-w-[80%] rounded-2xl px-3 py-2 text-sm',
-                            mine ? 'bg-accent/15 text-text' : 'bg-bg text-text',
-                          )}
-                        >
-                          <p className="text-[11px] font-medium text-muted">
-                            {mine ? 'Você' : message.authorName}
-                          </p>
-                          {attachment?.kind === 'image' ? (
-                            <button
-                              type="button"
-                              className="mt-1 block overflow-hidden rounded-xl border border-border/70 bg-black/20 text-left"
-                              onClick={() => setLightbox(attachment)}
-                              title="Ampliar imagem"
-                            >
-                              <img
-                                src={attachment.url}
-                                alt={attachment.name}
-                                className="max-h-56 max-w-full object-contain"
-                              />
-                            </button>
-                          ) : null}
-                          {attachment && attachment.kind !== 'image' ? (
-                            <a
-                              href={attachment.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border bg-bg/60 px-2 py-1.5 text-[12px] text-text hover:border-accent/50"
-                            >
-                              <FileIcon className="h-3.5 w-3.5 shrink-0 text-muted" />
-                              <span className="truncate">{attachment.name}</span>
-                            </a>
-                          ) : null}
-                          {showBody ? (
-                            <p className="mt-1 whitespace-pre-wrap break-words">{message.body}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-              <form
-                className="min-w-0 border-t border-border p-3"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void send()
-                }}
-              >
-                {attachmentPath ? (
-                  <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-bg px-2.5 py-2">
-                    {attachmentPreview ? (
-                      <img
-                        src={attachmentPreview}
-                        alt=""
-                        className="h-10 w-10 rounded-lg object-cover"
+                <ul className="mt-3.5 space-y-1">
+                  {members.map((member) => (
+                    <li
+                      key={member.id}
+                      className="flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-2"
+                    >
+                      <ChatAvatar
+                        name={member.name}
+                        size="sm"
+                        online={onlineIds.has(member.id)}
+                        tone={member.id === account.id ? 'accent' : 'neutral'}
                       />
-                    ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-card-2">
-                        <FileIcon className="h-4 w-4 text-muted" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-text">
+                          {member.id === account.id ? `${member.name} · você` : member.name}
+                        </p>
+                        {member.role === 'admin' ? (
+                          <p className="text-[10px] uppercase tracking-wider text-muted-2">Admin</p>
+                        ) : (
+                          <p className="truncate text-[11px] text-muted-2">{member.email}</p>
+                        )}
                       </div>
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-xs text-text">
-                      {fileNameFromPath(attachmentPath)}
-                    </span>
-                    <button
-                      type="button"
-                      className="rounded-lg p-1 text-muted hover:bg-white/5 hover:text-text"
-                      aria-label="Remover anexo"
-                      onClick={clearAttachment}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ) : null}
-                <div className="flex items-center gap-2">
-                  <div className="relative flex min-w-0 flex-1 items-center gap-1 rounded-xl border border-border bg-bg px-1.5 focus-within:border-accent/60">
-                    <button
-                      type="button"
-                      className="shrink-0 rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text"
-                      title="Anexar imagem ou arquivo"
-                      onClick={() => void pickAttachment()}
-                      disabled={sending}
-                    >
-                      <Paperclip className="h-4 w-4" />
-                    </button>
-                    <div className="relative shrink-0" ref={emojiRef}>
-                      <button
-                        type="button"
-                        className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text"
-                        title="Emoji"
-                        onClick={() => setEmojiOpen((open) => !open)}
-                        disabled={sending}
-                      >
-                        <Smile className="h-4 w-4" />
-                      </button>
-                      {emojiOpen ? (
-                        <div className="absolute bottom-[calc(100%+8px)] left-0 z-20 grid w-[220px] grid-cols-6 gap-1 rounded-xl border border-border bg-card p-2 shadow-xl">
-                          {EMOJIS.map((emoji) => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              className="rounded-lg p-1.5 text-lg leading-none hover:bg-white/5"
-                              onClick={() => insertEmoji(emoji)}
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                    <input
-                      ref={inputRef}
-                      value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
-                      placeholder={
-                        activeRoom.kind === 'dm'
-                          ? `Mensagem para ${activeRoom.title}...`
-                          : 'Escreva no grupo...'
-                      }
-                      className="h-11 min-w-0 flex-1 bg-transparent px-1.5 text-sm text-text placeholder:text-muted-2 focus:outline-none"
-                    />
-                  </div>
-                  <Button type="submit" disabled={sending || !canSend} className="h-11">
-                    Enviar
-                  </Button>
-                </div>
-              </form>
-            </>
-          ) : (
-            <div className="flex min-w-0 flex-1 items-center justify-center px-4 py-6 text-center text-sm text-muted">
-              <p className="max-w-[22rem] text-balance">
-                Selecione uma conversa ou inicie um DM / grupo.
-              </p>
-            </div>
-          )}
-        </section>
-
-        <aside className="hidden min-h-0 min-w-0 flex-col gap-3 overflow-hidden @[980px]:flex">
-          <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-border bg-card-2 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-2">Online</p>
-            <p className="mt-1 text-sm text-muted">
-              {onlineOthers.length === 0
-                ? 'Ninguém online no momento'
-                : onlineOthers.length === 1
-                  ? '1 pessoa no Atlas'
-                  : `${onlineOthers.length} pessoas no Atlas`}
-            </p>
-            {onlineOthers.length > 0 ? (
-              <ul className="mt-3 max-h-40 space-y-2 overflow-y-auto">
-                {onlineOthers.map((peer) => (
-                  <li key={peer.id} className="min-w-0">
-                    <button
-                      type="button"
-                      className="w-full truncate text-left text-sm text-text hover:text-accent"
-                      onClick={() => void openDmWith(peer.id)}
-                      title="Abrir conversa privada"
-                    >
-                      {peer.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-
-          {activeRoom ? (
-            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden rounded-2xl border border-border bg-card-2 p-4">
-              <div className="flex min-w-0 items-center justify-between gap-2">
-                <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-muted-2">
-                  {activeRoom.kind === 'dm' ? 'Participantes' : 'Membros'}
-                </p>
-                {activeRoom.kind === 'group' && activeRoom.myRole === 'admin' ? (
-                  <button
-                    type="button"
-                    className="shrink-0 text-[11px] font-medium text-accent hover:underline"
-                    onClick={() => {
-                      setComposer('add')
-                      setSelectedIds([])
-                      setGroupName('')
-                    }}
-                  >
-                    Adicionar
-                  </button>
-                ) : null}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="mt-3 space-y-2">
-                {members.map((member) => (
-                  <li key={member.id} className="min-w-0 truncate text-sm text-text">
-                    <span className="font-medium">
-                      {member.id === account.id ? `${member.name} · você` : member.name}
-                    </span>
-                    {member.role === 'admin' ? (
-                      <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-2">
-                        admin
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </aside>
+            ) : null}
+          </aside>
         </div>
       </div>
 
       {composer ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
           onClick={closeComposer}
           role="dialog"
           aria-modal="true"
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-border bg-card p-4 shadow-2xl"
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-border-soft/90 bg-card/95 p-5 shadow-2xl backdrop-blur-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-text">
-                {composer === 'dm'
-                  ? 'Nova conversa privada'
-                  : composer === 'group'
-                    ? 'Novo grupo'
-                    : 'Adicionar ao grupo'}
-              </p>
+              <div className="min-w-0">
+                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+                  {composer === 'dm' ? 'DM' : composer === 'group' ? 'Grupo' : 'Membros'}
+                </p>
+                <p className="mt-0.5 text-base font-semibold text-text">
+                  {composer === 'dm'
+                    ? 'Nova conversa privada'
+                    : composer === 'group'
+                      ? 'Novo grupo'
+                      : 'Adicionar ao grupo'}
+                </p>
+              </div>
               <button
                 type="button"
-                className="rounded-lg p-1 text-muted hover:bg-white/5 hover:text-text"
+                className="rounded-xl p-1.5 text-muted hover:bg-white/5 hover:text-text"
                 onClick={closeComposer}
                 aria-label="Fechar"
               >
@@ -821,19 +1059,17 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                 value={groupName}
                 onChange={(event) => setGroupName(event.target.value)}
                 placeholder="Nome do grupo"
-                className="mt-3 h-11 w-full rounded-xl border border-border bg-bg px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
+                className="mt-4 h-11 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
               />
             ) : null}
-            <p className="mt-3 text-xs text-muted">
+            <p className="mt-3 text-xs leading-relaxed text-muted">
               {composer === 'dm'
                 ? 'Só vocês dois terão acesso a esta conversa.'
                 : 'Selecione as pessoas. Em grupos, só o admin pode adicionar depois.'}
             </p>
             <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto">
               {pickerPeople.length === 0 ? (
-                <li className="py-4 text-center text-sm text-muted">
-                  Nenhuma pessoa disponível.
-                </li>
+                <li className="py-6 text-center text-sm text-muted">Nenhuma pessoa disponível.</li>
               ) : (
                 pickerPeople.map((peer) => {
                   const checked = selectedIds.includes(peer.id)
@@ -842,26 +1078,38 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                       <button
                         type="button"
                         className={cn(
-                          'flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm',
-                          checked ? 'bg-accent/15 text-text' : 'hover:bg-white/5 text-text',
+                          'flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors',
+                          checked ? 'bg-accent/12 ring-1 ring-accent/20' : 'hover:bg-white/[0.04]',
                         )}
                         onClick={() => {
                           if (composer === 'dm') setSelectedIds([peer.id])
                           else toggleSelected(peer.id)
                         }}
                       >
-                        <span>
-                          {peer.name}
-                          <span className="ml-2 text-xs text-muted">{peer.email}</span>
+                        <ChatAvatar name={peer.name} size="sm" online={onlineIds.has(peer.id)} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-text">
+                            {peer.name}
+                          </span>
+                          <span className="block truncate text-xs text-muted">{peer.email}</span>
                         </span>
-                        <span className="text-xs text-muted-2">{checked ? 'Selecionado' : ''}</span>
+                        <span
+                          className={cn(
+                            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px]',
+                            checked
+                              ? 'border-accent bg-accent text-black'
+                              : 'border-white/15 text-transparent',
+                          )}
+                        >
+                          ✓
+                        </span>
                       </button>
                     </li>
                   )
                 })
               )}
             </ul>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-5 flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={closeComposer}>
                 Cancelar
               </Button>
@@ -879,7 +1127,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
 
       {lightbox ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
           onClick={() => setLightbox(null)}
           role="dialog"
           aria-modal="true"
@@ -887,7 +1135,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
         >
           <button
             type="button"
-            className="absolute right-4 top-4 rounded-xl bg-black/40 p-2 text-white hover:bg-black/60"
+            className="absolute right-4 top-4 rounded-xl border border-white/10 bg-black/50 p-2 text-white hover:bg-black/70"
             aria-label="Fechar"
             onClick={() => setLightbox(null)}
           >

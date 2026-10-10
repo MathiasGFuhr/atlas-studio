@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Activity, FolderKanban, ListTodo, Tv } from 'lucide-react'
+import {
+  Activity,
+  CalendarDays,
+  ListTodo,
+  Newspaper,
+} from 'lucide-react'
 import type { AtlasTask, Channel, ChannelVideo, Project, ProjectType } from '@shared/types'
 import type { MusicTrack } from '@shared/musicAnalysis'
 import type { WorldClock } from '@shared/worldClocks'
@@ -9,19 +14,24 @@ import { dueDateState, pendingDueTodayCount, pendingTasksForHome } from '@shared
 import { buildHomeActivity } from '@shared/homeActivity'
 import { buildHomeModuleStats } from '@shared/homeStats'
 import {
+  AGENDA_UPCOMING_VIDEO_LIMIT,
   HOME_UPCOMING_VIDEO_LIMIT,
   channelAgendaPath,
+  channelCalendarPath,
   channelPublishedPath,
   channelVideoPath,
   todayDateKey,
 } from '@shared/channelVideos'
-import { HomeModuleCard } from '../components/home/HomeModuleCard'
+import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
+import type { TeamChatPeer } from '@shared/account'
+import { HomeHero } from '../components/home/HomeHero'
 import { HomeStatCard } from '../components/home/HomeStatCard'
-import { HomeTaskRow } from '../components/home/HomeTaskRow'
-import { HomeActivityRow } from '../components/home/HomeActivityRow'
-import { HomeScheduledVideoCard } from '../components/home/HomeScheduledVideoCard'
-import { HomeSection } from '../components/home/HomeSection'
-import { HomeWorldClocks } from '../components/home/HomeWorldClocks'
+import { HomeCalendarCard } from '../components/home/HomeCalendarCard'
+import { HomeMarketsCard } from '../components/home/HomeMarketsCard'
+import { HomePipeline } from '../components/home/HomePipeline'
+import { HomeQuickActions, HOME_QUICK_ICONS } from '../components/home/HomeQuickActions'
+import { HomeActivityCard } from '../components/home/HomeActivityCard'
+import { HomeTasksCard } from '../components/home/HomeTasksCard'
 import { Card } from '../components/Card'
 import { notifySettingsChanged } from '../lib/settingsEvents'
 import {
@@ -30,7 +40,7 @@ import {
   type ProjectFormValues,
 } from '../components/ProjectEditorModal'
 import { getAtlasApi } from '../lib/api'
-import { ENVIRONMENTS, projectPath } from '../lib/environments'
+import { ENVIRONMENTS } from '../lib/environments'
 import { notifyProjectsChanged, onProjectsChanged } from '../lib/projectEvents'
 import { notifyTasksChanged, onTasksChanged } from '../lib/taskEvents'
 import { onChannelsChanged } from '../lib/channelEvents'
@@ -63,6 +73,8 @@ export function HomePage() {
   const [channels, setChannels] = useState<Channel[]>([])
   const [tracks, setTracks] = useState<MusicTrack[]>([])
   const [upcomingVideos, setUpcomingVideos] = useState<ChannelVideo[]>([])
+  const [publishedCount, setPublishedCount] = useState(0)
+  const [chatOnline, setChatOnline] = useState<TeamChatPeer[]>([])
   const [accountName, setAccountName] = useState('')
   const [worldClocks, setWorldClocks] = useState<WorldClock[]>([])
   const [createType, setCreateType] = useState<ProjectType | null>(null)
@@ -74,13 +86,28 @@ export function HomePage() {
   const load = useCallback(async () => {
     const seq = ++loadSeq.current
     try {
-      const [music, taskList, channelList, trackList, videoList, settings] = await Promise.all([
+      const [
+        music,
+        taskList,
+        channelList,
+        trackList,
+        videoList,
+        publishedList,
+        settings,
+        online,
+      ] = await Promise.all([
         api.projects.list({ projectType: 'music' }),
         api.tasks.list(),
         api.channels.list(),
         api.music.list(),
-        api.videos.list({ from: todayDateKey(), limit: HOME_UPCOMING_VIDEO_LIMIT, excludeStatus: 'publicado' }),
+        api.videos.list({
+          from: todayDateKey(),
+          limit: AGENDA_UPCOMING_VIDEO_LIMIT,
+          excludeStatus: 'publicado',
+        }),
+        api.videos.list({ status: 'publicado', limit: 100 }).catch(() => [] as ChannelVideo[]),
         api.settings.get(),
+        api.teamChat.listOnline().catch(() => [] as TeamChatPeer[]),
       ])
       if (seq !== loadSeq.current) return
       setProjects(music)
@@ -88,8 +115,10 @@ export function HomePage() {
       setChannels(channelList)
       setTracks(trackList)
       setUpcomingVideos(videoList)
+      setPublishedCount(publishedList.length)
       setAccountName(settings.accountName?.trim() ?? '')
       setWorldClocks(normalizeWorldClocks(settings.worldClocks))
+      setChatOnline(online)
     } catch (error) {
       if (seq !== loadSeq.current) return
       pushError(error, 'Falha ao carregar o início')
@@ -106,6 +135,7 @@ export function HomePage() {
     const stopVideos = onVideosChanged(refresh)
     const stopChannels = onChannelsChanged(refresh)
     const stopSettings = onSettingsChanged(refresh)
+    const stopPresence = api.teamChat.onPresence((peers) => setChatOnline(peers))
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh()
     }
@@ -118,18 +148,20 @@ export function HomePage() {
       stopVideos()
       stopChannels()
       stopSettings()
+      stopPresence()
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', refresh)
     }
-  }, [load])
+  }, [api, load])
 
   const pending = tasks.filter((task) => task.status === 'pending')
-  const pendingHome = pendingTasksForHome(tasks, 5)
+  const pendingHome = pendingTasksForHome(tasks, 6)
   const todayCount = pendingDueTodayCount(tasks)
   const overdueCount = pending.filter((task) => dueDateState(task.dueDate) === 'overdue').length
+  const pipelineVideos = upcomingVideos.slice(0, HOME_UPCOMING_VIDEO_LIMIT + 2)
   const moduleStats = useMemo(
-    () => buildHomeModuleStats({ projects, tracks }),
-    [projects, tracks],
+    () => buildHomeModuleStats({ projects, tracks, upcomingVideos }),
+    [projects, tracks, upcomingVideos],
   )
   const activity = useMemo(
     () =>
@@ -173,20 +205,6 @@ export function HomePage() {
     }
   }
 
-  async function copyVideoField(value: string, emptyMessage: string, successMessage: string) {
-    const text = value.trim()
-    if (!text) {
-      push(emptyMessage, 'error')
-      return
-    }
-    try {
-      await api.system.copyText(text)
-      push(successMessage, 'success')
-    } catch {
-      push('Não foi possível copiar.', 'error')
-    }
-  }
-
   async function completeTask(task: AtlasTask) {
     try {
       await api.tasks.setStatus(task.id, 'completed')
@@ -216,219 +234,134 @@ export function HomePage() {
   }
 
   const createChannels = channels.filter((channel) => channel.channelType === createType)
+  const tasksHint =
+    overdueCount > 0
+      ? `${overdueCount} atrasada${overdueCount === 1 ? '' : 's'}`
+      : todayCount > 0
+        ? `${todayCount} para hoje`
+        : 'Organizadas por prazo e prioridade'
 
   return (
     <div className="relative h-full overflow-y-auto">
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_at_top,rgba(53,229,139,0.07),transparent_62%)]"
-        aria-hidden
-      />
+      <div className="relative mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+          {/* Coluna principal */}
+          <div className="flex min-w-0 flex-col gap-4 xl:col-span-3">
+            <HomeHero hello={homeHello()} name={accountName} dateLabel={homeDateLabel()} />
 
-      <div className="relative mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-2">Início</p>
-            <h1 className="home-greeting mt-2 text-[1.75rem] leading-[1.15] text-text sm:text-[2.15rem]">
-              {accountName.trim() ? (
-                <>
-                  <span className="home-greeting__hello">{homeHello()},</span>{' '}
-                  <span className="home-greeting__name">{accountName.trim()}</span>
-                </>
-              ) : (
-                <span className="home-greeting__hello">{homeHello()}</span>
-              )}
-            </h1>
-            <p className="mt-1.5 text-sm text-muted">{homeDateLabel()}</p>
-          </div>
-          <p className="max-w-sm text-sm leading-relaxed text-pretty text-muted-2 sm:text-right">
-            Produção, agenda e pendências em um só lugar.
-          </p>
-        </header>
-
-        <HomeWorldClocks
-          clocks={worldClocks}
-          saving={savingClocks}
-          onChange={(next) => void saveWorldClocks(next)}
-        />
-
-        <Card padding="sm" className="overflow-hidden !p-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-            <HomeStatCard
-              className="border-b border-border-soft sm:border-r xl:border-b-0"
-              icon={<FolderKanban className="h-4 w-4" />}
-              label="Projetos"
-              value={projects.length}
-              hint="Música"
-            />
-            <HomeStatCard
-              className="border-b border-border-soft xl:border-b-0 xl:border-r"
-              icon={<Tv className="h-4 w-4" />}
-              label="Canais"
-              value={channels.length}
-              hint="Cadastro ativo"
-              onClick={() => navigate('/canais')}
-            />
-            <HomeStatCard
-              className="border-b border-border-soft sm:border-r sm:border-b-0 xl:border-b-0 xl:border-r"
-              icon={<ListTodo className="h-4 w-4" />}
-              label="Pendências"
-              value={pending.length}
-              hint={todayCount > 0 ? `${todayCount} para hoje` : 'Nada para hoje'}
-              onClick={() => navigate('/tarefas')}
-            />
-            <HomeStatCard
-              icon={<Activity className="h-4 w-4" />}
-              label="Atividade"
-              value={latestActivity ? formatRelativeDate(latestActivity.at) : '—'}
-              hint={latestActivity?.detail}
-            />
-          </div>
-        </Card>
-
-        <div data-tour="modules" className="mt-8 grid grid-cols-1 gap-5">
-          <HomeModuleCard
-            color={ENVIRONMENTS.music.color}
-            icon={<ENVIRONMENTS.music.icon className="h-5 w-5" />}
-            title={ENVIRONMENTS.music.label}
-            description={ENVIRONMENTS.music.description}
-            stats={[
-              { label: 'Projetos', value: moduleStats.musicCount },
-              { label: 'Faixas', value: moduleStats.trackCount },
-            ]}
-            primaryLabel="Abrir Música"
-            secondaryLabel="Novo projeto"
-            onOpen={() => navigate(ENVIRONMENTS.music.basePath)}
-            onPrimary={() => navigate(ENVIRONMENTS.music.basePath)}
-            onSecondary={() => openCreate('music')}
-          />
-        </div>
-
-        <div className="mt-10">
-          <HomeSection
-            kicker="Calendário"
-            title="Agenda"
-            count={upcomingVideos.length}
-            action={
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => navigate(channelPublishedPath())}
-                  className="text-[13px] font-medium text-muted transition-colors hover:text-text"
-                >
-                  Publicados
-                </button>
-                <button
-                  type="button"
+            <Card padding="sm" className="overflow-hidden !p-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+                <HomeStatCard
+                  className="border-b border-white/[0.05] sm:border-r xl:border-b-0 xl:border-r"
+                  icon={<CalendarDays className="h-4 w-4 text-accent" />}
+                  label="Agendamentos"
+                  value={upcomingVideos.length}
+                  hint={upcomingVideos.length === 0 ? 'Nada na agenda' : 'Na agenda'}
                   onClick={() => navigate(channelAgendaPath())}
-                  className="text-[13px] font-medium text-muted transition-colors hover:text-text"
-                >
-                  Ver todos
-                </button>
+                />
+                <HomeStatCard
+                  className="border-b border-white/[0.05] sm:border-r-0 xl:border-b-0 xl:border-r"
+                  icon={<Newspaper className="h-4 w-4 text-accent" />}
+                  label="Publicações"
+                  value={publishedCount}
+                  hint="Publicados"
+                  onClick={() => navigate(channelPublishedPath())}
+                />
+                <HomeStatCard
+                  className="border-b border-white/[0.05] sm:border-r xl:border-b-0 xl:border-r"
+                  icon={<ListTodo className="h-4 w-4 text-accent" />}
+                  label="Tarefas pendentes"
+                  value={pending.length}
+                  hint={todayCount > 0 ? `${todayCount} para hoje` : 'Nada para hoje'}
+                  onClick={() => navigate('/tarefas')}
+                />
+                <HomeStatCard
+                  icon={<Activity className="h-4 w-4 text-accent" />}
+                  label="Atividade recente"
+                  value={latestActivity ? formatRelativeDate(latestActivity.at) : '—'}
+                  hint={latestActivity?.detail ?? 'Sem movimento'}
+                />
               </div>
-            }
-          >
-            {upcomingVideos.length === 0 ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-border-soft bg-card/60 px-5 py-6">
-                <div>
-                  <p className="text-sm font-medium text-text">Nenhum vídeo na agenda</p>
-                  <p className="mt-1 text-sm text-muted-2">Os próximos cadastros do calendário aparecem aqui.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/canais')}
-                  className="text-[13px] font-medium text-accent hover:text-accent-hover"
-                >
-                  Abrir canais
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                {upcomingVideos.map((video) => (
-                  <HomeScheduledVideoCard
-                    key={video.id}
-                    video={video}
-                    onOpen={() => navigate(channelVideoPath(video.channelId, video.id))}
-                    onOpenProject={
-                      video.channelType === 'music' && video.projectId
-                        ? () => navigate(projectPath('music', video.projectId!))
-                        : undefined
-                    }
-                    onCopyTitle={() =>
-                      void copyVideoField(video.title, 'Este vídeo ainda não tem título.', 'Título copiado.')
-                    }
-                    onCopyDescription={() =>
-                      void copyVideoField(
-                        video.description,
-                        'Este vídeo ainda não tem descrição.',
-                        'Descrição copiada.',
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </HomeSection>
-        </div>
-
-        <div className="mt-10 grid grid-cols-1 gap-8 xl:grid-cols-2">
-          <HomeSection
-            kicker="Operação"
-            title="Pendências"
-            count={pending.length}
-            action={
-              <button
-                type="button"
-                onClick={() => navigate('/tarefas')}
-                className="text-[13px] font-medium text-muted transition-colors hover:text-text"
-              >
-                Ver todas
-              </button>
-            }
-          >
-            <Card padding="sm" className="min-h-[240px] !px-4 !py-1">
-              <p className="px-1 pb-1 pt-3 text-xs text-muted-2">
-                {overdueCount > 0
-                  ? `${overdueCount} atrasada${overdueCount === 1 ? '' : 's'}`
-                  : todayCount > 0
-                    ? `${todayCount} para hoje`
-                    : 'Organizadas por prazo e prioridade'}
-              </p>
-              {pendingHome.length === 0 ? (
-                <p className="px-1 py-10 text-sm text-muted-2">Nenhuma tarefa pendente.</p>
-              ) : (
-                <ul className="divide-y divide-border-soft">
-                  {pendingHome.map((task) => (
-                    <HomeTaskRow
-                      key={task.id}
-                      task={task}
-                      onToggle={() => void completeTask(task)}
-                      onOpenRelated={(path) => navigate(path)}
-                    />
-                  ))}
-                </ul>
-              )}
             </Card>
-          </HomeSection>
 
-          <HomeSection kicker="Movimento" title="Atividade recente" count={activity.length}>
-            <Card padding="sm" className="min-h-[240px] !px-4 !py-1">
-              {activity.length === 0 ? (
-                <p className="px-1 py-10 text-sm text-muted-2">
-                  A produção recente aparece aqui quando houver movimento no Atlas.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border-soft">
-                  {activity.map((item) => (
-                    <HomeActivityRow
-                      key={item.id}
-                      item={item}
-                      onOpen={(href) => navigate(href)}
-                    />
-                  ))}
-                </ul>
-              )}
-            </Card>
-          </HomeSection>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="min-w-0 lg:col-span-2">
+                <HomeCalendarCard
+                  channels={channels}
+                  onOpenChannel={(id) => navigate(channelCalendarPath(id))}
+                  onOpenDay={(id) => navigate(channelCalendarPath(id))}
+                  onOpenVideo={(video) => navigate(channelVideoPath(video.channelId, video.id))}
+                />
+              </div>
+              <HomeQuickActions
+                actions={[
+                  {
+                    id: 'project',
+                    label: 'Novo projeto',
+                    icon: HOME_QUICK_ICONS.FolderPlus,
+                    onClick: () => openCreate('music'),
+                  },
+                  {
+                    id: 'lipsync',
+                    label: 'Lipsync',
+                    icon: HOME_QUICK_ICONS.Mic2,
+                    onClick: () => navigate(MUSIC_LIPSYNC_PATH),
+                  },
+                  {
+                    id: 'shorts',
+                    label: 'Shorts Studio',
+                    icon: HOME_QUICK_ICONS.Clapperboard,
+                    onClick: () => navigate('/shorts'),
+                  },
+                  {
+                    id: 'channels',
+                    label: 'Canais',
+                    icon: HOME_QUICK_ICONS.Tv,
+                    onClick: () => navigate('/canais'),
+                  },
+                  {
+                    id: 'prompts',
+                    label: 'Prompts',
+                    icon: HOME_QUICK_ICONS.MessageSquareText,
+                    onClick: () => navigate(MUSIC_PROMPTS_PATH),
+                  },
+                  {
+                    id: 'chat',
+                    label: chatOnline.length > 0 ? `Chat · ${chatOnline.length}` : 'Chat equipe',
+                    icon: HOME_QUICK_ICONS.MessagesSquare,
+                    onClick: () => navigate('/equipe'),
+                  },
+                ]}
+              />
+            </div>
+
+            <HomePipeline
+              videos={pipelineVideos}
+              onOpen={(video) => navigate(channelVideoPath(video.channelId, video.id))}
+              onSeeAll={() => navigate(channelAgendaPath())}
+            />
+          </div>
+
+          {/* Coluna direita */}
+          <div className="flex min-w-0 flex-col gap-4 xl:col-span-1">
+            <HomeMarketsCard
+              clocks={worldClocks}
+              saving={savingClocks}
+              onChange={(next) => void saveWorldClocks(next)}
+            />
+            <HomeActivityCard
+              items={activity.slice(0, 8)}
+              onOpen={(href) => navigate(href)}
+            />
+            <HomeTasksCard
+              tasks={pendingHome}
+              hint={tasksHint}
+              onToggle={(task) => void completeTask(task)}
+              onOpenRelated={(path) => navigate(path)}
+              onOpenAll={() => navigate('/tarefas')}
+              onCreate={() => navigate('/tarefas')}
+            />
+          </div>
         </div>
       </div>
 

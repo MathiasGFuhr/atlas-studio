@@ -11,7 +11,7 @@ export function TopBar({ settings }: { settings: AppSettings | null }) {
   return (
     <header
       data-tour="topbar"
-      className="flex h-14 shrink-0 items-center gap-2 border-b border-border-soft bg-bg/80 px-3 backdrop-blur sm:h-[68px] sm:gap-4 sm:px-6"
+      className="flex h-14 shrink-0 items-center gap-2 border-b border-border-soft bg-bg px-3 sm:h-[68px] sm:gap-4 sm:px-6"
     >
       <div className="min-w-0 flex-1">
         <GlobalSearch />

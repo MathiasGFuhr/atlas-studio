@@ -18,22 +18,23 @@ export function HomeStatCard({
 }) {
   const interactive = Boolean(onClick)
   const classes = cn(
-    'flex min-h-[92px] min-w-0 items-center gap-3.5 px-5 py-4 text-left transition-colors',
-    interactive && 'cursor-pointer hover:bg-white/[0.02]',
+    'group/stat relative flex min-h-[100px] min-w-0 items-center gap-4 px-5 py-5 text-left',
+    'transition-colors duration-200',
+    interactive && 'cursor-pointer hover:bg-white/[0.028]',
     className,
   )
 
   const content = (
     <>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-muted">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-gradient-to-b from-white/[0.07] to-white/[0.02] text-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-colors group-hover/stat:border-white/[0.1] group-hover/stat:text-text">
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-2">{label}</p>
-        <p className="mt-1 truncate text-[20px] font-semibold tabular-nums tracking-tight text-text">
+        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">{label}</p>
+        <p className="mt-1.5 truncate text-[22px] font-semibold tabular-nums tracking-tight text-text">
           {value}
         </p>
-        {hint ? <p className="mt-0.5 truncate text-xs text-muted-2">{hint}</p> : null}
+        {hint ? <p className="mt-1 truncate text-xs leading-snug text-muted-2">{hint}</p> : null}
       </div>
     </>
   )
