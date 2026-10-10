@@ -83,24 +83,46 @@ export const UPDATE_NOTES_FALLBACK = 'Esta atualização inclui melhorias e corr
 
 export function flattenReleaseNotes(raw: unknown): string {
   if (raw == null) return ''
-  if (typeof raw === 'string') return raw
+  if (typeof raw === 'string') return repairUtf8Mojibake(raw)
   if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw)
   if (Array.isArray(raw)) {
-    return raw
-      .map((item) => {
-        if (typeof item === 'string') return item
-        if (item && typeof item === 'object' && 'note' in item) {
-          return String((item as { note?: unknown }).note ?? '')
-        }
-        return ''
-      })
-      .filter(Boolean)
-      .join('\n')
+    return repairUtf8Mojibake(
+      raw
+        .map((item) => {
+          if (typeof item === 'string') return item
+          if (item && typeof item === 'object' && 'note' in item) {
+            return String((item as { note?: unknown }).note ?? '')
+          }
+          return ''
+        })
+        .filter(Boolean)
+        .join('\n'),
+    )
   }
   if (typeof raw === 'object' && 'note' in (raw as object)) {
-    return String((raw as { note?: unknown }).note ?? '')
+    return repairUtf8Mojibake(String((raw as { note?: unknown }).note ?? ''))
   }
   return ''
+}
+
+/** Corrige texto UTF-8 lido como Latin-1/Windows-1252 (ex.: "você" → "vocÃª"). */
+export function repairUtf8Mojibake(value: string): string {
+  if (!value || !/[ÃÂ]/.test(value)) return value
+  try {
+    const bytes = new Uint8Array(value.length)
+    for (let i = 0; i < value.length; i++) {
+      const code = value.charCodeAt(i)
+      if (code > 0xff) return value
+      bytes[i] = code
+    }
+    const fixed = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    const brokenMarkers = (value.match(/Ã./g) || []).length
+    const fixedMarkers = (fixed.match(/Ã./g) || []).length
+    if (fixedMarkers < brokenMarkers) return fixed
+    return value
+  } catch {
+    return value
+  }
 }
 
 export function normalizeReleaseNotes(

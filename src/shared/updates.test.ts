@@ -6,6 +6,7 @@ import {
   sidebarUpdateStatusLabel,
   normalizeReleaseNotes,
   realDownloadPercent,
+  repairUtf8Mojibake,
   safeUpdateErrorText,
   shouldToastAvailableUpdate,
   sidebarDownloadProgressLabel,
@@ -46,6 +47,16 @@ describe('atualizações', () => {
     expect(normalizeReleaseNotes('<p>A &amp; B &gt; C</p>').text).toBe('A & B > C')
     expect(normalizeReleaseNotes({ foo: 1 }).items).toEqual([])
     expect(normalizeReleaseNotes('[object Object]').items).toEqual([])
+  })
+
+  it('corrige acentuação quebrada (mojibake UTF-8)', () => {
+    expect(repairUtf8Mojibake('vocÃª')).toBe('você')
+    expect(repairUtf8Mojibake('notificaÃ§Ã£o')).toBe('notificação')
+    expect(repairUtf8Mojibake('RelÃ³gios no InÃ­cio')).toBe('Relógios no Início')
+    const notes = normalizeReleaseNotes(
+      '- Chat da equipe: ocultar conversa sÃ³ para vocÃª.',
+    )
+    expect(notes.items[0]).toBe('Chat da equipe: ocultar conversa só para você.')
   })
 
   it('resume HTML sem despejar tags', () => {
