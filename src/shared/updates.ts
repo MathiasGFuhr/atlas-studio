@@ -299,6 +299,18 @@ export function shouldAutoCheckOnStartup(
   return status.state === 'idle' || status.state === 'up-to-date'
 }
 
+/** Verificação em segundo plano enquanto o app está aberto (intervalo / foco). */
+export function shouldRunBackgroundUpdateCheck(
+  status: Pick<AppUpdateStatus, 'state' | 'packaged' | 'autoCheckEnabled'> | null | undefined,
+): boolean {
+  if (!status?.packaged || status.autoCheckEnabled === false) return false
+  return (
+    status.state === 'idle' ||
+    status.state === 'up-to-date' ||
+    status.state === 'error'
+  )
+}
+
 export function sidebarUpdateStatusLabel(state: AppUpdateStatus['state']): string {
   switch (state) {
     case 'downloading':

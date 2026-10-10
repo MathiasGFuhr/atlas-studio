@@ -7,6 +7,7 @@ import {
   emptyUpdateStatus,
   flattenReleaseNotes,
   realDownloadPercent,
+  shouldRunBackgroundUpdateCheck,
   userFacingUpdateError,
   type AppUpdateStatus,
 } from '../../../shared/updates'
@@ -17,12 +18,19 @@ type AppUpdater = import('electron-updater').AppUpdater
 type NsisUpdater = import('electron-updater').NsisUpdater
 
 const AUTO_CHECK_DELAY_MS = 1500
+/** Reconsulta o feed enquanto o app permanece aberto. */
+const AUTO_CHECK_INTERVAL_MS = 5 * 60 * 1000
+/** Ao focar a janela, evita bater no GitHub a cada clique. */
+const FOCUS_CHECK_THROTTLE_MS = 90 * 1000
 
 let updater: AppUpdater | null = null
 let status: AppUpdateStatus = emptyUpdateStatus('0.0.0', false)
 let getWindow: () => BrowserWindow | null = () => null
 let started = false
+let focusListenerBound = false
 let autoCheckTimer: ReturnType<typeof setTimeout> | null = null
+let autoCheckInterval: ReturnType<typeof setInterval> | null = null
+let lastBackgroundCheckAt = 0
 let checkInFlight: Promise<AppUpdateStatus> | null = null
 
 export function getAppUpdateStatus(): AppUpdateStatus {
@@ -61,6 +69,7 @@ export function startAppUpdateService(deps: { getWindow: () => BrowserWindow | n
     }
 
     bindUpdaterEvents(updater)
+    bindFocusUpdateCheck()
   } catch (error) {
     console.error('[updates]', userFacingUpdateError('unsupported'), error)
     status = {
@@ -74,15 +83,45 @@ export function startAppUpdateService(deps: { getWindow: () => BrowserWindow | n
   scheduleAutoCheck()
 }
 
-export function scheduleAutoCheck() {
+function clearAutoCheckTimers() {
   if (autoCheckTimer) {
     clearTimeout(autoCheckTimer)
     autoCheckTimer = null
   }
+  if (autoCheckInterval) {
+    clearInterval(autoCheckInterval)
+    autoCheckInterval = null
+  }
+}
+
+function bindFocusUpdateCheck() {
+  if (focusListenerBound) return
+  focusListenerBound = true
+  app.on('browser-window-focus', () => {
+    void maybeBackgroundUpdateCheck('focus')
+  })
+}
+
+function maybeBackgroundUpdateCheck(reason: 'interval' | 'focus') {
+  if (!shouldRunBackgroundUpdateCheck(getAppUpdateStatus())) return
+  const now = Date.now()
+  if (reason === 'focus' && now - lastBackgroundCheckAt < FOCUS_CHECK_THROTTLE_MS) return
+  lastBackgroundCheckAt = now
+  void checkForAppUpdates({ silent: true })
+}
+
+export function scheduleAutoCheck() {
+  clearAutoCheckTimers()
   if (!app.isPackaged || !updater || !readAutoCheck()) return
+
   autoCheckTimer = setTimeout(() => {
+    lastBackgroundCheckAt = Date.now()
     void checkForAppUpdates({ silent: true })
   }, AUTO_CHECK_DELAY_MS)
+
+  autoCheckInterval = setInterval(() => {
+    void maybeBackgroundUpdateCheck('interval')
+  }, AUTO_CHECK_INTERVAL_MS)
 }
 
 export async function checkForAppUpdates(opts: { silent?: boolean } = {}): Promise<AppUpdateStatus> {

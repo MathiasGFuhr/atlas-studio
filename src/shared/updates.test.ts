@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isSidebarUpdateRelevant,
   shouldAutoCheckOnStartup,
+  shouldRunBackgroundUpdateCheck,
   sidebarUpdateStatusLabel,
   normalizeReleaseNotes,
   realDownloadPercent,
@@ -84,6 +85,21 @@ describe('atualizações', () => {
     expect(shouldAutoCheckOnStartup({ state: 'available', packaged: true, autoCheckEnabled: true })).toBe(false)
     expect(shouldAutoCheckOnStartup({ state: 'idle', packaged: false, autoCheckEnabled: true })).toBe(false)
     expect(shouldAutoCheckOnStartup({ state: 'idle', packaged: true, autoCheckEnabled: false })).toBe(false)
+  })
+
+  it('reconsulta em segundo plano enquanto o app está aberto', () => {
+    expect(
+      shouldRunBackgroundUpdateCheck({ state: 'up-to-date', packaged: true, autoCheckEnabled: true }),
+    ).toBe(true)
+    expect(
+      shouldRunBackgroundUpdateCheck({ state: 'error', packaged: true, autoCheckEnabled: true }),
+    ).toBe(true)
+    expect(
+      shouldRunBackgroundUpdateCheck({ state: 'available', packaged: true, autoCheckEnabled: true }),
+    ).toBe(false)
+    expect(
+      shouldRunBackgroundUpdateCheck({ state: 'downloading', packaged: true, autoCheckEnabled: true }),
+    ).toBe(false)
   })
 
   it('rótulo da sidebar acompanha o estado da atualização', () => {
