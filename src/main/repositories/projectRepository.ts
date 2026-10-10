@@ -223,6 +223,7 @@ export const projectRepository = {
     db.prepare('UPDATE scripts SET project_id = NULL WHERE project_id = ?').run(id)
     db.prepare('UPDATE music_tracks SET project_id = NULL WHERE project_id = ?').run(id)
     db.prepare('UPDATE quick_prompts SET project_id = NULL WHERE project_id = ?').run(id)
+    db.prepare('UPDATE lipsync_refs SET project_id = NULL WHERE project_id = ?').run(id)
     db.prepare('DELETE FROM projects WHERE id = ?').run(id)
     return true
   },

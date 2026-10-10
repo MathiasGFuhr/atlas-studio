@@ -90,5 +90,9 @@ export default defineConfig({
     port: 5173,
     // Não abrir o navegador — o Atlas Studio real é a janela Electron.
     open: false,
+    watch: {
+      // Evita EBUSY ao observar instaladores .exe em pastas de release.
+      ignored: ['**/release/**', '**/release-*/**'],
+    },
   },
 })

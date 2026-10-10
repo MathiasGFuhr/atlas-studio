@@ -19,6 +19,7 @@ import { ChannelCalendarPage } from './pages/ChannelCalendarPage'
 import { ChannelAgendaPage } from './pages/ChannelAgendaPage'
 import { ChannelPublishedVideosPage } from './pages/ChannelPublishedVideosPage'
 import { PromptsPage } from './pages/PromptsPage'
+import { LipSyncRefsPage } from './pages/LipSyncRefsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { MusicPage } from './pages/MusicPage'
 import { MusicEditorPage } from './pages/MusicEditorPage'
@@ -34,7 +35,7 @@ import { useCodexAuth } from './hooks/useCodexAuth'
 import { WorkspaceCapabilitiesProvider } from './hooks/useWorkspaceCapabilities'
 import { AppUpdateProvider } from './hooks/useAppUpdate'
 import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
-import { MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
+import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { version as appVersion } from '../../package.json'
 
 /** Mantém links antigos funcionando sem duplicar telas. */
@@ -141,7 +142,7 @@ export default function App() {
         <CreateActionsProvider>
         <ShortsGenerationProvider>
         <div className="flex h-full w-full overflow-hidden bg-bg text-text">
-          <AppSidebar codexStatus={codexAuth.status} />
+          <AppSidebar codexStatus={codexAuth.status} accountId={session.user.id} />
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar settings={settings} />
             <main className="min-h-0 flex-1 overflow-hidden">
@@ -153,6 +154,7 @@ export default function App() {
                 <Route path="/musica/faixas" element={<MusicPage />} />
                 <Route path="/musica/faixas/:id" element={<MusicEditorPage />} />
                 <Route path={MUSIC_PROMPTS_PATH} element={<PromptsPage />} />
+                <Route path={MUSIC_LIPSYNC_PATH} element={<LipSyncRefsPage />} />
 
                 <Route path="/canais" element={<ChannelsPage />} />
                 <Route path="/canais/agenda" element={<ChannelAgendaPage />} />

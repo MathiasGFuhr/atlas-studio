@@ -79,7 +79,13 @@ type ProfileRow = {
 let channel: RealtimeChannel | null = null
 let getWindow: (() => BrowserWindow | null) | null = null
 let online: TeamChatPeer[] = []
+let presenceSelfId = ''
 let presenceReady = false
+
+function onlineOthers(): TeamChatPeer[] {
+  if (!presenceSelfId) return [...online]
+  return online.filter((peer) => peer.id !== presenceSelfId)
+}
 
 function resolveNotifyIcon(): string | undefined {
   const candidates = [
@@ -137,9 +143,12 @@ function emit(channelName: string, payload: unknown) {
 
 function peersFromPresence(state: Record<string, Array<Record<string, unknown>>>): TeamChatPeer[] {
   const byId = new Map<string, TeamChatPeer>()
-  for (const metas of Object.values(state)) {
+  for (const [key, metas] of Object.entries(state)) {
     for (const meta of metas) {
-      const id = typeof meta.id === 'string' ? meta.id : ''
+      const id =
+        typeof meta.id === 'string' && meta.id.trim()
+          ? meta.id.trim()
+          : key.trim()
       if (!id) continue
       byId.set(id, {
         id,
@@ -268,7 +277,7 @@ export const teamChatService = {
   },
 
   listOnline(): TeamChatPeer[] {
-    return [...online]
+    return onlineOthers()
   },
 
   async listDirectory(): Promise<TeamChatPeer[]> {
@@ -507,6 +516,7 @@ export const teamChatService = {
     }
     this.stop()
     const user = session.user
+    presenceSelfId = user.id
     await accountService.syncProfile(user)
     channel = supabase.channel('atlas-team', {
       config: { presence: { key: user.id } },
@@ -529,7 +539,7 @@ export const teamChatService = {
       }
       presenceReady = true
       online = next
-      emit(IPC.teamChat.presence, online)
+      emit(IPC.teamChat.presence, onlineOthers())
     })
     await channel.subscribe(async (status) => {
       if (status !== 'SUBSCRIBED' || !channel) return
@@ -547,6 +557,7 @@ export const teamChatService = {
       channel = null
     }
     online = []
+    presenceSelfId = ''
     presenceReady = false
     emit(IPC.teamChat.presence, [])
   },

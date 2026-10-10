@@ -348,6 +348,8 @@ describe('migração para projetos de História e Música', () => {
       expect.objectContaining({ version: 14 }),
       expect.objectContaining({ version: 15 }),
       expect.objectContaining({ version: 16 }),
+      expect.objectContaining({ version: 17 }),
+      expect.objectContaining({ version: 18 }),
     ])
   })
 

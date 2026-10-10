@@ -71,6 +71,12 @@ import type {
   TeamChatRoom,
   TeamChatSendInput,
 } from '../src/shared/account'
+import type {
+  LipSyncRef,
+  LipSyncRefCreateInput,
+  LipSyncRefListFilters,
+  LipSyncRefUpdateInput,
+} from '../src/shared/lipSyncRefs'
 
 /**
  * Mock API para preview no navegador (sem Electron).
@@ -100,6 +106,7 @@ const mockPeer: TeamChatPeer = {
 const teamRooms: TeamChatRoom[] = []
 const teamMembers = new Map<string, TeamChatMember[]>()
 const teamMessages: TeamChatMessage[] = []
+const lipSyncRefs: LipSyncRef[] = []
 const teamChatListeners = {
   message: new Set<(message: TeamChatMessage) => void>(),
   presence: new Set<(peers: TeamChatPeer[]) => void>(),
@@ -1225,9 +1232,72 @@ export const mockApi = {
   dialog: {
     selectFolder: async () => null,
     selectImage: async () => null,
+    selectImages: async () => [],
     readImageDataUrl: async () => null,
     selectFiles: async () => [],
     selectExecutable: async () => null,
+  },
+  lipSyncRefs: {
+    list: async (filters?: LipSyncRefListFilters) => {
+      let list = [...lipSyncRefs]
+      if (filters?.unassignedOnly) {
+        list = list.filter((item) => !item.projectId)
+      } else if (filters?.projectId) {
+        list = list.filter((item) => item.projectId === filters.projectId)
+      }
+      return list.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt))
+    },
+    create: async (input: LipSyncRefCreateInput) => {
+      const now = new Date().toISOString()
+      const projectId = input.projectId?.trim() || null
+      const project = projectId ? projects.find((item) => item.id === projectId) : null
+      const item: LipSyncRef = {
+        id: crypto.randomUUID(),
+        label: input.label?.trim() || 'Referência',
+        prompt: input.prompt?.trim() || '',
+        imagePath: input.imagePath,
+        imageDataUrl:
+          'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="400"><rect width="100%" height="100%" fill="%231a1a1a"/><text x="50%" y="50%" fill="%2388ff99" font-size="18" text-anchor="middle" dy=".3em">Lipsync</text></svg>',
+        projectId,
+        projectName: project?.name ?? null,
+        sortOrder: lipSyncRefs.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1,
+        createdAt: now,
+        updatedAt: now,
+      }
+      lipSyncRefs.push(item)
+      return item
+    },
+    createMany: async (imagePaths: string[], projectId?: string | null) => {
+      const created: LipSyncRef[] = []
+      for (const imagePath of imagePaths) {
+        created.push(await mockApi.lipSyncRefs.create({ imagePath, projectId }))
+      }
+      return created
+    },
+    update: async (id: string, patch: LipSyncRefUpdateInput) => {
+      const index = lipSyncRefs.findIndex((item) => item.id === id)
+      if (index < 0) return null
+      const current = lipSyncRefs[index]
+      const projectId =
+        patch.projectId !== undefined ? patch.projectId?.trim() || null : current.projectId
+      const project = projectId ? projects.find((item) => item.id === projectId) : null
+      const next: LipSyncRef = {
+        ...current,
+        label: patch.label !== undefined ? patch.label.trim() : current.label,
+        prompt: patch.prompt !== undefined ? patch.prompt : current.prompt,
+        projectId,
+        projectName: project?.name ?? null,
+        updatedAt: new Date().toISOString(),
+      }
+      lipSyncRefs[index] = next
+      return next
+    },
+    remove: async (id: string) => {
+      const index = lipSyncRefs.findIndex((item) => item.id === id)
+      if (index < 0) return false
+      lipSyncRefs.splice(index, 1)
+      return true
+    },
   },
   system: {
     copyText: async (text: string) => {

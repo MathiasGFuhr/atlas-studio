@@ -764,6 +764,13 @@ export const IPC = {
     setPublic: 'quickPrompts:setPublic',
     copyShared: 'quickPrompts:copyShared',
   },
+  lipSyncRefs: {
+    list: 'lipSyncRefs:list',
+    create: 'lipSyncRefs:create',
+    createMany: 'lipSyncRefs:createMany',
+    update: 'lipSyncRefs:update',
+    remove: 'lipSyncRefs:remove',
+  },
   prompts: {
     list: 'prompts:list',
     get: 'prompts:get',
@@ -885,6 +892,7 @@ export const IPC = {
   dialog: {
     selectFolder: 'dialog:selectFolder',
     selectImage: 'dialog:selectImage',
+    selectImages: 'dialog:selectImages',
     readImageDataUrl: 'dialog:readImageDataUrl',
     selectFiles: 'dialog:selectFiles',
     selectExecutable: 'dialog:selectExecutable',

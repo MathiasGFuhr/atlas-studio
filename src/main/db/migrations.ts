@@ -19,7 +19,7 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 16
+export const CURRENT_SCHEMA_VERSION = 18
 
 type SchemaStepResult = {
   historyCreated: number
@@ -139,6 +139,18 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyShortsLogoWatermark,
   },
+  {
+    version: 17,
+    name: 'lipsync-refs',
+    backup: false,
+    up: applyLipSyncRefs,
+  },
+  {
+    version: 18,
+    name: 'lipsync-refs-project',
+    backup: false,
+    up: applyLipSyncRefsProject,
+  },
 ]
 
 /**
@@ -255,6 +267,36 @@ function applyShortsLogoWatermark(database: AppDatabase): SchemaStepResult {
   }>
   if (!tables.some((item) => item.name === 'shorts_jobs')) return { historyCreated: 0, musicCreated: 0 }
   ensureColumn(database, 'shorts_jobs', 'logo_settings_json', "TEXT NOT NULL DEFAULT '{}'")
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyLipSyncRefs(database: AppDatabase): SchemaStepResult {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS lipsync_refs (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL DEFAULT '',
+      prompt TEXT NOT NULL DEFAULT '',
+      image_path TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_lipsync_refs_sort ON lipsync_refs(sort_order, created_at DESC)',
+  )
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyLipSyncRefsProject(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'lipsync_refs')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'lipsync_refs', 'project_id', 'TEXT')
+  database.exec('CREATE INDEX IF NOT EXISTS idx_lipsync_refs_project ON lipsync_refs(project_id)')
   return { historyCreated: 0, musicCreated: 0 }
 }
 

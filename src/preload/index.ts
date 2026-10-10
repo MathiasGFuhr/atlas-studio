@@ -72,6 +72,12 @@ import type {
   TeamChatRoom,
   TeamChatSendInput,
 } from '../shared/account'
+import type {
+  LipSyncRef,
+  LipSyncRefCreateInput,
+  LipSyncRefListFilters,
+  LipSyncRefUpdateInput,
+} from '../shared/lipSyncRefs'
 import type { WorkspaceCapabilities } from '../shared/workspaceCapabilities'
 import type { AgentModelSnapshot, AgentModelsBundle, AgentProviderId } from '../shared/agents/types'
 
@@ -492,8 +498,20 @@ const api = {
     readImageDataUrl: (filePath: string) =>
       ipcRenderer.invoke(IPC.dialog.readImageDataUrl, filePath) as Promise<string | null>,
     selectFiles: () => ipcRenderer.invoke(IPC.dialog.selectFiles) as Promise<string[]>,
+    selectImages: () => ipcRenderer.invoke(IPC.dialog.selectImages) as Promise<string[]>,
     selectExecutable: () =>
       ipcRenderer.invoke(IPC.dialog.selectExecutable) as Promise<string | null>,
+  },
+  lipSyncRefs: {
+    list: (filters?: LipSyncRefListFilters) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.list, filters) as Promise<LipSyncRef[]>,
+    create: (input: LipSyncRefCreateInput) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.create, input) as Promise<LipSyncRef>,
+    createMany: (imagePaths: string[], projectId?: string | null) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.createMany, imagePaths, projectId) as Promise<LipSyncRef[]>,
+    update: (id: string, patch: LipSyncRefUpdateInput) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.update, id, patch) as Promise<LipSyncRef | null>,
+    remove: (id: string) => ipcRenderer.invoke(IPC.lipSyncRefs.remove, id) as Promise<boolean>,
   },
   system: {
     copyText: (text: string) => ipcRenderer.invoke(IPC.system.copyText, text) as Promise<boolean>,

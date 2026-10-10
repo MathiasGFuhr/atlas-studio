@@ -394,23 +394,26 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
           </div>
           <div className="shrink-0 border-t border-border p-3 @[980px]:hidden">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-2">
-              Online · {online.length}
+              Online · {onlineOthers.length}
             </p>
-            <ul className="mt-2 max-h-28 space-y-1.5 overflow-y-auto">
-              <li className="truncate text-xs font-medium text-text">{account.name} · você</li>
-              {onlineOthers.map((peer) => (
-                <li key={peer.id} className="min-w-0">
-                  <button
-                    type="button"
-                    className="w-full truncate text-left text-xs text-text hover:text-accent"
-                    onClick={() => void openDmWith(peer.id)}
-                    title="Abrir conversa privada"
-                  >
-                    {peer.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {onlineOthers.length === 0 ? (
+              <p className="mt-2 text-xs text-muted">Ninguém online no momento</p>
+            ) : (
+              <ul className="mt-2 max-h-28 space-y-1.5 overflow-y-auto">
+                {onlineOthers.map((peer) => (
+                  <li key={peer.id} className="min-w-0">
+                    <button
+                      type="button"
+                      className="w-full truncate text-left text-xs text-text hover:text-accent"
+                      onClick={() => void openDmWith(peer.id)}
+                      title="Abrir conversa privada"
+                    >
+                      {peer.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </aside>
 
@@ -596,22 +599,29 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
         <aside className="hidden min-h-0 min-w-0 flex-col gap-3 overflow-hidden @[980px]:flex">
           <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-border bg-card-2 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-2">Online</p>
-            <p className="mt-1 text-sm text-muted">{online.length} pessoa(s) no Atlas</p>
-            <ul className="mt-3 max-h-40 space-y-2 overflow-y-auto">
-              <li className="truncate text-sm font-medium text-text">{account.name} · você</li>
-              {onlineOthers.map((peer) => (
-                <li key={peer.id} className="min-w-0">
-                  <button
-                    type="button"
-                    className="w-full truncate text-left text-sm text-text hover:text-accent"
-                    onClick={() => void openDmWith(peer.id)}
-                    title="Abrir conversa privada"
-                  >
-                    {peer.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <p className="mt-1 text-sm text-muted">
+              {onlineOthers.length === 0
+                ? 'Ninguém online no momento'
+                : onlineOthers.length === 1
+                  ? '1 pessoa no Atlas'
+                  : `${onlineOthers.length} pessoas no Atlas`}
+            </p>
+            {onlineOthers.length > 0 ? (
+              <ul className="mt-3 max-h-40 space-y-2 overflow-y-auto">
+                {onlineOthers.map((peer) => (
+                  <li key={peer.id} className="min-w-0">
+                    <button
+                      type="button"
+                      className="w-full truncate text-left text-sm text-text hover:text-accent"
+                      onClick={() => void openDmWith(peer.id)}
+                      title="Abrir conversa privada"
+                    >
+                      {peer.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
 
           {activeRoom ? (

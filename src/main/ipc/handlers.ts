@@ -50,6 +50,12 @@ import type {
   TeamChatCreateGroupInput,
   TeamChatSendInput,
 } from '../../shared/account'
+import type {
+  LipSyncRefCreateInput,
+  LipSyncRefListFilters,
+  LipSyncRefUpdateInput,
+} from '../../shared/lipSyncRefs'
+import { lipSyncRefRepository } from '../repositories/lipSyncRefRepository'
 import { musicRepository } from '../repositories/musicRepository'
 import { shortsRepository } from '../repositories/shortsRepository'
 import { analyzeShortsJob, regenerateShortsClipCopy } from '../services/shorts/ShortsPipeline'
@@ -1040,7 +1046,35 @@ export function registerIpcHandlers(deps: {
     if (result.canceled || !result.filePaths[0]) return null
     return result.filePaths[0]
   })
+  ipcMain.handle(IPC.dialog.selectImages, async () => {
+    const win = getMainWindow()
+    const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: 'Imagens para lipsync',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Imagens', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+      ],
+    })
+    if (result.canceled || result.filePaths.length === 0) return []
+    return result.filePaths
+  })
   ipcMain.handle(IPC.dialog.readImageDataUrl, (_e, filePath: string) => readImageDataUrl(filePath))
+
+  ipcMain.handle(IPC.lipSyncRefs.list, (_e, filters?: LipSyncRefListFilters) =>
+    lipSyncRefRepository.list(filters),
+  )
+  ipcMain.handle(IPC.lipSyncRefs.create, (_e, input: LipSyncRefCreateInput) =>
+    lipSyncRefRepository.create(input),
+  )
+  ipcMain.handle(
+    IPC.lipSyncRefs.createMany,
+    (_e, imagePaths: string[], projectId?: string | null) =>
+      lipSyncRefRepository.createMany(imagePaths, projectId),
+  )
+  ipcMain.handle(IPC.lipSyncRefs.update, (_e, id: string, patch: LipSyncRefUpdateInput) =>
+    lipSyncRefRepository.update(id, patch),
+  )
+  ipcMain.handle(IPC.lipSyncRefs.remove, (_e, id: string) => lipSyncRefRepository.remove(id))
 
   ipcMain.handle(IPC.dialog.selectFiles, async () => {
     const win = getMainWindow()

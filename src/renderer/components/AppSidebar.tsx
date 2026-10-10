@@ -1,9 +1,9 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
-import { CheckSquare, ChevronLeft, ChevronRight, Clapperboard, Home, Loader2, MessageSquareText, MessagesSquare, Music2, Settings, Tv } from 'lucide-react'
+import { CheckSquare, ChevronLeft, ChevronRight, Clapperboard, Home, Loader2, MessageSquareText, MessagesSquare, Mic2, Music2, Settings, Tv } from 'lucide-react'
 import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
-import { MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
+import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { AtlasAiStatusCard } from './AtlasAiStatusCard'
 import { SidebarChannelSwitcher } from './SidebarChannelSwitcher'
 import { SidebarUpdateCard } from './SidebarUpdateCard'
@@ -30,6 +30,12 @@ const globalItems = [
     icon: MessageSquareText,
     color: ENVIRONMENTS.music.color,
   },
+  {
+    to: MUSIC_LIPSYNC_PATH,
+    label: 'Lipsync',
+    icon: Mic2,
+    color: ENVIRONMENTS.music.color,
+  },
   { to: '/equipe', label: 'Chat', icon: MessagesSquare, color: undefined },
   { to: '/canais', label: 'Canais', icon: Tv, color: undefined },
   { to: '/shorts', label: 'Shorts Studio', icon: Clapperboard, color: undefined },
@@ -41,11 +47,16 @@ function isSidebarLinkActive(to: string, pathname: string, matched: boolean): bo
   if (to === ENVIRONMENTS.music.basePath) {
     return (
       pathname === ENVIRONMENTS.music.basePath ||
-      (pathname.startsWith(`${ENVIRONMENTS.music.basePath}/`) && !pathname.startsWith(MUSIC_PROMPTS_PATH))
+      (pathname.startsWith(`${ENVIRONMENTS.music.basePath}/`) &&
+        !pathname.startsWith(MUSIC_PROMPTS_PATH) &&
+        !pathname.startsWith(MUSIC_LIPSYNC_PATH))
     )
   }
   if (to === MUSIC_PROMPTS_PATH) {
     return pathname === MUSIC_PROMPTS_PATH || pathname.startsWith(`${MUSIC_PROMPTS_PATH}/`)
+  }
+  if (to === MUSIC_LIPSYNC_PATH) {
+    return pathname === MUSIC_LIPSYNC_PATH || pathname.startsWith(`${MUSIC_LIPSYNC_PATH}/`)
   }
   return matched
 }
@@ -54,8 +65,10 @@ const SIDEBAR_COLLAPSED_KEY = 'atlas.sidebar.collapsed'
 
 export function AppSidebar({
   codexStatus,
+  accountId,
 }: {
   codexStatus: CodexStatus | null
+  accountId: string
 }) {
   const api = getAtlasApi()
   const navigate = useNavigate()
@@ -64,6 +77,7 @@ export function AppSidebar({
   const aiStatus = deriveAtlasAiStatus(codexStatus, antigravityStatus)
   const shortsGeneration = useShortsGeneration()
   const [pendingCount, setPendingCount] = useState(0)
+  const [onlineCount, setOnlineCount] = useState(0)
   const compactViewport = useMediaQuery('(max-width: 1100px)')
   const userToggledRef = useRef(false)
   const collapsedRef = useRef(false)
@@ -86,6 +100,25 @@ export function AppSidebar({
     refresh()
     return onTasksChanged(refresh)
   }, [api])
+
+  useEffect(() => {
+    let cancelled = false
+
+    function applyPeers(peers: { id: string }[]) {
+      if (cancelled) return
+      setOnlineCount(
+        peers.filter((peer) => peer.id && peer.id !== accountId).length,
+      )
+    }
+
+    void api.teamChat.listOnline().then(applyPeers)
+    const offPresence = api.teamChat.onPresence(applyPeers)
+
+    return () => {
+      cancelled = true
+      offPresence()
+    }
+  }, [accountId, api])
 
   useEffect(() => {
     if (userToggledRef.current || tourLockRef.current) return
@@ -221,6 +254,10 @@ export function AppSidebar({
                 {collapsed ? (
                   item.to === '/tarefas' && pendingCount > 0 ? (
                     <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+                  ) : item.to === '/equipe' && onlineCount > 0 ? (
+                    <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-dark px-1 text-[10px] font-bold leading-none text-accent">
+                      {onlineCount > 9 ? '9+' : onlineCount}
+                    </span>
                   ) : item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
                     <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
                   ) : null
@@ -232,6 +269,11 @@ export function AppSidebar({
                     {item.to === '/tarefas' && pendingCount > 0 ? (
                       <span className="ml-auto rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-semibold text-muted">
                         {pendingCount}
+                      </span>
+                    ) : null}
+                    {item.to === '/equipe' && onlineCount > 0 ? (
+                      <span className="ml-auto text-[12px] font-semibold tabular-nums text-accent">
+                        {onlineCount}
                       </span>
                     ) : null}
                     {item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (

@@ -102,6 +102,8 @@ export function isContentAreaEnabled(
 export const MUSIC_PROMPTS_PATH = '/musica/prompts'
 /** Meus prompts (chat ou cadastro manual). */
 export const MUSIC_PROMPTS_CUSTOM_PATH = MUSIC_PROMPTS_PATH
+/** Referências de imagem + prompt de lipsync. */
+export const MUSIC_LIPSYNC_PATH = '/musica/lipsync'
 
 export function contentAreaFromPath(pathname: string): ContentArea | null {
   if (pathname === '/prompts' || pathname.startsWith('/prompts/')) return 'music'
