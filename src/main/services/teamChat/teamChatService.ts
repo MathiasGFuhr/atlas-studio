@@ -200,7 +200,14 @@ function peersFromPresence(state: Record<string, Array<Record<string, unknown>>>
 }
 
 function sanitizeFileName(name: string): string {
-  return name.replace(/[^\w.\-()+ ]+/g, '_').slice(0, 120) || 'arquivo'
+  return (
+    name
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\w.\-()+]+/g, '_')
+      .replace(/_+/g, '_')
+      .slice(0, 120) || 'arquivo'
+  )
 }
 
 function kindFromExt(ext: string): TeamChatAttachmentKind {
