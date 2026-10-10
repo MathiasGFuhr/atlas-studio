@@ -321,43 +321,44 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
           : false
 
   return (
-    <PageShell scroll={false} className="flex flex-col">
+    <PageShell scroll={false} className="flex min-w-0 flex-col">
       <PageHeader
         breadcrumb="Equipe"
         title="Chat"
         subtitle="Conversas privadas e grupos em tempo real."
       />
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[240px_minmax(0,1fr)_220px]">
-        <aside className="flex min-h-0 flex-col rounded-2xl border border-border bg-card-2">
-          <div className="flex items-center gap-2 border-b border-border p-3">
+      <div className="@container min-h-0 min-w-0 flex-1">
+        <div className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 @[640px]:grid-cols-[minmax(0,220px)_minmax(0,1fr)] @[980px]:grid-cols-[minmax(0,240px)_minmax(0,1fr)_minmax(0,200px)]">
+        <aside className="flex max-h-[42%] min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card-2 @[640px]:max-h-none">
+          <div className="flex shrink-0 flex-col gap-1 border-b border-border p-2">
             <Button
               type="button"
               variant="ghost"
-              className="h-9 flex-1 justify-start gap-2 px-2 text-xs"
+              className="h-9 w-full justify-start gap-2 px-2.5 text-xs"
               onClick={() => {
                 setComposer('dm')
                 setSelectedIds([])
                 setGroupName('')
               }}
             >
-              <MessageSquarePlus className="h-3.5 w-3.5" />
-              Nova conversa
+              <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Nova conversa</span>
             </Button>
             <Button
               type="button"
               variant="ghost"
-              className="h-9 flex-1 justify-start gap-2 px-2 text-xs"
+              className="h-9 w-full justify-start gap-2 px-2.5 text-xs"
               onClick={() => {
                 setComposer('group')
                 setSelectedIds([])
                 setGroupName('')
               }}
             >
-              <Users className="h-3.5 w-3.5" />
-              Novo grupo
+              <Users className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Novo grupo</span>
             </Button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2">
             {rooms.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-muted">
                 Nenhuma conversa ainda. Inicie um DM ou crie um grupo.
@@ -365,18 +366,18 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
             ) : (
               <ul className="space-y-1">
                 {rooms.map((room) => (
-                  <li key={room.id}>
+                  <li key={room.id} className="min-w-0">
                     <button
                       type="button"
                       className={cn(
-                        'w-full rounded-xl px-3 py-2.5 text-left transition-colors',
+                        'w-full min-w-0 rounded-xl px-3 py-2.5 text-left transition-colors',
                         room.id === activeRoomId
                           ? 'bg-accent/15 text-text'
                           : 'hover:bg-white/5 text-text',
                       )}
                       onClick={() => void loadRoom(room.id)}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center justify-between gap-2">
                         <span className="truncate text-sm font-medium">{room.title}</span>
                         <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-2">
                           {room.kind === 'dm' ? 'DM' : 'Grupo'}
@@ -391,18 +392,53 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
               </ul>
             )}
           </div>
+          <div className="shrink-0 border-t border-border p-3 @[980px]:hidden">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-2">
+              Online · {online.length}
+            </p>
+            <ul className="mt-2 max-h-28 space-y-1.5 overflow-y-auto">
+              <li className="truncate text-xs font-medium text-text">{account.name} · você</li>
+              {onlineOthers.map((peer) => (
+                <li key={peer.id} className="min-w-0">
+                  <button
+                    type="button"
+                    className="w-full truncate text-left text-xs text-text hover:text-accent"
+                    onClick={() => void openDmWith(peer.id)}
+                    title="Abrir conversa privada"
+                  >
+                    {peer.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </aside>
 
-        <section className="flex min-h-0 flex-col rounded-2xl border border-border bg-card-2">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card-2">
           {activeRoom ? (
             <>
-              <div className="border-b border-border px-4 py-3">
-                <p className="text-sm font-semibold text-text">{activeRoom.title}</p>
-                <p className="text-xs text-muted">
-                  {activeRoom.kind === 'dm'
-                    ? 'Conversa privada — só vocês dois veem.'
-                    : `${members.length} membro(s) no grupo`}
-                </p>
+              <div className="flex min-w-0 items-start justify-between gap-3 border-b border-border px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-text">{activeRoom.title}</p>
+                  <p className="truncate text-xs text-muted">
+                    {activeRoom.kind === 'dm'
+                      ? 'Conversa privada — só vocês dois veem.'
+                      : `${members.length} membro(s) no grupo`}
+                  </p>
+                </div>
+                {activeRoom.kind === 'group' && activeRoom.myRole === 'admin' ? (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10 @[980px]:hidden"
+                    onClick={() => {
+                      setComposer('add')
+                      setSelectedIds([])
+                      setGroupName('')
+                    }}
+                  >
+                    Adicionar
+                  </button>
+                ) : null}
               </div>
               <div ref={scroller} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
                 {messages.length === 0 ? (
@@ -462,7 +498,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                 )}
               </div>
               <form
-                className="border-t border-border p-3"
+                className="min-w-0 border-t border-border p-3"
                 onSubmit={(event) => {
                   event.preventDefault()
                   void send()
@@ -549,23 +585,25 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
               </form>
             </>
           ) : (
-            <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted">
-              Selecione uma conversa ou inicie um DM / grupo.
+            <div className="flex min-w-0 flex-1 items-center justify-center px-4 py-6 text-center text-sm text-muted">
+              <p className="max-w-[22rem] text-balance">
+                Selecione uma conversa ou inicie um DM / grupo.
+              </p>
             </div>
           )}
         </section>
 
-        <aside className="flex min-h-0 flex-col gap-4">
-          <div className="rounded-2xl border border-border bg-card-2 p-4">
+        <aside className="hidden min-h-0 min-w-0 flex-col gap-3 overflow-hidden @[980px]:flex">
+          <div className="min-w-0 shrink-0 overflow-hidden rounded-2xl border border-border bg-card-2 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-2">Online</p>
             <p className="mt-1 text-sm text-muted">{online.length} pessoa(s) no Atlas</p>
-            <ul className="mt-3 space-y-2">
-              <li className="text-sm font-medium text-text">{account.name} · você</li>
+            <ul className="mt-3 max-h-40 space-y-2 overflow-y-auto">
+              <li className="truncate text-sm font-medium text-text">{account.name} · você</li>
               {onlineOthers.map((peer) => (
-                <li key={peer.id}>
+                <li key={peer.id} className="min-w-0">
                   <button
                     type="button"
-                    className="w-full text-left text-sm text-text hover:text-accent"
+                    className="w-full truncate text-left text-sm text-text hover:text-accent"
                     onClick={() => void openDmWith(peer.id)}
                     title="Abrir conversa privada"
                   >
@@ -577,15 +615,15 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
           </div>
 
           {activeRoom ? (
-            <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-card-2 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-2">
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden rounded-2xl border border-border bg-card-2 p-4">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-muted-2">
                   {activeRoom.kind === 'dm' ? 'Participantes' : 'Membros'}
                 </p>
                 {activeRoom.kind === 'group' && activeRoom.myRole === 'admin' ? (
                   <button
                     type="button"
-                    className="text-[11px] font-medium text-accent hover:underline"
+                    className="shrink-0 text-[11px] font-medium text-accent hover:underline"
                     onClick={() => {
                       setComposer('add')
                       setSelectedIds([])
@@ -598,7 +636,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
               </div>
               <ul className="mt-3 space-y-2">
                 {members.map((member) => (
-                  <li key={member.id} className="text-sm text-text">
+                  <li key={member.id} className="min-w-0 truncate text-sm text-text">
                     <span className="font-medium">
                       {member.id === account.id ? `${member.name} · você` : member.name}
                     </span>
@@ -613,6 +651,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
             </div>
           ) : null}
         </aside>
+        </div>
       </div>
 
       {composer ? (
