@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Database, Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid, ExternalLink, Compass } from 'lucide-react'
+import { Info, Monitor, Bot, Save, LogOut, Link as LinkIcon, RefreshCw, User, Sparkles, LogIn, LayoutGrid, ExternalLink, Compass } from 'lucide-react'
 import type { AntigravityStatus, AppSettings } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
@@ -195,7 +195,7 @@ export function SettingsPage({
         subtitle="Ajuste o sistema para o seu fluxo de trabalho."
       />
 
-      <div data-tour="page-actions" className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div data-tour="page-actions" className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatusMini
           icon={Bot}
           title="Codex"
@@ -219,12 +219,6 @@ export function SettingsPage({
           ok={Boolean(antigravity?.connected)}
         />
         <StatusMini icon={Monitor} title="Sistema" value="Estável" ok />
-        <StatusMini
-          icon={Database}
-          title="Backup"
-          value={settings.backupEnabled ? 'Ativo' : 'Inativo'}
-          ok={settings.backupEnabled}
-        />
       </div>
 
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -610,78 +604,6 @@ export function SettingsPage({
                 value={settings.defaultLanguage}
                 onChange={(e) => setSettings({ ...settings, defaultLanguage: e.target.value })}
                 options={['Alemão', 'Inglês', 'Português'].map((l) => ({ value: l, label: l }))}
-              />
-            }
-          />
-        </SettingsCard>
-
-        <SettingsCard title="Saída" icon={Database}>
-          <Row
-            label="Estilo padrão"
-            control={
-              <Select
-                value={settings.defaultOutputStyle}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    defaultOutputStyle: e.target.value as AppSettings['defaultOutputStyle'],
-                  })
-                }
-                options={[
-                  { value: 'original', label: 'Original' },
-                  { value: 'profissional', label: 'Profissional' },
-                  { value: 'alta_retencao', label: 'Alta retenção' },
-                ]}
-              />
-            }
-          />
-          <Row
-            label="Duração"
-            control={
-              <Select
-                value={settings.defaultDuration}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    defaultDuration: e.target.value as AppSettings['defaultDuration'],
-                  })
-                }
-                options={[
-                  { value: '10', label: '10 min' },
-                  { value: '15', label: '15 min / Médio' },
-                  { value: '20', label: '20 min' },
-                  { value: '30', label: '30 min' },
-                ]}
-              />
-            }
-          />
-          <Row
-            label="Auditoria final"
-            control={
-              <Select
-                value={settings.finalAuditEnabled ? 'sim' : 'nao'}
-                onChange={(e) =>
-                  setSettings({ ...settings, finalAuditEnabled: e.target.value === 'sim' })
-                }
-                options={[
-                  { value: 'sim', label: 'Ativa' },
-                  { value: 'nao', label: 'Desligada' },
-                ]}
-              />
-            }
-          />
-          <Row
-            label="Backup"
-            control={
-              <Select
-                value={settings.backupEnabled ? 'sim' : 'nao'}
-                onChange={(e) =>
-                  setSettings({ ...settings, backupEnabled: e.target.value === 'sim' })
-                }
-                options={[
-                  { value: 'sim', label: 'Ativo' },
-                  { value: 'nao', label: 'Inativo' },
-                ]}
               />
             }
           />
