@@ -1,7 +1,9 @@
-import type { BrowserWindow } from 'electron'
+import fs from 'node:fs'
+import path from 'node:path'
+import { Notification, type BrowserWindow } from 'electron'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { IPC } from '../../../shared/types'
-import type { TeamChatMessage, TeamChatPeer } from '../../../shared/account'
+import { peersWhoJoined, type TeamChatMessage, type TeamChatPeer } from '../../../shared/account'
 import { getAtlasSupabase } from '../supabase/atlasSupabase'
 import { accountService } from '../account/accountService'
 
@@ -16,6 +18,33 @@ type TeamMessageRow = {
 let channel: RealtimeChannel | null = null
 let getWindow: (() => BrowserWindow | null) | null = null
 let online: TeamChatPeer[] = []
+let presenceReady = false
+
+function resolveNotifyIcon(): string | undefined {
+  const candidates = [
+    path.join(process.resourcesPath ?? '', 'icon.ico'),
+    path.join(process.cwd(), 'build', 'icon.ico'),
+  ]
+  return candidates.find((candidate) => candidate && fs.existsSync(candidate))
+}
+
+function showOnlineToast(peer: TeamChatPeer) {
+  if (!Notification.isSupported()) return
+  const toast = new Notification({
+    title: 'Atlas Studio',
+    body: `${peer.name.trim() || 'Alguém'} entrou e está online`,
+    icon: resolveNotifyIcon(),
+  })
+  toast.on('click', () => {
+    const win = getWindow?.()
+    if (!win || win.isDestroyed()) return
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    emit(IPC.teamChat.openChat, null)
+  })
+  toast.show()
+}
 
 function mapMessage(row: TeamMessageRow): TeamChatMessage {
   return {
@@ -109,7 +138,15 @@ export const teamChatService = {
       },
     )
     channel.on('presence', { event: 'sync' }, () => {
-      online = peersFromPresence(channel?.presenceState() ?? {})
+      const next = peersFromPresence(channel?.presenceState() ?? {})
+      if (presenceReady) {
+        for (const peer of peersWhoJoined(online, next, user.id)) {
+          emit(IPC.teamChat.peerOnline, peer)
+          showOnlineToast(peer)
+        }
+      }
+      presenceReady = true
+      online = next
       emit(IPC.teamChat.presence, online)
     })
     await channel.subscribe(async (status) => {
@@ -128,6 +165,7 @@ export const teamChatService = {
       channel = null
     }
     online = []
+    presenceReady = false
     emit(IPC.teamChat.presence, [])
   },
 }

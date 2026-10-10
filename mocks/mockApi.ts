@@ -1005,6 +1005,8 @@ export const mockApi = {
         teamChatListeners.presence.delete(callback)
       }
     },
+    onPeerOnline: () => () => undefined,
+    onOpenChat: () => () => undefined,
   },
   workspace: {
     capabilities: async () =>

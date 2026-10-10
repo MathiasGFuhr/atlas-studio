@@ -8,13 +8,15 @@ import { environmentBreadcrumb } from '../lib/environments'
  */
 export function PromptsPage() {
   return (
-    <PageShell>
+    <PageShell scroll={false} className="flex min-h-0 flex-col">
       <PageHeader
         breadcrumb={environmentBreadcrumb('music', 'Prompts')}
         title="Prompts"
-        subtitle="Os prompts que você criar, organizados em abas como lipsync, ângulos de câmera ou o que fizer sentido."
+        subtitle="Biblioteca para guardar, agrupar e copiar os textos da produção."
       />
-      <QuickPromptsPanel />
+      <div className="min-h-0 flex-1">
+        <QuickPromptsPanel />
+      </div>
     </PageShell>
   )
 }

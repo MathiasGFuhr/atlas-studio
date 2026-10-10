@@ -2,7 +2,7 @@ import type { AtlasTask } from './types'
 import { daysBetweenYmd, dueDateState, todayYmd } from './tasks'
 import { UPDATE_SETTINGS_HREF, updateNotificationId, type AppUpdateState } from './updates'
 
-export type AtlasNotificationKind = 'task-overdue' | 'task-today' | 'app-update'
+export type AtlasNotificationKind = 'task-overdue' | 'task-today' | 'app-update' | 'user-online'
 
 export interface AtlasNotification {
   id: string
@@ -90,11 +90,33 @@ export function deriveUpdateNotification(status: {
   }
 }
 
+export function onlineNotificationId(userId: string, joinedAt: string): string {
+  return `user-online:${userId}:${joinedAt}`
+}
+
+export function deriveOnlineNotification(
+  peer: { id: string; name: string },
+  joinedAt = new Date().toISOString(),
+): AtlasNotification {
+  const name = peer.name.trim() || 'Alguém'
+  return {
+    id: onlineNotificationId(peer.id, joinedAt),
+    kind: 'user-online',
+    title: 'Online',
+    body: `${name} entrou e está online`,
+    hint: 'Está no Atlas agora',
+    href: '/equipe',
+    sortAt: joinedAt,
+    createdAt: joinedAt,
+  }
+}
+
 function kindRank(kind: AtlasNotificationKind): number {
   if (kind === 'app-update') return 0
-  if (kind === 'task-overdue') return 1
-  if (kind === 'task-today') return 2
-  return 3
+  if (kind === 'user-online') return 1
+  if (kind === 'task-overdue') return 2
+  if (kind === 'task-today') return 3
+  return 4
 }
 
 export function sortNotifications(items: AtlasNotification[]): AtlasNotification[] {

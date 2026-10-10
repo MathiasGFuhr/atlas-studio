@@ -29,6 +29,9 @@ registerAtlasMediaScheme()
 if (app.isPackaged) {
   app.setName('Atlas Studio')
 }
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.atlasstudio.app')
+}
 
 function resolveAppIcon(): string | undefined {
   const candidates = [

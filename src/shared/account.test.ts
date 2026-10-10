@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mapAtlasAccount } from './account'
+import { mapAtlasAccount, peersWhoJoined } from './account'
 
 describe('mapAtlasAccount', () => {
   it('usa o nome gravado no cadastro', () => {
@@ -28,5 +28,27 @@ describe('mapAtlasAccount', () => {
       email: 'joao@studio.test',
       name: 'joao',
     })
+  })
+})
+
+describe('peersWhoJoined', () => {
+  it('ignora quem já estava e a própria conta', () => {
+    expect(
+      peersWhoJoined(
+        [{ id: 'me', name: 'Eu', email: '' }, { id: 'a', name: 'Ana', email: '' }],
+        [
+          { id: 'me', name: 'Eu', email: '' },
+          { id: 'a', name: 'Ana', email: '' },
+          { id: 'b', name: 'Bia', email: '' },
+        ],
+        'me',
+      ),
+    ).toEqual([{ id: 'b', name: 'Bia', email: '' }])
+  })
+
+  it('com lista anterior vazia, só os outros contam como entrada', () => {
+    expect(
+      peersWhoJoined([], [{ id: 'me', name: 'Eu', email: '' }, { id: 'a', name: 'Ana', email: '' }], 'me'),
+    ).toEqual([{ id: 'a', name: 'Ana', email: '' }])
   })
 })

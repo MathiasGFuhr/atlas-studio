@@ -28,6 +28,15 @@ export type TeamChatPeer = {
   email: string
 }
 
+export function peersWhoJoined(
+  previous: TeamChatPeer[],
+  next: TeamChatPeer[],
+  selfId: string,
+): TeamChatPeer[] {
+  const had = new Set(previous.map((peer) => peer.id))
+  return next.filter((peer) => peer.id !== selfId && !had.has(peer.id))
+}
+
 export function mapAtlasAccount(user: {
   id: string
   email?: string | null

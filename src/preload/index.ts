@@ -378,6 +378,20 @@ const api = {
         ipcRenderer.removeListener(IPC.teamChat.presence, listener)
       }
     },
+    onPeerOnline: (callback: (peer: TeamChatPeer) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: TeamChatPeer) => callback(data)
+      ipcRenderer.on(IPC.teamChat.peerOnline, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.teamChat.peerOnline, listener)
+      }
+    },
+    onOpenChat: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on(IPC.teamChat.openChat, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.teamChat.openChat, listener)
+      }
+    },
   },
   codex: {
     status: () => ipcRenderer.invoke(IPC.codex.status) as Promise<CodexStatus>,

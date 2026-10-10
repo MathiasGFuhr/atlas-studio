@@ -853,6 +853,8 @@ export const IPC = {
     listOnline: 'teamChat:listOnline',
     message: 'teamChat:message',
     presence: 'teamChat:presence',
+    peerOnline: 'teamChat:peerOnline',
+    openChat: 'teamChat:openChat',
   },
   codex: {
     status: 'codex:status',
