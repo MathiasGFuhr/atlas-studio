@@ -1,17 +1,13 @@
 import {
-  BookOpen,
   CalendarDays,
   CheckSquare,
   Clapperboard,
-  FileText,
   FolderKanban,
   ListMusic,
   MessageSquareText,
   Music2,
   Scissors,
   Settings,
-  Sparkles,
-  Tag,
   Tv,
   type LucideIcon,
 } from 'lucide-react'
@@ -58,84 +54,6 @@ function screenTour(
 }
 
 export const PAGE_TOURS: Record<string, TourStep[]> = {
-  'history-projects': screenTour(
-    'history-projects',
-    BookOpen,
-    'História',
-    {
-      title: 'Projetos de roteiro',
-      body: 'Cada projeto reúne os roteiros de um tema. Daqui você abre um trabalho em andamento ou começa o próximo.',
-    },
-    {
-      title: 'Buscar e criar',
-      body: 'A busca localiza um projeto. Roteiros e Nichos são os atalhos do ambiente. Novo projeto abre o cadastro. As abas separam o que está em produção do que já foi publicado.',
-    },
-  ),
-  'history-project': screenTour(
-    'history-project',
-    FolderKanban,
-    'Projeto',
-    {
-      title: 'O projeto de História',
-      body: 'Aqui ficam os roteiros deste tema. Abra um existente ou gere o próximo sem sair do projeto.',
-    },
-    {
-      title: 'Criar o roteiro',
-      body: 'Criar roteiro leva ao formulário de nicho, idioma e tema. O texto gerado volta para esta lista.',
-    },
-  ),
-  'create-script': screenTour(
-    'create-script',
-    Sparkles,
-    'Roteiro',
-    {
-      title: 'Como o roteiro nasce',
-      body: 'O nicho escolhe a skill de escrita. O idioma define a saída. O tema é o pedido. O Atlas pesquisa, escreve e devolve o roteiro no projeto.',
-    },
-    {
-      title: 'Gerar',
-      body: 'Preencha o tema e toque em Gerar roteiro. A geração segue quando o nicho tem uma skill associada na biblioteca.',
-    },
-  ),
-  scripts: screenTour(
-    'scripts',
-    FileText,
-    'Roteiros',
-    {
-      title: 'A biblioteca de roteiros',
-      body: 'Todos os roteiros gerados ficam aqui, para abrir, continuar ou filtrar sem procurar projeto por projeto.',
-    },
-    {
-      title: 'Filtrar e criar',
-      body: 'Busque pelo título, filtre por nicho e idioma, ou comece um roteiro novo. A lista abaixo abre o texto pronto.',
-    },
-  ),
-  'script-detail': screenTour(
-    'script-detail',
-    FileText,
-    'Roteiro pronto',
-    {
-      title: 'Ler e levar o texto',
-      body: 'Esta tela é o roteiro fechado: título, nicho, idioma, duração e o texto para revisar.',
-    },
-    {
-      title: 'Copiar, exportar, versionar',
-      body: 'Copie tudo, exporte em TXT ou Markdown, gere de novo ou salve uma versão. O texto fica logo abaixo destes botões.',
-    },
-  ),
-  niches: screenTour(
-    'niches',
-    Tag,
-    'Nichos',
-    {
-      title: 'O jeito de escrever',
-      body: 'O nicho aponta para uma skill da biblioteca. É ele que o Atlas usa na hora de gerar o roteiro.',
-    },
-    {
-      title: 'Skills e nichos',
-      body: 'Busque um nicho, rescaneie a pasta de skills ou crie um nicho novo e associe a skill correspondente.',
-    },
-  ),
   'music-projects': screenTour(
     'music-projects',
     Music2,
@@ -285,7 +203,7 @@ export const PAGE_TOURS: Record<string, TourStep[]> = {
     'Tarefas',
     {
       title: 'O que ainda falta fazer',
-      body: 'A lista operacional da produção: prazos, prioridades e o vínculo com projeto, roteiro ou canal.',
+      body: 'A lista operacional da produção: prazos, prioridades e o vínculo com projeto ou canal.',
     },
     {
       title: 'Filtrar e criar',
@@ -308,12 +226,6 @@ export const PAGE_TOURS: Record<string, TourStep[]> = {
 }
 
 const RULES: Array<{ id: string; test: (path: string) => boolean }> = [
-  { id: 'create-script', test: (path) => path === '/historia/criar' },
-  { id: 'scripts', test: (path) => path === '/historia/roteiros' },
-  { id: 'script-detail', test: (path) => /^\/historia\/roteiros\/[^/]+$/.test(path) },
-  { id: 'niches', test: (path) => path === '/historia/nichos' },
-  { id: 'history-project', test: (path) => /^\/historia\/projetos\/[^/]+$/.test(path) },
-  { id: 'history-projects', test: (path) => path === '/historia' },
   { id: 'music-editor', test: (path) => /^\/musica\/faixas\/[^/]+$/.test(path) },
   { id: 'music-tracks', test: (path) => path === '/musica/faixas' },
   {

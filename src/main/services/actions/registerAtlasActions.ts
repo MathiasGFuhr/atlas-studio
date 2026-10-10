@@ -12,10 +12,8 @@ import {
 import { MUSIC_PROMPTS_CUSTOM_PATH } from '../../../shared/workspaceCapabilities'
 import { isTaskCategory, isTaskPriority, isTaskRelatedType, todayYmd } from '../../../shared/tasks'
 import { channelRepository } from '../../repositories/channelRepository'
-import { nicheRepository } from '../../repositories/nicheRepository'
 import { projectRepository } from '../../repositories/projectRepository'
 import { quickPromptRepository } from '../../repositories/quickPromptRepository'
-import { scriptRepository } from '../../repositories/scriptRepository'
 import { taskRepository } from '../../repositories/taskRepository'
 import { removeProject } from '../videos/musicVideoProjectService'
 import {
@@ -51,7 +49,7 @@ function bool(input: Record<string, unknown>, key: string, fallback = true): boo
 
 function asProjectType(value: unknown): ProjectType | null {
   if (value === 'music' || value === 'musica' || value === 'música') return 'music'
-  if (value === 'history' || value === 'historia' || value === 'história') return 'history'
+  if (value === 'history' || value === 'historia' || value === 'história') return 'music'
   return isProjectType(value) ? value : null
 }
 
@@ -142,24 +140,6 @@ function findPrompt(input: Record<string, unknown>) {
   if (exact) return exact
   if (list.length === 1) return list[0]
   throw new Error(`Prompt "${name}" não encontrado.`)
-}
-
-function findScript(input: Record<string, unknown>) {
-  const id = str(input, 'id') || str(input, 'scriptId')
-  const title = str(input, 'title') || str(input, 'name')
-  if (id) {
-    const found = scriptRepository.get(id)
-    if (!found) throw new Error('Roteiro não encontrado.')
-    return found
-  }
-  if (!title) throw new Error('Informe o roteiro (id ou título).')
-  const list = scriptRepository.list({ query: title })
-  const exact = list.find(
-    (item) => item.title.toLowerCase() === title.toLowerCase() || item.topic.toLowerCase() === title.toLowerCase(),
-  )
-  if (exact) return exact
-  if (list.length === 1) return list[0]
-  throw new Error(`Roteiro "${title}" não encontrado.`)
 }
 
 function ok(partial: Omit<ChatActionResult, 'status'> & { status?: ChatActionResult['status'] }): ChatActionResult {
@@ -415,7 +395,7 @@ export function createAtlasActionRegistry(deps: {
   registry.register('create_channel', (input) => {
     const name = str(input, 'name')
     if (!name) throw new Error('Informe o nome do canal.')
-    const channelType = asProjectType(input.channelType ?? input.type) ?? 'history'
+    const channelType = asProjectType(input.channelType ?? input.type) ?? 'music'
     const language = str(input, 'language').toLowerCase()
     const languageNote = language
       ? `Idioma: ${LANGUAGE_LABEL[language] ?? language}.`
@@ -743,129 +723,6 @@ export function createAtlasActionRegistry(deps: {
       entityId: id,
       navigateTo: MUSIC_PROMPTS_CUSTOM_PATH,
       navigateLabel: 'Abrir Meus prompts',
-    })
-  })
-
-  registry.register('list_scripts', (input, ctx) => {
-    const projectId =
-      str(input, 'projectId') || (ctx.client.useProjectContext ? ctx.client.projectId ?? '' : '')
-    const items = scriptRepository.list({
-      projectId: projectId || undefined,
-      query: str(input, 'query') || undefined,
-      nicheId: str(input, 'nicheId') || undefined,
-      language: str(input, 'language') || undefined,
-    })
-    return ok({
-      name: 'list_scripts',
-      title: `${items.length} roteiros`,
-      data: items.map((item) => ({
-        id: item.id,
-        title: item.title,
-        topic: item.topic,
-        status: item.status,
-        projectId: item.projectId,
-      })),
-    })
-  })
-
-  registry.register('get_script', (input) => {
-    const script = findScript(input)
-    const content = script.content.length > 4000 ? `${script.content.slice(0, 4000)}…` : script.content
-    return ok({
-      name: 'get_script',
-      title: script.title,
-      entityType: 'script',
-      entityId: script.id,
-      navigateTo: `/historia/roteiros/${script.id}`,
-      navigateLabel: 'Abrir roteiro',
-      data: {
-        id: script.id,
-        title: script.title,
-        topic: script.topic,
-        language: script.language,
-        status: script.status,
-        content,
-      },
-    })
-  })
-
-  registry.register('open_script', (input) => {
-    const script = findScript(input)
-    return ok({
-      name: 'open_script',
-      title: 'Abrir roteiro',
-      subtitle: script.title,
-      entityType: 'script',
-      entityId: script.id,
-      navigateTo: `/historia/roteiros/${script.id}`,
-      navigateLabel: 'Abrir roteiro',
-    })
-  })
-
-  registry.register('create_script', async (input, ctx) => {
-    const nicheId = str(input, 'nicheId')
-    const language = str(input, 'language') || 'pt'
-    const topic = str(input, 'topic') || str(input, 'title')
-    if (!nicheId) throw new Error('Informe o nicho (nicheId). Use list_niches se necessário.')
-    if (!topic) throw new Error('Informe o tema do roteiro.')
-    const projectId =
-      str(input, 'projectId') || (ctx.client.useProjectContext ? ctx.client.projectId ?? '' : '')
-    const durationRaw = input.durationMinutes
-    const durationMinutes =
-      typeof durationRaw === 'number'
-        ? durationRaw
-        : durationRaw
-          ? Number(durationRaw)
-          : undefined
-    const result = await codexService.generateScript({
-      nicheId,
-      language,
-      topic,
-      durationMinutes: Number.isFinite(durationMinutes) ? durationMinutes : undefined,
-      projectId: projectId || null,
-    })
-    return ok({
-      name: 'create_script',
-      title: 'Roteiro criado',
-      subtitle: result.script.title,
-      entityType: 'script',
-      entityId: result.script.id,
-      navigateTo: `/historia/roteiros/${result.script.id}`,
-      navigateLabel: 'Abrir roteiro',
-      data: { id: result.script.id, title: result.script.title, status: result.script.status },
-    })
-  })
-
-  registry.register('adjust_script', async (input) => {
-    const scriptId = str(input, 'scriptId') || str(input, 'id')
-    const instruction = str(input, 'instruction') || str(input, 'prompt')
-    if (!scriptId) throw new Error('Informe o roteiro.')
-    if (!instruction) throw new Error('Informe a instrução de revisão.')
-    const result = await codexService.adjustScript({ scriptId, instruction })
-    return ok({
-      name: 'adjust_script',
-      title: 'Revisão solicitada',
-      subtitle: result.script.title,
-      entityType: 'script',
-      entityId: result.script.id,
-      navigateTo: `/historia/roteiros/${result.script.id}`,
-      navigateLabel: 'Abrir roteiro',
-    })
-  })
-
-  registry.register('list_niches', (input) => {
-    const items = nicheRepository.list({
-      query: str(input, 'query') || undefined,
-      language: str(input, 'language') || undefined,
-    })
-    return ok({
-      name: 'list_niches',
-      title: `${items.length} nichos`,
-      data: items.map((item) => ({
-        id: item.id,
-        name: item.name,
-        defaultLanguage: item.defaultLanguage,
-      })),
     })
   })
 

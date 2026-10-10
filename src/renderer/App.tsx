@@ -6,7 +6,6 @@ import { AppSidebar } from './components/AppSidebar'
 import { TopBar } from './components/TopBar'
 import { ToastProvider } from './components/Toast'
 import { CreateActionsProvider } from './components/CreateActionsProvider'
-import { ContentAreaRoute } from './components/ContentAreaRoute'
 import { CodexLinkModal } from './components/CodexLinkModal'
 import { CodexOnboarding } from './components/CodexOnboarding'
 import { INTRO_TOUR_STEPS, ProductTour } from './components/ProductTour'
@@ -15,15 +14,11 @@ import { PRODUCT_TOUR_REPLAY_EVENT } from './lib/productTourEvents'
 import { HomePage } from './pages/HomePage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
-import { CreateScriptPage } from './pages/CreateScriptPage'
-import { NichesPage } from './pages/NichesPage'
 import { ChannelsPage } from './pages/ChannelsPage'
 import { ChannelCalendarPage } from './pages/ChannelCalendarPage'
 import { ChannelAgendaPage } from './pages/ChannelAgendaPage'
 import { ChannelPublishedVideosPage } from './pages/ChannelPublishedVideosPage'
 import { PromptsPage } from './pages/PromptsPage'
-import { ScriptsPage } from './pages/ScriptsPage'
-import { ScriptDetailPage } from './pages/ScriptDetailPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { MusicPage } from './pages/MusicPage'
 import { MusicEditorPage } from './pages/MusicEditorPage'
@@ -38,6 +33,7 @@ import { openAtlasChat } from './lib/chatEvents'
 import { useCodexAuth } from './hooks/useCodexAuth'
 import { WorkspaceCapabilitiesProvider } from './hooks/useWorkspaceCapabilities'
 import { AppUpdateProvider } from './hooks/useAppUpdate'
+import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
 import { MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { version as appVersion } from '../../package.json'
 
@@ -143,6 +139,7 @@ export default function App() {
         <AppUpdateProvider>
         <WorkspaceCapabilitiesProvider>
         <CreateActionsProvider>
+        <ShortsGenerationProvider>
         <div className="flex h-full w-full overflow-hidden bg-bg text-text">
           <AppSidebar codexStatus={codexAuth.status} />
           <div className="flex min-w-0 flex-1 flex-col">
@@ -151,105 +148,12 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<HomePage />} />
 
-                <Route
-                  path="/historia"
-                  element={
-                    <ContentAreaRoute area="history">
-                      <ProjectsPage projectType="history" />
-                    </ContentAreaRoute>
-                  }
-                />
-                <Route
-                  path="/historia/projetos/:id"
-                  element={
-                    <ContentAreaRoute area="history">
-                      <ProjectDetailPage projectType="history" />
-                    </ContentAreaRoute>
-                  }
-                />
-                <Route
-                  path="/historia/criar"
-                  element={
-                    <ContentAreaRoute area="history">
-                      <CreateScriptPage
-                        codexAuth={codexAuth}
-                        onRequestLink={() => setLinkModalOpen(true)}
-                      />
-                    </ContentAreaRoute>
-                  }
-                />
-                <Route
-                  path="/historia/roteiros"
-                  element={
-                    <ContentAreaRoute area="history">
-                      <ScriptsPage />
-                    </ContentAreaRoute>
-                  }
-                />
-                <Route
-                  path="/historia/roteiros/:id"
-                  element={
-                    <ContentAreaRoute area="history">
-                      <ScriptDetailPage />
-                    </ContentAreaRoute>
-                  }
-                />
-                <Route
-                  path="/historia/nichos"
-                  element={
-                    <ContentAreaRoute area="history">
-                      <NichesPage />
-                    </ContentAreaRoute>
-                  }
-                />
+                <Route path="/musica" element={<ProjectsPage projectType="music" />} />
+                <Route path="/musica/projetos/:id" element={<ProjectDetailPage projectType="music" />} />
+                <Route path="/musica/faixas" element={<MusicPage />} />
+                <Route path="/musica/faixas/:id" element={<MusicEditorPage />} />
+                <Route path={MUSIC_PROMPTS_PATH} element={<PromptsPage />} />
 
-                {/* Ambiente Música */}
-                <Route
-                  path="/musica"
-                  element={
-                    <ContentAreaRoute area="music">
-                      <ProjectsPage projectType="music" />
-                    </ContentAreaRoute>
-                  }
-                />
-                <Route
-                  path="/musica/projetos/:id"
-                  element={
-                    <ContentAreaRoute area="music">
-                      <ProjectDetailPage projectType="music" />
-                    </ContentAreaRoute>
-                  }
-                />
-                <Route
-                  path="/musica/faixas"
-                  element={
-                    <ContentAreaRoute area="music">
-                      <MusicPage />
-                    </ContentAreaRoute>
-                  }
-                />
-                <Route
-                  path="/musica/faixas/:id"
-                  element={
-                    <ContentAreaRoute area="music">
-                      <MusicEditorPage />
-                    </ContentAreaRoute>
-                  }
-                />
-                <Route
-                  path={MUSIC_PROMPTS_PATH}
-                  element={
-                    <ContentAreaRoute
-                      area="music"
-                      unavailableTitle="Prompts fazem parte do ambiente Música."
-                      unavailableDescription={null}
-                    >
-                      <PromptsPage />
-                    </ContentAreaRoute>
-                  }
-                />
-
-                {/* Áreas compartilhadas */}
                 <Route path="/canais" element={<ChannelsPage />} />
                 <Route path="/canais/agenda" element={<ChannelAgendaPage />} />
                 <Route path="/canais/publicados" element={<ChannelPublishedVideosPage />} />
@@ -272,20 +176,15 @@ export default function App() {
                   }
                 />
 
-                {/* Rotas anteriores à separação História/Música */}
-                <Route path="/create" element={<Navigate to="/historia/criar" replace />} />
-                <Route path="/nichos" element={<Navigate to="/historia/nichos" replace />} />
-                <Route path="/niches" element={<Navigate to="/historia/nichos" replace />} />
-                <Route path="/roteiros" element={<Navigate to="/historia/roteiros" replace />} />
-                <Route path="/scripts" element={<Navigate to="/historia/roteiros" replace />} />
-                <Route
-                  path="/roteiros/:id"
-                  element={<LegacyRedirect to={(id) => `/historia/roteiros/${id}`} />}
-                />
-                <Route
-                  path="/scripts/:id"
-                  element={<LegacyRedirect to={(id) => `/historia/roteiros/${id}`} />}
-                />
+                <Route path="/historia" element={<Navigate to="/musica" replace />} />
+                <Route path="/historia/*" element={<Navigate to="/musica" replace />} />
+                <Route path="/create" element={<Navigate to="/musica" replace />} />
+                <Route path="/nichos" element={<Navigate to="/musica" replace />} />
+                <Route path="/niches" element={<Navigate to="/musica" replace />} />
+                <Route path="/roteiros" element={<Navigate to="/musica" replace />} />
+                <Route path="/scripts" element={<Navigate to="/musica" replace />} />
+                <Route path="/roteiros/:id" element={<Navigate to="/musica" replace />} />
+                <Route path="/scripts/:id" element={<Navigate to="/musica" replace />} />
                 <Route path="/musicas" element={<Navigate to="/musica" replace />} />
                 <Route
                   path="/musicas/:id"
@@ -341,6 +240,7 @@ export default function App() {
           codexAuth={codexAuth}
           onClose={() => setLinkModalOpen(false)}
         />
+        </ShortsGenerationProvider>
         </CreateActionsProvider>
         </WorkspaceCapabilitiesProvider>
         </AppUpdateProvider>

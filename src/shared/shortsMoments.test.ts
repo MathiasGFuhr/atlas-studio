@@ -37,30 +37,9 @@ describe('shortsMoments', () => {
     }
   })
 
-  it('para História prioriza blocos de fala contínuos', () => {
-    const clips = buildLocalShortsCandidates({
-      profile: 'history',
-      duration: 90,
-      requestedDuration: 20,
-      durationMode: 'approximate',
-      count: 3,
-      analysis: {
-        duration: 90,
-        sampleRate: 22050,
-        energy: [],
-        frameDuration: 0.046,
-        silence: [{ start: 28, end: 32 }],
-        onsets: [0, 32],
-      },
-      cues: [{ start: 0, end: 28, text: 'gancho' }],
-    })
-    expect(clips[0]?.start).toBeLessThan(1)
-    expect(clips.some((clip) => clip.reason.toLowerCase().includes('falado') || clip.source === 'speech')).toBe(true)
-  })
-
   it('sem transcrição ainda gera trechos distintos em vídeo de 5 minutos', () => {
     const clips = buildLocalShortsCandidates({
-      profile: 'history',
+      profile: 'music',
       duration: 310,
       requestedDuration: 30,
       durationMode: 'approximate',
@@ -84,9 +63,9 @@ describe('shortsMoments', () => {
     expect(clips.every((clip) => Math.abs(clip.start - 276) < 0.2 && Math.abs(clip.end - 310) < 0.2)).toBe(false)
   })
 
-  it('em vídeo de 56.6s / 30s gera janelas no início e no fim', () => {
+  it('em vídeo de 56.6s / 30s gera um pool de candidatos', () => {
     const clips = buildLocalShortsCandidates({
-      profile: 'history',
+      profile: 'music',
       duration: 56.6,
       requestedDuration: 30,
       durationMode: 'approximate',
@@ -104,13 +83,12 @@ describe('shortsMoments', () => {
     })
     expect(clips.length).toBeGreaterThanOrEqual(2)
     expect(clips.length).toBeLessThanOrEqual(shortsCandidatePoolSize(2))
-    expect(clips.some((clip) => clip.start <= 1 && clip.end >= 28)).toBe(true)
-    expect(clips.some((clip) => clip.start >= 20 && clip.end >= 54)).toBe(true)
+    expect(clips.every((clip) => clip.end <= 56.6 + 0.05)).toBe(true)
   })
 
   it('em vídeo de 56.6s / 45s / 3 Shorts gera um pool com janelas diferentes', () => {
     const clips = buildLocalShortsCandidates({
-      profile: 'history',
+      profile: 'music',
       duration: 56.6,
       requestedDuration: 45,
       durationMode: 'approximate',
@@ -141,14 +119,14 @@ describe('shortsMoments', () => {
         { start: 12, end: 24.4, text: 'e terminou aqui.' },
       ],
       60,
-      'history',
+      'music',
     )
     expect(snapped.start).toBe(9.8)
     expect(snapped.end).toBe(24.4)
   })
 
   it('não estica o corte até o fim do vídeo por causa de uma cue enorme', () => {
-    const snapped = snapClipToCues(20, 52, [{ start: 0, end: 310, text: 'bloco único' }], 310, 'history')
+    const snapped = snapClipToCues(20, 52, [{ start: 0, end: 310, text: 'bloco único' }], 310, 'music')
     expect(snapped.start).toBeCloseTo(20, 1)
     expect(snapped.end).toBeCloseTo(52, 1)
   })

@@ -5,46 +5,26 @@ import { TASK_RELATED_LABEL } from './tasks'
 export type ContentArea = ProjectType
 
 export interface ContentAreaPresence {
-  historyPresent: boolean
   musicPresent: boolean
 }
 
 export interface ContentAreaPreference {
-  autoDetect: boolean
-  historyEnabled: boolean
   musicEnabled: boolean
 }
 
 export interface WorkspaceCapabilities {
-  autoDetect: boolean
-  historyEnabled: boolean
   musicEnabled: boolean
-  historyPresent: boolean
   musicPresent: boolean
 }
 
 export const DEFAULT_CONTENT_AREA_PREFERENCE: ContentAreaPreference = {
-  autoDetect: true,
-  historyEnabled: true,
   musicEnabled: true,
 }
 
 export const BOTH_AREAS_ENABLED: WorkspaceCapabilities = {
-  autoDetect: true,
-  historyEnabled: true,
   musicEnabled: true,
-  historyPresent: false,
   musicPresent: false,
 }
-
-const HISTORY_CHAT_ACTIONS = new Set([
-  'list_scripts',
-  'get_script',
-  'open_script',
-  'create_script',
-  'adjust_script',
-  'list_niches',
-])
 
 const MUSIC_CHAT_ACTIONS = new Set([
   'list_quick_prompts',
@@ -56,97 +36,66 @@ const MUSIC_CHAT_ACTIONS = new Set([
   'favorite_quick_prompt',
 ])
 
-function asArea(value: unknown): ContentArea | null {
-  return value === 'history' || value === 'music' ? value : null
-}
-
 export function detectContentAreaPresence(input: {
   channelTypes?: Array<unknown>
   projectTypes?: Array<unknown>
 }): ContentAreaPresence {
-  let historyPresent = false
   let musicPresent = false
 
   for (const value of input.channelTypes ?? []) {
-    const area = asArea(value) ?? 'history'
-    if (area === 'music') musicPresent = true
-    else historyPresent = true
+    if (value === 'music' || value === 'history') musicPresent = true
   }
 
   for (const value of input.projectTypes ?? []) {
-    const area = asArea(value)
-    if (area === 'music') musicPresent = true
-    if (area === 'history') historyPresent = true
+    if (value === 'music' || value === 'history') musicPresent = true
   }
 
-  return { historyPresent, musicPresent }
+  return { musicPresent }
 }
 
 export function resolveWorkspaceCapabilities(
   presence: ContentAreaPresence,
-  preference: ContentAreaPreference = DEFAULT_CONTENT_AREA_PREFERENCE,
+  _preference: ContentAreaPreference = DEFAULT_CONTENT_AREA_PREFERENCE,
 ): WorkspaceCapabilities {
-  if (!preference.autoDetect) {
-    return {
-      autoDetect: false,
-      historyEnabled: preference.historyEnabled,
-      musicEnabled: preference.musicEnabled,
-      historyPresent: presence.historyPresent,
-      musicPresent: presence.musicPresent,
-    }
-  }
-
-  const emptyWorkspace = !presence.historyPresent && !presence.musicPresent
   return {
-    autoDetect: true,
-    historyEnabled: emptyWorkspace || presence.historyPresent,
-    musicEnabled: emptyWorkspace || presence.musicPresent,
-    historyPresent: presence.historyPresent,
+    musicEnabled: true,
     musicPresent: presence.musicPresent,
   }
 }
 
-export function preferenceFromSettings(settings: {
+export function preferenceFromSettings(_settings: {
   contentAreasAutoDetect?: boolean
   contentAreasHistoryEnabled?: boolean
   contentAreasMusicEnabled?: boolean
 }): ContentAreaPreference {
-  return {
-    autoDetect: settings.contentAreasAutoDetect !== false,
-    historyEnabled: settings.contentAreasHistoryEnabled !== false,
-    musicEnabled: settings.contentAreasMusicEnabled !== false,
-  }
+  return { musicEnabled: true }
 }
 
-export function preferenceToSettings(preference: ContentAreaPreference): {
+export function preferenceToSettings(_preference: ContentAreaPreference): {
   contentAreasAutoDetect: boolean
   contentAreasHistoryEnabled: boolean
   contentAreasMusicEnabled: boolean
 } {
   return {
-    contentAreasAutoDetect: preference.autoDetect,
-    contentAreasHistoryEnabled: preference.historyEnabled,
-    contentAreasMusicEnabled: preference.musicEnabled,
+    contentAreasAutoDetect: false,
+    contentAreasHistoryEnabled: false,
+    contentAreasMusicEnabled: true,
   }
 }
 
-/** Liga uma área em modo manual, preservando a visibilidade atual da outra. */
+/** Liga uma área em modo manual — no Atlas só existe Música. */
 export function preferenceEnablingArea(
-  current: Pick<WorkspaceCapabilities, 'historyEnabled' | 'musicEnabled'>,
-  area: ContentArea,
+  _current: Pick<WorkspaceCapabilities, 'musicEnabled'>,
+  _area: ContentArea,
 ): ContentAreaPreference {
-  return {
-    autoDetect: false,
-    historyEnabled: area === 'history' ? true : current.historyEnabled,
-    musicEnabled: area === 'music' ? true : current.musicEnabled,
-  }
+  return { musicEnabled: true }
 }
 
 export function isContentAreaEnabled(
-  capabilities: Pick<WorkspaceCapabilities, 'historyEnabled' | 'musicEnabled'>,
+  _capabilities: Pick<WorkspaceCapabilities, 'musicEnabled'>,
   area: ContentArea,
 ): boolean {
-  return area === 'history' ? capabilities.historyEnabled : capabilities.musicEnabled
+  return area === 'music'
 }
 
 /** Biblioteca global de Prompts — pertence ao ambiente Música. */
@@ -157,85 +106,60 @@ export const MUSIC_PROMPTS_CUSTOM_PATH = MUSIC_PROMPTS_PATH
 export function contentAreaFromPath(pathname: string): ContentArea | null {
   if (pathname === '/prompts' || pathname.startsWith('/prompts/')) return 'music'
   if (pathname.startsWith('/musica') || pathname.startsWith('/musicas')) return 'music'
-  if (
-    pathname.startsWith('/historia') ||
-    pathname.startsWith('/create') ||
-    pathname.startsWith('/nichos') ||
-    pathname.startsWith('/niches') ||
-    pathname.startsWith('/roteiros') ||
-    pathname.startsWith('/scripts')
-  ) {
-    return 'history'
-  }
   return null
 }
 
-/** Rotas de um item existente (projeto, roteiro, faixa) — o acesso aos dados deve permanecer. */
+/** Rotas de um item existente (projeto, faixa) — o acesso aos dados deve permanecer. */
 export function isContentAreaEntityPath(pathname: string): boolean {
-  return /\/(projetos|roteiros|faixas|scripts|musicas)\/[^/]+/.test(pathname)
+  return /\/(projetos|faixas|musicas)\/[^/]+/.test(pathname)
 }
 
 export function filterCreateMenuItems(
   items: CreateMenuId[],
-  capabilities: Pick<WorkspaceCapabilities, 'historyEnabled' | 'musicEnabled'>,
+  _capabilities: Pick<WorkspaceCapabilities, 'musicEnabled'>,
 ): CreateMenuId[] {
-  return items.filter((id) => {
-    if (id === 'history') return capabilities.historyEnabled
-    if (id === 'music') return capabilities.musicEnabled
-    return true
-  })
+  return items.filter((id) => id === 'music' || id === 'channel' || id === 'task')
 }
 
 export function filterChatActions<T extends { name: string }>(
   actions: T[],
-  capabilities: Pick<WorkspaceCapabilities, 'historyEnabled' | 'musicEnabled'>,
+  _capabilities: Pick<WorkspaceCapabilities, 'musicEnabled'>,
 ): T[] {
   return actions.filter((action) => {
-    if (!capabilities.historyEnabled && HISTORY_CHAT_ACTIONS.has(action.name)) return false
-    if (!capabilities.musicEnabled && MUSIC_CHAT_ACTIONS.has(action.name)) return false
+    if (
+      action.name === 'list_scripts' ||
+      action.name === 'get_script' ||
+      action.name === 'open_script' ||
+      action.name === 'create_script' ||
+      action.name === 'adjust_script' ||
+      action.name === 'list_niches'
+    ) {
+      return false
+    }
     return true
   })
 }
 
 export function chatAreasPromptNote(
-  capabilities: Pick<WorkspaceCapabilities, 'historyEnabled' | 'musicEnabled'>,
+  _capabilities: Pick<WorkspaceCapabilities, 'musicEnabled'>,
 ): string {
-  const enabled: string[] = []
-  if (capabilities.historyEnabled) enabled.push('História')
-  if (capabilities.musicEnabled) enabled.push('Música')
-  const lines = [`Áreas visíveis neste workspace: ${enabled.join(' e ') || 'nenhuma (apenas áreas globais)'}.`]
-  if (!capabilities.historyEnabled) {
-    lines.push(
-      'Não ofereça roteiros, nichos nem fluxo de História, salvo se o usuário pedir explicitamente para ativar ou criar História.',
-    )
-  }
-  if (!capabilities.musicEnabled) {
-    lines.push(
-      'Não ofereça o cortador, prompts rápidos nem fluxo de Música, salvo se o usuário pedir explicitamente para ativar ou criar Música.',
-    )
-  }
-  return lines.join(' ')
+  return 'Este workspace é só Música: projetos, faixas, cortes e prompts. Não ofereça roteiros, nichos nem fluxo de História.'
 }
 
 export function enabledContentAreas(
-  capabilities: Pick<WorkspaceCapabilities, 'historyEnabled' | 'musicEnabled'>,
+  _capabilities: Pick<WorkspaceCapabilities, 'musicEnabled'>,
 ): ContentArea[] {
-  const areas: ContentArea[] = []
-  if (capabilities.historyEnabled) areas.push('history')
-  if (capabilities.musicEnabled) areas.push('music')
-  return areas
+  return ['music']
 }
 
 export function taskRelatedTypeOptions(
-  capabilities: Pick<WorkspaceCapabilities, 'historyEnabled' | 'musicEnabled'>,
+  _capabilities: Pick<WorkspaceCapabilities, 'musicEnabled'>,
 ): Array<{ value: string; label: string }> {
-  const options = [{ value: '', label: 'Nada — tarefa geral' }]
-  if (capabilities.historyEnabled) {
-    options.push({ value: 'history', label: TASK_RELATED_LABEL.history })
-  }
-  if (capabilities.musicEnabled) {
-    options.push({ value: 'music', label: TASK_RELATED_LABEL.music })
-  }
-  options.push({ value: 'channel', label: TASK_RELATED_LABEL.channel })
-  return options
+  return [
+    { value: '', label: 'Nada — tarefa geral' },
+    { value: 'music', label: TASK_RELATED_LABEL.music },
+    { value: 'channel', label: TASK_RELATED_LABEL.channel },
+  ]
 }
+
+export { MUSIC_CHAT_ACTIONS }

@@ -1,15 +1,12 @@
 import type { TitleAnalysisPayload, TitleAnalysisProfile, AnalyzeTitleRequest } from '../../../shared/types'
 import { isTitleAnalysisProfile } from '../../../shared/antigravity/titleAnalysis'
-import { isProjectType } from '../../../shared/types'
 import { channelRepository } from '../../repositories/channelRepository'
-import { nicheRepository } from '../../repositories/nicheRepository'
-import { scriptRepository } from '../../repositories/scriptRepository'
 import { projectRepository } from '../../repositories/projectRepository'
 import { musicRepository } from '../../repositories/musicRepository'
 
 function asProfile(value: unknown, fallback: TitleAnalysisProfile = 'general'): TitleAnalysisProfile {
   if (isTitleAnalysisProfile(value)) return value
-  if (isProjectType(value)) return value
+  if (value === 'music') return 'music'
   return fallback
 }
 
@@ -24,30 +21,23 @@ export function enrichTitleAnalysisPayload(request: AnalyzeTitleRequest): TitleA
   const video = request.videoId ? channelRepository.getVideo(request.videoId) : null
   const channelId = request.channelId || video?.channelId
   const channel = channelId ? channelRepository.get(channelId) : null
-  const niche = channel?.nicheId ? nicheRepository.get(channel.nicheId) : null
-  const script = video?.scriptId ? scriptRepository.get(video.scriptId) : null
   const project = video?.projectId
     ? projectRepository.get(video.projectId)
     : video?.projectFolderPath
       ? projectRepository.getByFolderPath(video.projectFolderPath)
       : null
-  const tracks =
-    project?.projectType === 'music' ? musicRepository.list({ projectId: project.id }) : []
+  const tracks = project ? musicRepository.list({ projectId: project.id }) : []
 
   const projectType = asProfile(
-    request.projectType ?? channel?.channelType ?? project?.projectType ?? (script ? 'history' : null),
-    'general',
+    request.projectType ?? channel?.channelType ?? project?.projectType ?? 'music',
+    'music',
   )
 
-  const language =
-    request.language?.trim() ||
-    script?.language?.trim() ||
-    niche?.defaultLanguage?.trim() ||
-    undefined
+  const language = request.language?.trim() || undefined
 
   const videoContext =
     request.videoContext?.trim() ||
-    [request.description?.trim() || video?.description?.trim(), script ? clip(`${script.topic}\n${script.content}`, 800) : '']
+    [request.description?.trim() || video?.description?.trim(), tracks[0] ? clip(tracks[0].name, 200) : '']
       .filter(Boolean)
       .join('\n')
       .trim() ||

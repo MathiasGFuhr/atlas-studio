@@ -3,6 +3,7 @@ import { ExternalLink, Loader2, LogIn } from 'lucide-react'
 import { Modal } from './Modal'
 import { Button } from './Button'
 import type { AntigravityStatus } from '@shared/types'
+import { toUserFacingError } from '@shared/userFacingError'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from './Toast'
 
@@ -18,7 +19,7 @@ export function AntigravityLinkModal({
   onStatus: (status: AntigravityStatus) => void
 }) {
   const api = getAtlasApi()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,9 +47,9 @@ export function AntigravityLinkModal({
       const next = await api.antigravity.status()
       onStatus(next)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Não foi possível iniciar o login Google.'
+      const message = toUserFacingError(err, 'Não foi possível iniciar o login Google.')
       setError(message)
-      push(message, 'error')
+      pushError(err, 'Não foi possível iniciar o login Google.')
     } finally {
       setStarting(false)
     }
@@ -63,11 +64,15 @@ export function AntigravityLinkModal({
         push('Conta Google vinculada.', 'success')
         onClose()
       } else {
-        setError(next.message || 'O login ainda não foi concluído no Antigravity.')
+        setError(
+          toUserFacingError(
+            next.message,
+            'O login ainda não foi concluído no Antigravity.',
+          ),
+        )
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Não foi possível confirmar o login.'
-      setError(message)
+      setError(toUserFacingError(err, 'Não foi possível confirmar o login.'))
     } finally {
       setStarting(false)
     }

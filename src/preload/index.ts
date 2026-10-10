@@ -98,15 +98,6 @@ const api = {
     openFolder: (id: string) =>
       ipcRenderer.invoke(IPC.projects.openFolder, id) as Promise<boolean>,
   },
-  niches: {
-    list: (filters?: { query?: string; language?: string }) =>
-      ipcRenderer.invoke(IPC.niches.list, filters) as Promise<Niche[]>,
-    get: (id: string) => ipcRenderer.invoke(IPC.niches.get, id) as Promise<Niche | null>,
-    create: (input: Omit<Niche, 'id' | 'createdAt' | 'updatedAt'>) =>
-      ipcRenderer.invoke(IPC.niches.create, input) as Promise<Niche>,
-    update: (id: string, patch: Partial<Omit<Niche, 'id' | 'createdAt'>>) =>
-      ipcRenderer.invoke(IPC.niches.update, id, patch) as Promise<Niche | null>,
-  },
   channels: {
     list: (filters?: { query?: string; channelType?: ProjectType }) =>
       ipcRenderer.invoke(IPC.channels.list, filters) as Promise<Channel[]>,
@@ -297,38 +288,6 @@ const api = {
       }
     },
   },
-  skills: {
-    list: () => ipcRenderer.invoke(IPC.skills.list) as Promise<DiscoveredSkill[]>,
-    rescan: (libraryRoot?: string) =>
-      ipcRenderer.invoke(IPC.skills.rescan, libraryRoot) as Promise<SkillRescanResult>,
-    validate: (skillPath: string) =>
-      ipcRenderer.invoke(IPC.skills.validate, skillPath) as Promise<SkillValidationResult>,
-  },
-  scripts: {
-    list: (filters?: {
-      query?: string
-      nicheId?: string
-      language?: string
-      projectId?: string
-    }) => ipcRenderer.invoke(IPC.scripts.list, filters) as Promise<ScriptRecord[]>,
-    get: (id: string) => ipcRenderer.invoke(IPC.scripts.get, id) as Promise<ScriptRecord | null>,
-    recent: (limit?: number) =>
-      ipcRenderer.invoke(IPC.scripts.recent, limit) as Promise<ScriptRecord[]>,
-    summary: () =>
-      ipcRenderer.invoke(IPC.scripts.summary) as Promise<{
-        total: number
-        prontos: number
-        rascunhos: number
-        emRevisao: number
-        erros: number
-      }>,
-    versions: (scriptId: string) =>
-      ipcRenderer.invoke(IPC.scripts.versions, scriptId) as Promise<ScriptVersion[]>,
-    saveVersion: (scriptId: string) =>
-      ipcRenderer.invoke(IPC.scripts.saveVersion, scriptId) as Promise<ScriptVersion>,
-    export: (scriptId: string, format: 'txt' | 'md') =>
-      ipcRenderer.invoke(IPC.scripts.export, { scriptId, format }) as Promise<string | null>,
-  },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settings.get) as Promise<AppSettings>,
     update: (patch: Partial<AppSettings>) =>
@@ -452,30 +411,6 @@ const api = {
       ipcRenderer.on(IPC.agents.capabilitiesChanged, listener)
       return () => {
         ipcRenderer.removeListener(IPC.agents.capabilitiesChanged, listener)
-      }
-    },
-  },
-  generation: {
-    start: (request: GenerateScriptRequest) =>
-      ipcRenderer.invoke(IPC.generation.start, request) as Promise<GenerationResult>,
-    adjust: (request: AdjustScriptRequest) =>
-      ipcRenderer.invoke(IPC.generation.adjust, request) as Promise<GenerationResult>,
-    cancel: () => ipcRenderer.invoke(IPC.generation.cancel) as Promise<void>,
-    interrupted: () =>
-      ipcRenderer.invoke(IPC.generation.interrupted) as Promise<
-        Array<{
-          id: string
-          nicheId: string | null
-          startedAt: string
-          errorMessage?: string | null
-        }>
-      >,
-    onProgress: (callback: (event: GenerationProgressEvent) => void) => {
-      const listener = (_: Electron.IpcRendererEvent, data: GenerationProgressEvent) =>
-        callback(data)
-      ipcRenderer.on(IPC.generation.progress, listener)
-      return () => {
-        ipcRenderer.removeListener(IPC.generation.progress, listener)
       }
     },
   },

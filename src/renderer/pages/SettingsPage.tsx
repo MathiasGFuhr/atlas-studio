@@ -14,7 +14,6 @@ import { UpdatesSettingsCard } from '../components/UpdatesSettingsCard'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import type { CodexAuth } from '../hooks/useCodexAuth'
-import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 import { notifySettingsChanged } from '../lib/settingsEvents'
 import { AgentIntegrationModels } from '../components/settings/AgentIntegrationModels'
 import { useAgentModels } from '../hooks/useAgentModels'
@@ -31,10 +30,8 @@ export function SettingsPage({
   onRequestLink?: () => void
 }) {
   const api = getAtlasApi()
-  const { push } = useToast()
-  const { capabilities } = useWorkspaceCapabilities()
+  const { push, pushError } = useToast()
   const [settings, setSettings] = useState<AppSettings | null>(null)
-  const [niches, setNiches] = useState<Array<{ id: string; name: string }>>([])
   const [confirmLogout, setConfirmLogout] = useState(false)
   const [confirmAtlasLogout, setConfirmAtlasLogout] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -50,13 +47,11 @@ export function SettingsPage({
 
   useEffect(() => {
     void (async () => {
-      const [s, n, agy] = await Promise.all([
+      const [s, agy] = await Promise.all([
         api.settings.get(),
-        api.niches.list(),
         api.antigravity.status().catch(() => null),
       ])
       setSettings(s)
-      setNiches(n.map((item) => ({ id: item.id, name: item.name })))
       setAntigravity(agy)
     })()
   }, [api])
@@ -235,66 +230,8 @@ export function SettingsPage({
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <SettingsCard title="Áreas do Atlas" icon={LayoutGrid}>
           <p className="text-xs leading-relaxed text-muted">
-            Controla só o que aparece na interface. Projetos, canais e roteiros continuam no Atlas.
+            O Atlas está focado em Música: projetos, faixas, cortes, prompts, canais e Shorts.
           </p>
-          <label className="flex items-center gap-2 text-sm text-text">
-            <input
-              type="checkbox"
-              checked={settings.contentAreasAutoDetect}
-              onChange={(e) => {
-                const autoDetect = e.target.checked
-                setSettings({
-                  ...settings,
-                  contentAreasAutoDetect: autoDetect,
-                  contentAreasHistoryEnabled: autoDetect
-                    ? settings.contentAreasHistoryEnabled
-                    : capabilities.historyEnabled,
-                  contentAreasMusicEnabled: autoDetect
-                    ? settings.contentAreasMusicEnabled
-                    : capabilities.musicEnabled,
-                })
-              }}
-            />
-            Detectar automaticamente
-          </label>
-          <label
-            className={`flex items-center gap-2 text-sm ${
-              settings.contentAreasAutoDetect ? 'text-muted' : 'text-text'
-            }`}
-          >
-            <input
-              type="checkbox"
-              disabled={settings.contentAreasAutoDetect}
-              checked={
-                settings.contentAreasAutoDetect
-                  ? capabilities.historyEnabled
-                  : settings.contentAreasHistoryEnabled
-              }
-              onChange={(e) =>
-                setSettings({ ...settings, contentAreasHistoryEnabled: e.target.checked })
-              }
-            />
-            História
-          </label>
-          <label
-            className={`flex items-center gap-2 text-sm ${
-              settings.contentAreasAutoDetect ? 'text-muted' : 'text-text'
-            }`}
-          >
-            <input
-              type="checkbox"
-              disabled={settings.contentAreasAutoDetect}
-              checked={
-                settings.contentAreasAutoDetect
-                  ? capabilities.musicEnabled
-                  : settings.contentAreasMusicEnabled
-              }
-              onChange={(e) =>
-                setSettings({ ...settings, contentAreasMusicEnabled: e.target.checked })
-              }
-            />
-            Música
-          </label>
         </SettingsCard>
         <SettingsCard title="Introdução" icon={Compass}>
           <p className="text-xs leading-relaxed text-muted">
@@ -355,10 +292,7 @@ export function SettingsPage({
                           onSettingsSaved?.(next)
                           push('Foto de perfil atualizada.', 'success')
                         } catch (error) {
-                          push(
-                            error instanceof Error ? error.message : 'Não foi possível usar esta imagem.',
-                            'error',
-                          )
+                          pushError(error, 'Não foi possível usar esta imagem.')
                         }
                       })()
                     }}
@@ -664,80 +598,9 @@ export function SettingsPage({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-2">
-                  O Atlas cria as pastas dos projetos em Historia/ e Musica/ dentro desta raiz.
+                  O Atlas cria as pastas dos projetos em Musica/ dentro desta raiz.
                 </p>
               </div>
-            }
-          />
-          <Row
-            label="Biblioteca de skills"
-            control={
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <Input
-                    value={settings.skillLibraryRoot}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        skillLibraryRoot: e.target.value,
-                        skillsPath: e.target.value,
-                      })
-                    }
-                  />
-                  <Button
-                    variant="secondary"
-                    className="h-11 shrink-0"
-                    onClick={() => {
-                      void api.dialog.selectFolder().then((folder) => {
-                        if (!folder) return
-                        setSettings({
-                          ...settings,
-                          skillLibraryRoot: folder,
-                          skillsPath: folder,
-                        })
-                      })
-                    }}
-                  >
-                    Pasta
-                  </Button>
-                </div>
-                <Button
-                  variant="secondary"
-                  className="h-9 w-full text-xs"
-                  onClick={() => {
-                    void (async () => {
-                      try {
-                        const next = await api.settings.update({
-                          skillLibraryRoot: settings.skillLibraryRoot,
-                          skillsPath: settings.skillLibraryRoot,
-                        })
-                        setSettings(next)
-                        const result = await api.skills.rescan(settings.skillLibraryRoot)
-                        push(
-                          `Biblioteca atualizada: ${result.total} skills (+${result.added} / -${result.removed})`,
-                          'success',
-                        )
-                      } catch (error) {
-                        push(
-                          error instanceof Error ? error.message : 'Falha ao rescanear skills',
-                          'error',
-                        )
-                      }
-                    })()
-                  }}
-                >
-                  Rescanear skills
-                </Button>
-              </div>
-            }
-          />
-          <Row
-            label="Pasta dos roteiros"
-            control={
-              <Input
-                value={settings.scriptsPath}
-                onChange={(e) => setSettings({ ...settings, scriptsPath: e.target.value })}
-              />
             }
           />
           <Row
@@ -747,21 +610,6 @@ export function SettingsPage({
                 value={settings.defaultLanguage}
                 onChange={(e) => setSettings({ ...settings, defaultLanguage: e.target.value })}
                 options={['Alemão', 'Inglês', 'Português'].map((l) => ({ value: l, label: l }))}
-              />
-            }
-          />
-          <Row
-            label="Nicho padrão"
-            control={
-              <Select
-                value={settings.defaultNicheId ?? ''}
-                onChange={(e) =>
-                  setSettings({ ...settings, defaultNicheId: e.target.value || null })
-                }
-                options={[
-                  { value: '', label: 'Nenhum' },
-                  ...niches.map((n) => ({ value: n.id, label: n.name })),
-                ]}
               />
             }
           />

@@ -27,7 +27,7 @@ describe('finalizeShortsSelection', () => {
       videoDuration: video,
       requestedDuration: 30,
       durationMode: 'approximate',
-      profile: 'history',
+      profile: 'music',
       cues: [{ start: 0, end: 310, text: '' }],
     })
     expect(result.clips).toHaveLength(5)
@@ -80,7 +80,7 @@ describe('finalizeShortsSelection', () => {
       videoDuration: 240,
       requestedDuration: 30,
       durationMode: 'exact',
-      profile: 'history',
+      profile: 'music',
     })
     expect(result.clips).toHaveLength(3)
     for (const item of result.clips) {
@@ -98,7 +98,7 @@ describe('finalizeShortsSelection', () => {
       videoDuration: 200,
       requestedDuration: 30,
       durationMode: 'approximate',
-      profile: 'history',
+      profile: 'music',
       cues: [{ start: 0, end: 200, text: '' }],
     })
     expect(result.clips).toHaveLength(5)
@@ -121,7 +121,7 @@ describe('finalizeShortsSelection', () => {
       videoDuration: 56.6,
       requestedDuration: 30,
       durationMode: 'approximate',
-      profile: 'history',
+      profile: 'music',
     })
     expect(result.clips).toHaveLength(2)
     expect(result.insufficient).toBe(false)
@@ -137,7 +137,7 @@ describe('finalizeShortsSelection', () => {
       videoDuration: 56.6,
       requestedDuration: 45,
       durationMode: 'approximate',
-      profile: 'history',
+      profile: 'music',
     })
     expect(result.clips.length).toBeGreaterThanOrEqual(1)
     expect(result.clips.length).toBeLessThanOrEqual(3)
@@ -166,7 +166,7 @@ describe('finalizeShortsSelection', () => {
       videoDuration: 56.6,
       requestedDuration: 45,
       durationMode: 'exact',
-      profile: 'history',
+      profile: 'music',
     })
     expect(result.clips.length).toBeGreaterThanOrEqual(1)
     expect(result.clips.length).toBeLessThan(3)
@@ -193,7 +193,7 @@ describe('finalizeShortsSelection', () => {
       videoDuration: 300,
       requestedDuration: 30,
       durationMode: 'approximate',
-      profile: 'history',
+      profile: 'music',
     })
     expect(result.clips).toHaveLength(5)
     expect(uniqueWindows(result.clips).size).toBe(5)
@@ -213,7 +213,7 @@ describe('finalizeShortsSelection', () => {
       videoDuration: 12,
       requestedDuration: 30,
       durationMode: 'approximate',
-      profile: 'history',
+      profile: 'music',
     })
     expect(result.clips.length).toBeGreaterThanOrEqual(1)
     expect(result.clips.length).toBeLessThanOrEqual(1)

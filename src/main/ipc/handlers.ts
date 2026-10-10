@@ -2,7 +2,6 @@ import { ipcMain, dialog, clipboard, shell } from 'electron'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '../../shared/types'
 import type {
-  AdjustScriptRequest,
   AnalyzeQuickPromptRequest,
   AnalyzeTitleRequest,
   Channel,
@@ -10,8 +9,6 @@ import type {
   SelectFolderOptions,
   ChannelVideo,
   ChannelVideoWriteInput,
-  GenerateScriptRequest,
-  Niche,
   Project,
   ProjectType,
   AppSettings,
@@ -20,7 +17,6 @@ import type {
   TaskWriteInput,
   VideoListFilters,
 } from '../../shared/types'
-import { nicheRepository } from '../repositories/nicheRepository'
 import { projectRepository } from '../repositories/projectRepository'
 import {
   createProjectFolder,
@@ -28,12 +24,7 @@ import {
   resolveEnvironmentRoot,
   resolveFolderDialogStart,
 } from '../services/storage/projectFolders'
-import { scriptRepository } from '../repositories/scriptRepository'
 import { settingsRepository } from '../repositories/settingsRepository'
-import { skillsRepository } from '../repositories/skillsRepository'
-import { validateSkill } from '../services/skills/SkillDiscoveryService'
-import { syncSkillLibrary } from '../services/skills/SkillLibrarySync'
-import { generationRunRepository } from '../repositories/generationRunRepository'
 import type { CodexService } from '../services/codex/CodexService'
 import type { CodexRuntimeManager } from '../services/codex/CodexRuntimeManager'
 import {
@@ -41,7 +32,6 @@ import {
   readConfiguredModel,
   resolveEffectiveCodexModel,
 } from '../services/codex/codexModels'
-import { exportScriptFile } from '../services/storage/scriptFiles'
 import {
   clearProfilePhotoFiles,
   importProfilePhoto,
@@ -222,24 +212,6 @@ export function registerIpcHandlers(deps: {
     if (error) throw new Error(error)
     return true
   })
-
-  ipcMain.handle(IPC.niches.list, (_e, filters?: { query?: string; language?: string }) => {
-    syncSkillLibrary()
-    return nicheRepository.list(filters)
-  })
-
-  ipcMain.handle(IPC.niches.get, (_e, id: string) => nicheRepository.get(id))
-
-  ipcMain.handle(
-    IPC.niches.create,
-    (_e, input: Omit<Niche, 'id' | 'createdAt' | 'updatedAt'>) => nicheRepository.create(input),
-  )
-
-  ipcMain.handle(
-    IPC.niches.update,
-    (_e, id: string, patch: Partial<Omit<Niche, 'id' | 'createdAt'>>) =>
-      nicheRepository.update(id, patch),
-  )
 
   ipcMain.handle(
     IPC.channels.list,
@@ -648,7 +620,7 @@ export function registerIpcHandlers(deps: {
       sourcePath,
       sourceName: probe.name,
       projectId: project?.id ?? null,
-      profile: project?.projectType ?? 'history',
+      profile: 'music',
       probe,
       forceNew: false,
     })
@@ -674,7 +646,7 @@ export function registerIpcHandlers(deps: {
         sourcePath,
         sourceName: probe.name,
         projectId: project?.id ?? null,
-        profile: project?.projectType ?? 'history',
+        profile: 'music',
         probe,
         forceNew: Boolean(input.forceNew),
       })
@@ -860,56 +832,6 @@ export function registerIpcHandlers(deps: {
     return true
   })
 
-  ipcMain.handle(IPC.skills.list, () => skillsRepository.listDiscovered(true))
-
-  ipcMain.handle(IPC.skills.rescan, (_e, libraryRoot?: string) => {
-    return syncSkillLibrary(libraryRoot)
-  })
-
-  ipcMain.handle(IPC.skills.validate, (_e, skillPath: string) => validateSkill(skillPath))
-
-  ipcMain.handle(
-    IPC.scripts.list,
-    (_e, filters?: { query?: string; nicheId?: string; language?: string; projectId?: string }) =>
-      scriptRepository.list(filters),
-  )
-
-  ipcMain.handle(IPC.scripts.get, (_e, id: string) => scriptRepository.get(id))
-  ipcMain.handle(IPC.scripts.recent, (_e, limit?: number) => scriptRepository.recent(limit ?? 3))
-  ipcMain.handle(IPC.scripts.summary, () => scriptRepository.summary())
-  ipcMain.handle(IPC.scripts.versions, (_e, scriptId: string) => scriptRepository.versions(scriptId))
-
-  ipcMain.handle(IPC.scripts.saveVersion, (_e, scriptId: string) => {
-    const script = scriptRepository.get(scriptId)
-    if (!script) throw new Error('Roteiro não encontrado')
-    return scriptRepository.addVersion(scriptId, script.content, 'Salvar versão manual')
-  })
-
-  ipcMain.handle(
-    IPC.scripts.export,
-    async (_e, payload: { scriptId: string; format: 'txt' | 'md' }) => {
-      const script = scriptRepository.get(payload.scriptId)
-      if (!script) throw new Error('Roteiro não encontrado')
-      const win = getMainWindow()
-      const result = await dialog.showSaveDialog(win ?? undefined!, {
-        title: 'Exportar roteiro',
-        defaultPath: `${script.title}.${payload.format}`,
-        filters:
-          payload.format === 'md'
-            ? [{ name: 'Markdown', extensions: ['md'] }]
-            : [{ name: 'Texto', extensions: ['txt'] }],
-      })
-      if (result.canceled || !result.filePath) return null
-      exportScriptFile({
-        title: script.title,
-        content: script.content,
-        format: payload.format,
-        targetPath: result.filePath,
-      })
-      return result.filePath
-    },
-  )
-
   ipcMain.handle(IPC.workspace.capabilities, () => getWorkspaceCapabilities())
   ipcMain.handle(IPC.settings.get, () => settingsRepository.get())
   ipcMain.handle(IPC.settings.update, (_e, patch: Partial<AppSettings>) => {
@@ -976,15 +898,6 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.agents.setReasoningEffort, (_e, provider: AgentProviderId, effort: string) =>
     agentModelCatalog.setReasoningEffort(provider, effort),
   )
-
-  ipcMain.handle(IPC.generation.start, (_e, request: GenerateScriptRequest) =>
-    codexService.generateScript(request),
-  )
-  ipcMain.handle(IPC.generation.adjust, (_e, request: AdjustScriptRequest) =>
-    codexService.adjustScript(request),
-  )
-  ipcMain.handle(IPC.generation.cancel, () => codexService.cancel())
-  ipcMain.handle(IPC.generation.interrupted, () => generationRunRepository.listInterrupted())
 
   ipcMain.handle(IPC.chat.listConversations, () => chatService.listConversations())
   ipcMain.handle(IPC.chat.getConversation, (_e, id: string) => chatService.getConversation(id))

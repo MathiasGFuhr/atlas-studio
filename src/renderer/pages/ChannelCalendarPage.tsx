@@ -88,7 +88,7 @@ export function ChannelCalendarPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const api = getAtlasApi()
   const navigate = useNavigate()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const now = new Date()
   const openedFromRoute = useRef<string | null>(null)
   const publishedTab = searchParams.get('aba') === 'publicados'
@@ -319,7 +319,7 @@ export function ChannelCalendarPage() {
         notifyVideosChanged()
         await load()
       } catch (error) {
-        push(error instanceof Error ? error.message : 'Falha ao salvar a thumbnail', 'error')
+        pushError(error, 'Falha ao salvar a thumbnail')
       }
       return
     }
@@ -370,7 +370,7 @@ export function ChannelCalendarPage() {
         'success',
       )
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao vincular a pasta', 'error')
+      pushError(error, 'Falha ao vincular a pasta')
     }
   }
 
@@ -379,7 +379,7 @@ export function ChannelCalendarPage() {
     try {
       await api.system.openPath(channel.folderPath)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao abrir a pasta', 'error')
+      pushError(error, 'Falha ao abrir a pasta')
     }
   }
 
@@ -388,7 +388,7 @@ export function ChannelCalendarPage() {
     try {
       await api.system.openPath(form.projectFolderPath)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao abrir a pasta', 'error')
+      pushError(error, 'Falha ao abrir a pasta')
     }
   }
 
@@ -501,7 +501,7 @@ export function ChannelCalendarPage() {
       closeModal({ publishedTab: form.status === 'publicado' })
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao salvar vídeo', 'error')
+      pushError(error, 'Falha ao salvar vídeo')
     }
   }
 
@@ -521,7 +521,7 @@ export function ChannelCalendarPage() {
       closeModal()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao remover vídeo', 'error')
+      pushError(error, 'Falha ao remover vídeo')
     }
   }
 

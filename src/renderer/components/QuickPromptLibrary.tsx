@@ -97,7 +97,7 @@ export function QuickPromptLibrary({
   onCopied: (key: string) => void
 }) {
   const api = getAtlasApi()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [query, setQuery] = useState('')
@@ -238,7 +238,7 @@ export function QuickPromptLibrary({
       notifyPromptsChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao copiar o prompt público', 'error')
+      pushError(error, 'Falha ao copiar o prompt público')
     }
   }
 
@@ -308,7 +308,7 @@ export function QuickPromptLibrary({
       notifyPromptsChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao salvar o prompt', 'error')
+      pushError(error, 'Falha ao salvar o prompt')
     }
   }
 
@@ -322,7 +322,7 @@ export function QuickPromptLibrary({
       notifyPromptsChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao excluir o prompt', 'error')
+      pushError(error, 'Falha ao excluir o prompt')
     }
   }
 
@@ -345,7 +345,7 @@ export function QuickPromptLibrary({
       notifyPromptsChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao salvar a aba', 'error')
+      pushError(error, 'Falha ao salvar a aba')
     }
   }
 
@@ -360,7 +360,7 @@ export function QuickPromptLibrary({
       notifyPromptsChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao excluir a aba', 'error')
+      pushError(error, 'Falha ao excluir a aba')
     }
   }
 

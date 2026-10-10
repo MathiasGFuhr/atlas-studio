@@ -18,7 +18,7 @@ export function ProjectFolderPanel({
   onChange: (project: Project) => void
 }) {
   const api = getAtlasApi()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const [busy, setBusy] = useState(false)
 
   async function run(action: () => Promise<Project | null>, successMessage: string) {
@@ -29,7 +29,7 @@ export function ProjectFolderPanel({
       onChange(updated)
       push(successMessage, 'success')
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha na operação de pasta', 'error')
+      pushError(error, 'Falha na operação de pasta')
     } finally {
       setBusy(false)
     }
@@ -40,7 +40,7 @@ export function ProjectFolderPanel({
     try {
       await api.projects.openFolder(project.id)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao abrir a pasta', 'error')
+      pushError(error, 'Falha ao abrir a pasta')
     } finally {
       setBusy(false)
     }

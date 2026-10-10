@@ -136,7 +136,7 @@ export function buildShortsAnalysisPrompt(input: {
 }): string {
   const bounds = durationBounds(input.requestedDuration, input.duration, input.durationMode)
   const criteria = input.profile === 'music' ? MUSIC_CRITERIA : HISTORY_CRITERIA
-  const profileLabel = input.profile === 'music' ? 'MÚSICA' : 'HISTÓRIA'
+  const profileLabel = 'MÚSICA'
   const candidates = withCandidateIds(input.localCandidates)
   const contentLanguage = input.editorial?.contentLanguage?.trim() || input.editorial?.language?.trim() || ''
   const languageName = input.editorial?.languageName?.trim() || contentLanguage || 'the source material language'

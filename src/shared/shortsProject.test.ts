@@ -86,6 +86,7 @@ describe('shorts project helpers', () => {
 
   it('conta exports e descreve o status simples', () => {
     expect(shortsProjectStatusLabel(job({ status: 'draft', clips: [] }))).toBe('Análise pendente')
+    expect(shortsProjectStatusLabel(job({ status: 'analyzing', clips: [] }))).toBe('Gerando Shorts...')
     expect(
       shortsProjectStatusLabel(
         job({

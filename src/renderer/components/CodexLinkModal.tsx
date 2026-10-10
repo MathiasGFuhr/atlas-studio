@@ -3,6 +3,7 @@ import { ExternalLink, Loader2, Copy, AlertCircle } from 'lucide-react'
 import { Modal } from './Modal'
 import { Button } from './Button'
 import type { CodexAuth } from '../hooks/useCodexAuth'
+import { toUserFacingError } from '@shared/userFacingError'
 import { useToast } from './Toast'
 import { getAtlasApi } from '../lib/api'
 
@@ -155,10 +156,11 @@ export function CodexLinkModal({
 }
 
 function friendlyError(msg: string): string {
+  const fallback = 'Não foi possível concluir a vinculação. Tente novamente.'
   if (/token|authorization|cookie|api[_-]?key|bearer|spawn|enoent|eacces/i.test(msg)) {
-    return 'Não foi possível concluir a vinculação. Tente novamente.'
+    return fallback
   }
-  return msg
+  return toUserFacingError(msg, fallback)
 }
 
 function NotFoundContent({

@@ -1,11 +1,10 @@
 import { app } from 'electron'
 import { bootAtlasApp } from './boot'
-import { runRealFlowTest } from './services/e2e/runRealFlowTest'
 import { registerAtlasMediaScheme } from './services/media/atlasMediaProtocol'
 
 /**
  * Entrypoint exclusivo de `npm run test:e2e`.
- * Não é importado pelo main de produção e não entra no instalador.
+ * O fluxo antigo de geração de roteiro foi removido — o boot valida o app.
  */
 registerAtlasMediaScheme()
 
@@ -15,10 +14,9 @@ if (app.isPackaged) {
 
 app.whenReady().then(async () => {
   try {
-    const { codexService } = await bootAtlasApp()
-    const result = await runRealFlowTest(codexService)
-    console.log('[atlas-e2e]', JSON.stringify(result, null, 2))
-    app.exit(result.ok ? 0 : 1)
+    await bootAtlasApp()
+    console.log('[atlas-e2e]', JSON.stringify({ ok: true, mode: 'boot-only' }, null, 2))
+    app.exit(0)
   } catch (error) {
     console.error('[atlas-e2e] failed', error)
     app.exit(1)

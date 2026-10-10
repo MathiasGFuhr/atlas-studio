@@ -52,6 +52,7 @@ import type {
   ChatSendMessageResult,
 } from '../src/shared/chat/types'
 import { CHAT_DOCK_DEFAULT_HEIGHT, CHAT_DOCK_DEFAULT_WIDTH } from '../src/shared/chat/chatDockSize'
+import { DEFAULT_WORLD_CLOCKS } from '../src/shared/worldClocks'
 import { GENERATION_STEPS } from '../src/shared/types'
 import {
   detectContentAreaPresence,
@@ -157,6 +158,7 @@ const settings: AppSettings = {
   chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
   chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
   musicExportFolder: '',
+  worldClocks: DEFAULT_WORLD_CLOCKS.map((clock) => ({ ...clock })),
 }
 
 function emptyPublicationFields(): Pick<

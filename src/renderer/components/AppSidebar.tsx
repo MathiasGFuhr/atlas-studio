@@ -1,9 +1,9 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, CheckSquare, ChevronLeft, ChevronRight, Clapperboard, Home, MessageSquareText, MessagesSquare, Music2, Settings, Tv } from 'lucide-react'
+import { CheckSquare, ChevronLeft, ChevronRight, Clapperboard, Home, Loader2, MessageSquareText, MessagesSquare, Music2, Settings, Tv } from 'lucide-react'
 import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
-import { isContentAreaEnabled, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
+import { MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { AtlasAiStatusCard } from './AtlasAiStatusCard'
 import { SidebarChannelSwitcher } from './SidebarChannelSwitcher'
 import { SidebarUpdateCard } from './SidebarUpdateCard'
@@ -12,38 +12,29 @@ import { cn } from '../lib/utils'
 import { getAtlasApi } from '../lib/api'
 import { onTasksChanged } from '../lib/taskEvents'
 import { useAntigravityStatus } from '../hooks/useAntigravityStatus'
-import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useShortsGeneration } from '../hooks/useShortsGeneration'
 import { PRODUCT_TOUR_ACTIVE_EVENT } from '../lib/productTourEvents'
 
 const globalItems = [
-  { to: '/', label: 'Início', icon: Home, end: true, color: undefined, area: null as 'history' | 'music' | null },
-  {
-    to: ENVIRONMENTS.history.basePath,
-    label: ENVIRONMENTS.history.label,
-    icon: BookOpen,
-    color: ENVIRONMENTS.history.color,
-    area: 'history' as const,
-  },
+  { to: '/', label: 'Início', icon: Home, end: true, color: undefined },
   {
     to: ENVIRONMENTS.music.basePath,
     label: ENVIRONMENTS.music.label,
     icon: Music2,
     color: ENVIRONMENTS.music.color,
-    area: 'music' as const,
   },
   {
     to: MUSIC_PROMPTS_PATH,
     label: 'Prompts',
     icon: MessageSquareText,
     color: ENVIRONMENTS.music.color,
-    area: 'music' as const,
   },
-  { to: '/equipe', label: 'Chat', icon: MessagesSquare, color: undefined, area: null },
-  { to: '/canais', label: 'Canais', icon: Tv, color: undefined, area: null },
-  { to: '/shorts', label: 'Shorts Studio', icon: Clapperboard, color: undefined, area: null },
-  { to: '/tarefas', label: 'Tarefas', icon: CheckSquare, color: undefined, area: null },
-  { to: '/configuracoes', label: 'Configurações', icon: Settings, color: undefined, area: null },
+  { to: '/equipe', label: 'Chat', icon: MessagesSquare, color: undefined },
+  { to: '/canais', label: 'Canais', icon: Tv, color: undefined },
+  { to: '/shorts', label: 'Shorts Studio', icon: Clapperboard, color: undefined },
+  { to: '/tarefas', label: 'Tarefas', icon: CheckSquare, color: undefined },
+  { to: '/configuracoes', label: 'Configurações', icon: Settings, color: undefined },
 ]
 
 function isSidebarLinkActive(to: string, pathname: string, matched: boolean): boolean {
@@ -71,6 +62,7 @@ export function AppSidebar({
   const { pathname, search } = useLocation()
   const antigravityStatus = useAntigravityStatus()
   const aiStatus = deriveAtlasAiStatus(codexStatus, antigravityStatus)
+  const shortsGeneration = useShortsGeneration()
   const [pendingCount, setPendingCount] = useState(0)
   const compactViewport = useMediaQuery('(max-width: 1100px)')
   const userToggledRef = useRef(false)
@@ -85,11 +77,7 @@ export function AppSidebar({
     }
   })
   collapsedRef.current = collapsed
-  const { capabilities } = useWorkspaceCapabilities()
-  const items = globalItems.filter((item) => {
-    if (!item.area) return true
-    return isContentAreaEnabled(capabilities, item.area)
-  })
+  const items = globalItems
 
   useEffect(() => {
     function refresh() {
@@ -178,7 +166,7 @@ export function AppSidebar({
             <div className="truncate text-[15px] font-semibold tracking-tight text-text">
               Atlas Studio
             </div>
-            <div className="truncate text-[11px] text-muted">Sistema de roteiros com IA</div>
+            <div className="truncate text-[11px] text-muted">Produção musical com IA</div>
           </div>
         )}
       </div>
@@ -233,6 +221,8 @@ export function AppSidebar({
                 {collapsed ? (
                   item.to === '/tarefas' && pendingCount > 0 ? (
                     <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+                  ) : item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
+                    <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
                   ) : null
                 ) : (
                   <>
@@ -243,6 +233,9 @@ export function AppSidebar({
                       <span className="ml-auto rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-semibold text-muted">
                         {pendingCount}
                       </span>
+                    ) : null}
+                    {item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
+                      <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
                     ) : null}
                   </>
                 )}

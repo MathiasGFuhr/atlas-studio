@@ -16,7 +16,7 @@ import { formatRelativeDate } from '../lib/utils'
 export function MusicPage() {
   const api = getAtlasApi()
   const navigate = useNavigate()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const [tracks, setTracks] = useState<MusicTrack[]>([])
   const [importing, setImporting] = useState(false)
   const [deleting, setDeleting] = useState<MusicTrack | null>(null)
@@ -37,7 +37,7 @@ export function MusicPage() {
       push('Música importada. Abrindo o editor de cortes.', 'success')
       navigate(`/musica/faixas/${track.id}`)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao importar a música', 'error')
+      pushError(error, 'Falha ao importar a música')
     } finally {
       setImporting(false)
     }
@@ -51,7 +51,7 @@ export function MusicPage() {
       setDeleting(null)
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao remover a música', 'error')
+      pushError(error, 'Falha ao remover a música')
     }
   }
 

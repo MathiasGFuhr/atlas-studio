@@ -567,7 +567,7 @@ function mapShortsSnapshot(row: {
     name: String(row.name ?? '').trim() || shortsProjectNameFromFileName(row.source_name),
     sourcePath: row.source_path,
     sourceName: row.source_name,
-    profile: row.profile === 'music' ? 'music' : 'history',
+    profile: 'music',
     status: (row.status as ShortsJobStatus) || 'draft',
     createdAt: row.created_at,
     updatedAt: row.updated_at,

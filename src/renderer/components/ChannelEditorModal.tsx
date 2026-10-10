@@ -28,7 +28,7 @@ export const EMPTY_CHANNEL_FORM: ChannelFormValues = {
   nicheId: '',
   youtubeUrl: '',
   color: CHANNEL_COLORS[0],
-  channelType: 'history',
+  channelType: 'music',
   active: true,
   folderPath: null,
 }
@@ -61,7 +61,7 @@ export function ChannelEditorModal({
   onPickAvatar: () => void
 }) {
   const api = getAtlasApi()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const types = allowedTypes?.length ? allowedTypes : (['history', 'music'] as ChannelType[])
   const folderTitle = form.channelType === 'music' ? 'Pasta do artista' : 'Pasta do canal'
 
@@ -78,14 +78,14 @@ export function ChannelEditorModal({
     try {
       await api.system.openPath(form.folderPath)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao abrir a pasta', 'error')
+      pushError(error, 'Falha ao abrir a pasta')
     }
   }
   const nicheOptions = [
     { value: '', label: 'Nenhum nicho vinculado' },
     ...niches.map((n) => ({ value: n.id, label: n.name })),
   ]
-  const showNiche = !hideNiche && (form.channelType === 'history' || types.includes('history'))
+  const showNiche = false
 
   return (
     <Modal

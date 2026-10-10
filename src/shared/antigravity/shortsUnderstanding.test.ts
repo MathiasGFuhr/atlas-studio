@@ -18,7 +18,7 @@ describe('prompts de compreensão audiovisual', () => {
 
   it('no fallback proíbe fingir que assistiu ao vídeo', () => {
     const prompt = buildVideoUnderstandingPrompt({
-      profile: 'history',
+      profile: 'music',
       duration: 200,
       fileName: 'doc.mp4',
       mediaPath: null,

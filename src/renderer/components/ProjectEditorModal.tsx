@@ -1,8 +1,9 @@
-import { Tv } from 'lucide-react'
-import type { Channel, Project, ProjectType } from '@shared/types'
+import { ImagePlus, Tv } from 'lucide-react'
+import type { Channel, ChannelVideoStatus, Project, ProjectType } from '@shared/types'
 import { Button } from './Button'
 import { Input } from './Input'
 import { Modal } from './Modal'
+import { Select } from './Select'
 import { Textarea } from './Textarea'
 import { ENVIRONMENTS } from '../lib/environments'
 import { cn } from '../lib/utils'
@@ -11,6 +12,34 @@ export type ProjectFormValues = {
   name: string
   description: string
   channelId: string
+  /** Título da publicação no YouTube (quando há vídeo vinculado). */
+  publicationTitle: string
+  /** Descrição do vídeo (quando há vídeo vinculado). */
+  publicationDescription: string
+  scheduledDate: string
+  publicationStatus: ChannelVideoStatus
+}
+
+export const EMPTY_PROJECT_FORM: ProjectFormValues = {
+  name: '',
+  description: '',
+  channelId: '',
+  publicationTitle: '',
+  publicationDescription: '',
+  scheduledDate: '',
+  publicationStatus: 'colocando',
+}
+
+export function projectToFormValues(project: Project): ProjectFormValues {
+  return {
+    name: project.name,
+    description: project.description,
+    channelId: project.channelId ?? '',
+    publicationTitle: project.scheduledVideoTitle || project.name,
+    publicationDescription: project.scheduledVideoDescription ?? '',
+    scheduledDate: project.scheduledDate ?? '',
+    publicationStatus: project.scheduledVideoStatus ?? 'colocando',
+  }
 }
 
 export function ProjectEditorModal({
@@ -20,7 +49,9 @@ export function ProjectEditorModal({
   editing,
   form,
   saving,
+  thumbPreviewSrc,
   onChange,
+  onPickThumbnail,
   onClose,
   onSubmit,
 }: {
@@ -30,17 +61,20 @@ export function ProjectEditorModal({
   editing: Project | null
   form: ProjectFormValues
   saving: boolean
+  thumbPreviewSrc?: string | null
   onChange: (patch: Partial<ProjectFormValues>) => void
+  onPickThumbnail?: () => void
   onClose: () => void
   onSubmit: () => void
 }) {
   const env = ENVIRONMENTS[projectType]
+  const hasPublication = Boolean(editing?.scheduledVideoId)
 
   return (
     <Modal
       open={open}
       title={editing ? `Editar projeto de ${env.label}` : `Novo projeto de ${env.label}`}
-      size="lg"
+      size={hasPublication ? 'xl' : 'lg'}
       onClose={onClose}
       footer={
         <>
@@ -58,13 +92,87 @@ export function ProjectEditorModal({
           label="Nome do projeto"
           value={form.name}
           onChange={(e) => onChange({ name: e.target.value })}
-          placeholder={projectType === 'history' ? 'Ex.: Impérios esquecidos' : 'Ex.: Trilha do canal'}
+          placeholder="Ex.: Trilha do canal"
         />
-        <Textarea
-          label="Descrição (opcional)"
-          value={form.description}
-          onChange={(e) => onChange({ description: e.target.value })}
-        />
+
+        {hasPublication ? (
+          <>
+            <Input
+              label="Título da publicação"
+              value={form.publicationTitle}
+              onChange={(e) => onChange({ publicationTitle: e.target.value })}
+              placeholder="Título que vai no YouTube"
+            />
+            <Textarea
+              label="Descrição da publicação"
+              value={form.publicationDescription}
+              onChange={(e) => onChange({ publicationDescription: e.target.value })}
+              placeholder="Descrição do vídeo"
+            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                label="Agendado para"
+                type="date"
+                value={form.scheduledDate}
+                onChange={(e) => onChange({ scheduledDate: e.target.value })}
+              />
+              <Select
+                label="Status"
+                value={form.publicationStatus}
+                onChange={(e) =>
+                  onChange({ publicationStatus: e.target.value as ChannelVideoStatus })
+                }
+                options={[
+                  { value: 'colocando', label: 'Colocando' },
+                  { value: 'editando', label: 'Editando' },
+                  { value: 'agendando', label: 'Agendando' },
+                  { value: 'publicado', label: 'Publicado' },
+                ]}
+              />
+            </div>
+            {onPickThumbnail ? (
+              <div>
+                <p className="mb-2 text-sm font-medium text-muted">Thumbnail</p>
+                <div className="flex items-start gap-3">
+                  <div className="h-[90px] w-[160px] overflow-hidden rounded-xl border border-border bg-card-2">
+                    {thumbPreviewSrc ? (
+                      <img
+                        src={thumbPreviewSrc}
+                        alt="Preview da thumbnail"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-muted-2">
+                        <ImagePlus className="h-5 w-5" />
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="secondary"
+                    className="h-9 px-3 text-xs"
+                    onClick={onPickThumbnail}
+                  >
+                    Escolher thumb
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <Textarea
+            label="Descrição (opcional)"
+            value={form.description}
+            onChange={(e) => onChange({ description: e.target.value })}
+          />
+        )}
+
+        {hasPublication ? (
+          <Textarea
+            label="Descrição do projeto (opcional)"
+            value={form.description}
+            onChange={(e) => onChange({ description: e.target.value })}
+          />
+        ) : null}
 
         <div>
           <p className="mb-2 text-sm font-medium text-muted">Canal (opcional)</p>

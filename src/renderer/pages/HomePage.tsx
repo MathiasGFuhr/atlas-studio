@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, FolderKanban, ListTodo, Tv } from 'lucide-react'
-import type { AtlasTask, Channel, ChannelVideo, Project, ProjectType, ScriptRecord } from '@shared/types'
+import type { AtlasTask, Channel, ChannelVideo, Project, ProjectType } from '@shared/types'
 import type { MusicTrack } from '@shared/musicAnalysis'
+import type { WorldClock } from '@shared/worldClocks'
+import { DEFAULT_WORLD_CLOCKS, normalizeWorldClocks } from '@shared/worldClocks'
 import { dueDateState, pendingDueTodayCount, pendingTasksForHome } from '@shared/tasks'
 import { buildHomeActivity } from '@shared/homeActivity'
 import { buildHomeModuleStats } from '@shared/homeStats'
@@ -19,8 +21,11 @@ import { HomeTaskRow } from '../components/home/HomeTaskRow'
 import { HomeActivityRow } from '../components/home/HomeActivityRow'
 import { HomeScheduledVideoCard } from '../components/home/HomeScheduledVideoCard'
 import { HomeSection } from '../components/home/HomeSection'
+import { HomeWorldClocks } from '../components/home/HomeWorldClocks'
 import { Card } from '../components/Card'
+import { notifySettingsChanged } from '../lib/settingsEvents'
 import {
+  EMPTY_PROJECT_FORM,
   ProjectEditorModal,
   type ProjectFormValues,
 } from '../components/ProjectEditorModal'
@@ -33,10 +38,6 @@ import { onVideosChanged } from '../lib/videoEvents'
 import { onSettingsChanged } from '../lib/settingsEvents'
 import { useToast } from '../components/Toast'
 import { formatRelativeDate } from '../lib/utils'
-import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
-import { enabledContentAreas } from '@shared/workspaceCapabilities'
-
-const EMPTY_FORM: ProjectFormValues = { name: '', description: '', channelId: '' }
 
 function homeGreeting(name?: string | null, now = new Date()): string {
   const hour = now.getHours()
@@ -58,39 +59,38 @@ function homeDateLabel(now = new Date()): string {
 export function HomePage() {
   const api = getAtlasApi()
   const navigate = useNavigate()
-  const { push } = useToast()
-  const { capabilities } = useWorkspaceCapabilities()
-  const modules = enabledContentAreas(capabilities)
+  const { push, pushError } = useToast()
 
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<AtlasTask[]>([])
   const [channels, setChannels] = useState<Channel[]>([])
-  const [scripts, setScripts] = useState<ScriptRecord[]>([])
   const [tracks, setTracks] = useState<MusicTrack[]>([])
   const [upcomingVideos, setUpcomingVideos] = useState<ChannelVideo[]>([])
   const [accountName, setAccountName] = useState('')
+  const [worldClocks, setWorldClocks] = useState<WorldClock[]>(() =>
+    DEFAULT_WORLD_CLOCKS.map((clock) => ({ ...clock })),
+  )
   const [createType, setCreateType] = useState<ProjectType | null>(null)
-  const [form, setForm] = useState<ProjectFormValues>(EMPTY_FORM)
+  const [form, setForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
   const [saving, setSaving] = useState(false)
+  const [savingClocks, setSavingClocks] = useState(false)
 
   const load = useCallback(async () => {
-    const [history, music, taskList, channelList, scriptList, trackList, videoList, settings] = await Promise.all([
-      api.projects.list({ projectType: 'history' }),
+    const [music, taskList, channelList, trackList, videoList, settings] = await Promise.all([
       api.projects.list({ projectType: 'music' }),
       api.tasks.list(),
       api.channels.list(),
-      api.scripts.list(),
       api.music.list(),
       api.videos.list({ from: todayDateKey(), limit: HOME_UPCOMING_VIDEO_LIMIT, excludeStatus: 'publicado' }),
       api.settings.get(),
     ])
-    setProjects([...history, ...music])
+    setProjects(music)
     setTasks(taskList)
     setChannels(channelList)
-    setScripts(scriptList)
     setTracks(trackList)
     setUpcomingVideos(videoList)
     setAccountName(settings.accountName?.trim() ?? '')
+    setWorldClocks(normalizeWorldClocks(settings.worldClocks))
   }, [api])
 
   useEffect(() => {
@@ -124,25 +124,24 @@ export function HomePage() {
   const todayCount = pendingDueTodayCount(tasks)
   const overdueCount = pending.filter((task) => dueDateState(task.dueDate) === 'overdue').length
   const moduleStats = useMemo(
-    () => buildHomeModuleStats({ projects, scripts, tracks }),
-    [projects, scripts, tracks],
+    () => buildHomeModuleStats({ projects, tracks }),
+    [projects, tracks],
   )
   const activity = useMemo(
     () =>
       buildHomeActivity({
         projects,
-        scripts: moduleStats.scripts,
         tasks,
         channels,
         tracks: moduleStats.tracks,
       }),
-    [projects, moduleStats.scripts, moduleStats.tracks, tasks, channels],
+    [projects, moduleStats.tracks, tasks, channels],
   )
   const latestActivity = activity[0]
 
   function openCreate(type: ProjectType) {
     setCreateType(type)
-    setForm(EMPTY_FORM)
+    setForm(EMPTY_PROJECT_FORM)
   }
 
   async function saveProject() {
@@ -160,11 +159,11 @@ export function HomePage() {
         channelId: form.channelId || null,
       })
       setCreateType(null)
-      setForm(EMPTY_FORM)
+      setForm(EMPTY_PROJECT_FORM)
       notifyProjectsChanged()
       navigate(`${ENVIRONMENTS[createType].projectsPath}/${project.id}`)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao criar projeto', 'error')
+      pushError(error, 'Falha ao criar projeto')
     } finally {
       setSaving(false)
     }
@@ -190,7 +189,23 @@ export function HomePage() {
       notifyTasksChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao atualizar tarefa', 'error')
+      pushError(error, 'Falha ao atualizar tarefa')
+    }
+  }
+
+  async function saveWorldClocks(next: WorldClock[]) {
+    const previous = worldClocks
+    setWorldClocks(next)
+    setSavingClocks(true)
+    try {
+      const saved = await api.settings.update({ worldClocks: next })
+      setWorldClocks(normalizeWorldClocks(saved.worldClocks))
+      notifySettingsChanged()
+    } catch (error) {
+      setWorldClocks(previous)
+      pushError(error, 'Falha ao salvar fusos horários')
+    } finally {
+      setSavingClocks(false)
     }
   }
 
@@ -215,6 +230,12 @@ export function HomePage() {
           </p>
         </header>
 
+        <HomeWorldClocks
+          clocks={worldClocks}
+          saving={savingClocks}
+          onChange={(next) => void saveWorldClocks(next)}
+        />
+
         <Card padding="sm" className="overflow-hidden !p-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
             <HomeStatCard
@@ -222,15 +243,7 @@ export function HomePage() {
               icon={<FolderKanban className="h-4 w-4" />}
               label="Projetos"
               value={projects.length}
-              hint={
-                modules.length === 2
-                  ? 'História e Música'
-                  : modules[0] === 'music'
-                    ? 'Música'
-                    : modules[0] === 'history'
-                      ? 'História'
-                      : 'Cadastrados'
-              }
+              hint="Música"
             />
             <HomeStatCard
               className="border-b border-border-soft xl:border-b-0 xl:border-r"
@@ -257,44 +270,22 @@ export function HomePage() {
           </div>
         </Card>
 
-        <div
-          data-tour="modules"
-          className={
-            modules.length > 1
-              ? 'mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2'
-              : 'mt-8 grid grid-cols-1 gap-5'
-          }
-        >
-          {modules.map((type) => {
-            const env = ENVIRONMENTS[type]
-            const stats =
-              type === 'history'
-                ? [
-                    { label: 'Projetos', value: moduleStats.historyCount },
-                    { label: 'Em andamento', value: moduleStats.draftCount },
-                    { label: 'Para revisar', value: moduleStats.reviewCount },
-                  ]
-                : [
-                    { label: 'Projetos', value: moduleStats.musicCount },
-                    { label: 'Faixas', value: moduleStats.trackCount },
-                  ]
-
-            return (
-              <HomeModuleCard
-                key={type}
-                color={env.color}
-                icon={<env.icon className="h-5 w-5" />}
-                title={env.label}
-                description={env.description}
-                stats={stats}
-                primaryLabel={`Abrir ${env.label}`}
-                secondaryLabel="Novo projeto"
-                onOpen={() => navigate(env.basePath)}
-                onPrimary={() => navigate(env.basePath)}
-                onSecondary={() => openCreate(type)}
-              />
-            )
-          })}
+        <div data-tour="modules" className="mt-8 grid grid-cols-1 gap-5">
+          <HomeModuleCard
+            color={ENVIRONMENTS.music.color}
+            icon={<ENVIRONMENTS.music.icon className="h-5 w-5" />}
+            title={ENVIRONMENTS.music.label}
+            description={ENVIRONMENTS.music.description}
+            stats={[
+              { label: 'Projetos', value: moduleStats.musicCount },
+              { label: 'Faixas', value: moduleStats.trackCount },
+            ]}
+            primaryLabel="Abrir Música"
+            secondaryLabel="Novo projeto"
+            onOpen={() => navigate(ENVIRONMENTS.music.basePath)}
+            onPrimary={() => navigate(ENVIRONMENTS.music.basePath)}
+            onSecondary={() => openCreate('music')}
+          />
         </div>
 
         <div className="mt-10">
@@ -428,7 +419,7 @@ export function HomePage() {
 
       <ProjectEditorModal
         open={Boolean(createType)}
-        projectType={createType ?? 'history'}
+        projectType={createType ?? 'music'}
         channels={createChannels}
         editing={null}
         form={form}

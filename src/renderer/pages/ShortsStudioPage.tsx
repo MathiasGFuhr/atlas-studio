@@ -49,6 +49,7 @@ import {
   shortsClipDeleteMessage,
   shortsProjectDeleteMessage,
 } from '@shared/shortsProject'
+import { mergeShortsJobSnapshot, shortsAnalyzeProgressLabel } from '@shared/shortsGeneration'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
@@ -60,6 +61,7 @@ import { ShortsFramingPanel } from '../components/shorts/ShortsFramingPanel'
 import { ShortsResultCard } from '../components/shorts/ShortsResultCard'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
+import { useShortsGeneration } from '../hooks/useShortsGeneration'
 
 function FieldSelect({
   label,
@@ -88,7 +90,8 @@ function FieldSelect({
 
 export function ShortsStudioPage() {
   const api = getAtlasApi()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
+  const generation = useShortsGeneration()
   const navigate = useNavigate()
   const { jobId } = useParams<{ jobId: string }>()
   const [params] = useSearchParams()
@@ -99,7 +102,7 @@ export function ShortsStudioPage() {
   const [job, setJob] = useState<ShortsJob | null>(null)
   const [missing, setMissing] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [profile, setProfile] = useState<ShortsProfile>('history')
+  const [profile, setProfile] = useState<ShortsProfile>('music')
   const [clipCount, setClipCount] = useState<ShortsClipCount>(5)
   const [requestedDuration, setRequestedDuration] = useState(30)
   const [durationInput, setDurationInput] = useState('00:30')
@@ -122,7 +125,12 @@ export function ShortsStudioPage() {
   const [analysisPlan, setAnalysisPlan] = useState<ShortsAnalysisPlan | null>(null)
   const [modelChoiceOpen, setModelChoiceOpen] = useState(false)
 
-  const analyzing = job?.status === 'analyzing' || (busy && progress?.stage !== 'exporting')
+  const analyzingJob = Boolean(jobId && generation.isAnalyzing(jobId))
+  const analyzeProgress = jobId ? generation.progressFor(jobId) : null
+  const liveJob = jobId ? generation.jobFor(jobId) : null
+  const displayProgress = progress ?? analyzeProgress
+  const analyzing = analyzingJob || job?.status === 'analyzing' || (busy && progress?.stage !== 'exporting')
+  const pageBusy = busy || analyzingJob
 
   useEffect(() => {
     if (!projectId) {
@@ -143,7 +151,7 @@ export function ShortsStudioPage() {
       return
     }
     const found = await api.shorts.get(jobId)
-    setJob(found)
+    setJob((current) => mergeShortsJobSnapshot(current, found))
     setMissing(!found)
     setLoading(false)
   }
@@ -151,6 +159,18 @@ export function ShortsStudioPage() {
   useEffect(() => {
     void loadJob()
   }, [jobId])
+
+  useEffect(() => {
+    if (!liveJob) return
+    setJob((current) => mergeShortsJobSnapshot(current, liveJob))
+  }, [liveJob])
+
+  useEffect(() => {
+    if (!jobId) return
+    if (job?.status === 'analyzing' || generation.isAnalyzing(jobId)) {
+      generation.watchJob(jobId)
+    }
+  }, [generation, job?.status, jobId])
 
   useEffect(() => {
     void api.settings.get().then((settings) => {
@@ -163,11 +183,14 @@ export function ShortsStudioPage() {
     if (missing) navigate(listPath, { replace: true })
   }, [missing, listPath, navigate])
 
+  // Progresso de exportação continua local; a análise usa o provider em background.
   useEffect(() => {
     return api.shorts.onProgress((event) => {
+      if (event.stage !== 'exporting') return
+      if (jobId && event.jobId !== jobId) return
       setProgress(event)
     })
-  }, [api])
+  }, [api, jobId])
 
   useEffect(() => {
     if (!job) return
@@ -270,7 +293,7 @@ export function ShortsStudioPage() {
       setJob(next)
       push('Arquivo original localizado.', 'success')
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao localizar o arquivo', 'error')
+      pushError(error, 'Falha ao localizar o arquivo')
     } finally {
       setBusy(false)
     }
@@ -308,40 +331,33 @@ export function ShortsStudioPage() {
       push('Abra um projeto com vídeo para analisar.', 'error')
       return
     }
-    setBusy(true)
-    setProgress({ jobId: job.id, stage: 'preparing_video', message: SHORTS_PROGRESS_LABEL.preparing_video })
+    const jobKey = job.id
+    const preservedCount = job.clips.filter(isProtectedShortsClip).length
     try {
-      const next = await api.shorts.analyze({
-        jobId: job.id,
-        profile,
-        clipCount,
-        requestedDuration,
-        durationMode,
-        aspectMode,
-        captionsEnabled,
-        allowExternalVideoAnalysis,
-        modelDecision: decision,
-        modelOverride: decision === 'use_compatible' ? analysisPlan?.compatibleVideoModels[0]?.id ?? null : null,
-      })
-      setJob(next)
-      if (next.status === 'error') {
-        push(next.errorMessage || 'A análise falhou. O vídeo original foi preservado.', 'error')
-      } else {
-        const preserved = job.clips.filter(isProtectedShortsClip).length
-        push(
-          preserved
-            ? `${next.clips.length} Shorts no projeto. Shorts exportados foram preservados.`
-            : `${next.clips.length} Shorts sugeridos.`,
-          'success',
-        )
+      // A geração vive no ShortsGenerationProvider: navegar para outra aba não cancela o processo.
+      const next = await generation.analyze(
+        {
+          jobId: jobKey,
+          profile,
+          clipCount,
+          requestedDuration,
+          durationMode,
+          aspectMode,
+          captionsEnabled,
+          allowExternalVideoAnalysis,
+          modelDecision: decision,
+          modelOverride: decision === 'use_compatible' ? analysisPlan?.compatibleVideoModels[0]?.id ?? null : null,
+        },
+        { preservedCount },
+      )
+      setJob((current) => mergeShortsJobSnapshot(current, next))
+    } catch {
+      try {
+        const latest = await api.shorts.get(jobKey)
+        if (latest) setJob((current) => mergeShortsJobSnapshot(current, latest))
+      } catch {
+        /* o provider já notificou o erro */
       }
-    } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao analisar o vídeo', 'error')
-      const latest = await api.shorts.get(job.id)
-      if (latest) setJob(latest)
-    } finally {
-      setBusy(false)
-      setProgress(null)
     }
   }
 
@@ -372,7 +388,7 @@ export function ShortsStudioPage() {
       if (latest) setJob(latest)
       push('Short exportado em MP4. O vídeo original não foi alterado.', 'success')
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao exportar o Short', 'error')
+      pushError(error, 'Falha ao exportar o Short')
     } finally {
       setBusy(false)
       setProgress(null)
@@ -419,7 +435,7 @@ export function ShortsStudioPage() {
         'success',
       )
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao regenerar título/descrição', 'error')
+      pushError(error, 'Falha ao regenerar título/descrição')
     } finally {
       setCopyBusyId(null)
       setProgress(null)
@@ -433,7 +449,7 @@ export function ShortsStudioPage() {
       push('Projeto excluído. O vídeo original e os exports foram preservados.', 'success')
       navigate(listPath)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao excluir o projeto', 'error')
+      pushError(error, 'Falha ao excluir o projeto')
     } finally {
       setDeletingProject(false)
     }
@@ -456,7 +472,7 @@ export function ShortsStudioPage() {
         'success',
       )
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao excluir o Short', 'error')
+      pushError(error, 'Falha ao excluir o Short')
     }
   }
 
@@ -517,7 +533,7 @@ export function ShortsStudioPage() {
             subtitle="Importe um vídeo completo, deixe o Atlas sugerir os melhores trechos e exporte Shorts 9:16 com corte, crop e legenda. Sem editor complexo."
             hint={
               project
-                ? `Vinculado ao projeto ${project.name} (${project.projectType === 'music' ? 'Música' : 'História'}).`
+                ? `Vinculado ao projeto ${project.name} (Música).`
                 : undefined
             }
           />
@@ -527,7 +543,7 @@ export function ShortsStudioPage() {
             variant="ghost"
             className="h-9 px-3 text-xs"
             icon={<Trash2 className="h-3.5 w-3.5" />}
-            disabled={!job || busy}
+            disabled={!job || pageBusy}
             onClick={() => setDeletingProject(true)}
           >
             Excluir
@@ -560,7 +576,7 @@ export function ShortsStudioPage() {
                   ) : null}
                 </div>
                 {job && !job.sourceExists ? (
-                  <Button variant="secondary" disabled={busy} onClick={() => void relinkVideo()}>
+                  <Button variant="secondary" disabled={pageBusy} onClick={() => void relinkVideo()}>
                     Localizar arquivo
                   </Button>
                 ) : null}
@@ -575,7 +591,6 @@ export function ShortsStudioPage() {
                 void persistSettings({ profile: next })
               }}
             >
-              <option value="history">História</option>
               <option value="music">Música</option>
             </FieldSelect>
             <FieldSelect
@@ -726,7 +741,7 @@ export function ShortsStudioPage() {
                 settings={job?.framingSettings ?? DEFAULT_FRAMING_SETTINGS}
                 subjects={previewClip ? clipFramingPlan(previewClip)?.subjects ?? [] : job?.clips[0] ? clipFramingPlan(job.clips[0])?.subjects ?? [] : []}
                 usedFallback={job?.clips.some((clip) => clipFramingPlan(clip)?.usedFallback) ?? false}
-                disabled={busy}
+                disabled={pageBusy}
                 onModeChange={persistFramingMode}
                 onSettingsChange={persistFraming}
               />
@@ -765,15 +780,15 @@ export function ShortsStudioPage() {
             <div className="md:col-span-2">
               <Button
                 fullWidth
-                disabled={busy || Boolean(copyBusyId) || !job || job.sourceExists === false}
+                disabled={pageBusy || Boolean(copyBusyId) || !job || job.sourceExists === false}
                 icon={analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />}
                 onClick={() => void requestAnalyze()}
               >
                 Analisar vídeo
               </Button>
-              {progress ? (
+              {displayProgress ? (
                 <p className="mt-3 text-sm text-accent" role="status">
-                  {progress.message || SHORTS_PROGRESS_LABEL[progress.stage]}
+                  {shortsAnalyzeProgressLabel(displayProgress)}
                 </p>
               ) : null}
             </div>
@@ -820,7 +835,7 @@ export function ShortsStudioPage() {
                   framingPlan={clipFramingPlan(clip)}
                   picking={Boolean(job.framingSettings?.picking)}
                   playing={playingClipId === clip.id && previewClip?.id !== clip.id}
-                  busy={busy || Boolean(copyBusyId)}
+                  busy={pageBusy || Boolean(copyBusyId)}
                   regenerating={copyBusyId === clip.id}
                   onPlayingChange={(playing) => setPlayingClipId(playing ? clip.id : null)}
                   onAssignPoint={(x, y, time) => assignFramingPoint(clip, x, y, time)}
@@ -854,7 +869,7 @@ export function ShortsStudioPage() {
             <p>
               {profile === 'music'
                 ? 'Perfil Música: performance, banda, público, luz, solo, refrão, clímax, dinâmica — não só o trecho mais alto.'
-                : 'Perfil História: fala, edição, B-roll, revelação, pergunta e resposta, clímax narrativo, unidade de pensamento.'}
+                : 'Perfil Música: refrão, solo, clímax, entrada vocal e mudança de dinâmica.'}
             </p>
           </Card>
         </aside>
@@ -896,7 +911,7 @@ export function ShortsStudioPage() {
         framingPlan={previewClip ? clipFramingPlan(previewClip) : null}
         picking={Boolean(job?.framingSettings?.picking)}
         playing={Boolean(previewClip && playingClipId === previewClip.id)}
-        busy={busy}
+        busy={pageBusy}
         regenerating={Boolean(previewClip && copyBusyId === previewClip.id)}
         onClose={() => {
           setPreviewClip(null)

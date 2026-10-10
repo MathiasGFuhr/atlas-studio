@@ -1,12 +1,5 @@
 import type { BrowserWindow } from 'electron'
-import type {
-  AdjustScriptRequest,
-  CodexStatus,
-  GenerateScriptRequest,
-  GenerationProgressEvent,
-  GenerationResult,
-  GenerationStep,
-} from '../../../shared/types'
+import type { CodexStatus, GenerationProgressEvent, GenerationStep } from '../../../shared/types'
 import { GENERATION_STEPS } from '../../../shared/types'
 
 export interface CodexServiceOptions {
@@ -20,8 +13,6 @@ export interface ICodexService {
   disconnect(): Promise<void>
   healthCheck(): Promise<CodexStatus>
   createThread(): Promise<string>
-  generateScript(request: GenerateScriptRequest): Promise<GenerationResult>
-  adjustScript(request: AdjustScriptRequest): Promise<GenerationResult>
   runChatPrompt(
     prompt: string,
     signal?: AbortSignal,

@@ -11,9 +11,8 @@ export function getWorkspaceCapabilities(): WorkspaceCapabilities {
   const settings = settingsRepository.get()
   return resolveWorkspaceCapabilities(
     {
-      historyPresent:
-        channelRepository.existsOfType('history') || projectRepository.existsOfType('history'),
-      musicPresent: channelRepository.existsOfType('music') || projectRepository.existsOfType('music'),
+      musicPresent:
+        channelRepository.existsOfType('music') || projectRepository.existsOfType('music'),
     },
     preferenceFromSettings(settings),
   )

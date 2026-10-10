@@ -1,11 +1,10 @@
-import { BookOpen, CheckSquare, FolderKanban, Music2, Tv } from 'lucide-react'
+import { CheckSquare, FolderKanban, Music2, Tv } from 'lucide-react'
 import type { HomeActivityItem, HomeActivityKind } from '@shared/homeActivity'
 import { formatRelativeDate } from '../../lib/utils'
 
 const ICONS: Record<HomeActivityKind, typeof FolderKanban> = {
   'project-created': FolderKanban,
   'project-updated': FolderKanban,
-  'script-updated': BookOpen,
   'task-completed': CheckSquare,
   'channel-created': Tv,
   'music-updated': Music2,

@@ -32,10 +32,9 @@ export function TasksPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const { capabilities } = useWorkspaceCapabilities()
   const [tasks, setTasks] = useState<AtlasTask[]>([])
-  const [historyProjects, setHistoryProjects] = useState<Project[]>([])
   const [musicProjects, setMusicProjects] = useState<Project[]>([])
   const [channels, setChannels] = useState<Channel[]>([])
   const [query, setQuery] = useState('')
@@ -48,14 +47,12 @@ export function TasksPage() {
   const openedQueryRef = useRef<string | null>(null)
 
   async function load() {
-    const [list, history, music, channelList] = await Promise.all([
+    const [list, music, channelList] = await Promise.all([
       api.tasks.list(),
-      api.projects.list({ projectType: 'history' }),
       api.projects.list({ projectType: 'music' }),
       api.channels.list(),
     ])
     setTasks(list)
-    setHistoryProjects(history)
     setMusicProjects(music)
     setChannels(channelList)
   }
@@ -74,13 +71,7 @@ export function TasksPage() {
   )
 
   const relatedOptions = useMemo(() => {
-    if (form.relatedType === 'history') {
-      return [
-        { value: '', label: 'Selecione o projeto' },
-        ...historyProjects.map((p) => ({ value: p.id, label: p.name })),
-      ]
-    }
-    if (form.relatedType === 'music') {
+    if (form.relatedType === 'music' || form.relatedType === 'history') {
       return [
         { value: '', label: 'Selecione o projeto' },
         ...musicProjects.map((p) => ({ value: p.id, label: p.name })),
@@ -93,7 +84,7 @@ export function TasksPage() {
       ]
     }
     return [{ value: '', label: 'Sem relacionamento' }]
-  }, [form.relatedType, historyProjects, musicProjects, channels])
+  }, [form.relatedType, musicProjects, channels])
 
   function openCreate() {
     setEditing(null)
@@ -157,7 +148,7 @@ export function TasksPage() {
       await load()
       notifyTasksChanged()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao salvar tarefa', 'error')
+      pushError(error, 'Falha ao salvar tarefa')
     } finally {
       setSaving(false)
     }
@@ -170,7 +161,7 @@ export function TasksPage() {
       await load()
       notifyTasksChanged()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao atualizar tarefa', 'error')
+      pushError(error, 'Falha ao atualizar tarefa')
     }
   }
 
@@ -183,7 +174,7 @@ export function TasksPage() {
       await load()
       notifyTasksChanged()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao excluir tarefa', 'error')
+      pushError(error, 'Falha ao excluir tarefa')
     }
   }
 

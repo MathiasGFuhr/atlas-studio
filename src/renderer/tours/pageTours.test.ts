@@ -3,12 +3,6 @@ import { matchPageTour } from './pageTours'
 
 describe('matchPageTour', () => {
   it('reconhece as telas principais', () => {
-    expect(matchPageTour('/historia')).toBe('history-projects')
-    expect(matchPageTour('/historia/projetos/abc')).toBe('history-project')
-    expect(matchPageTour('/historia/criar')).toBe('create-script')
-    expect(matchPageTour('/historia/roteiros')).toBe('scripts')
-    expect(matchPageTour('/historia/roteiros/abc')).toBe('script-detail')
-    expect(matchPageTour('/historia/nichos')).toBe('niches')
     expect(matchPageTour('/musica')).toBe('music-projects')
     expect(matchPageTour('/musica/faixas')).toBe('music-tracks')
     expect(matchPageTour('/musica/faixas/abc')).toBe('music-editor')
@@ -27,5 +21,6 @@ describe('matchPageTour', () => {
   it('ignora o início e rotas desconhecidas', () => {
     expect(matchPageTour('/')).toBeNull()
     expect(matchPageTour('/chat')).toBeNull()
+    expect(matchPageTour('/historia')).toBeNull()
   })
 })

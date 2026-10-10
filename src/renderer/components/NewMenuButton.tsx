@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { BookOpen, CheckSquare, Music2, Plus, Tv } from 'lucide-react'
+import { CheckSquare, Music2, Plus, Tv } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { createMenuAreaFromPath, createMenuOrder, type CreateMenuId } from '@shared/createMenu'
 import { filterCreateMenuItems } from '@shared/workspaceCapabilities'
 import { Button } from './Button'
 import { useCreateActions } from './CreateActionsProvider'
 import { cn } from '../lib/utils'
-import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 
-const LABELS: Record<CreateMenuId, { label: string; icon: typeof BookOpen }> = {
-  history: { label: 'Projeto de História', icon: BookOpen },
+const LABELS: Record<CreateMenuId, { label: string; icon: typeof Music2 }> = {
   music: { label: 'Projeto de Música', icon: Music2 },
   channel: { label: 'Canal', icon: Tv },
   task: { label: 'Tarefa', icon: CheckSquare },
@@ -18,14 +16,13 @@ const LABELS: Record<CreateMenuId, { label: string; icon: typeof BookOpen }> = {
 export function NewMenuButton() {
   const location = useLocation()
   const { openCreate } = useCreateActions()
-  const { capabilities } = useWorkspaceCapabilities()
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
 
   const items = filterCreateMenuItems(
     createMenuOrder(createMenuAreaFromPath(location.pathname)),
-    capabilities,
+    { musicEnabled: true },
   )
 
   const close = useCallback(() => setOpen(false), [])

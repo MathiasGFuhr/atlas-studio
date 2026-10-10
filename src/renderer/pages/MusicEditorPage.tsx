@@ -117,7 +117,7 @@ export function MusicEditorPage() {
   const { id } = useParams()
   const api = getAtlasApi()
   const navigate = useNavigate()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const samplesRef = useRef<Float32Array | null>(null)
@@ -261,7 +261,7 @@ export function MusicEditorPage() {
         }
       } catch (error) {
         if (!cancelled) {
-          push(error instanceof Error ? error.message : 'Não foi possível abrir a música', 'error')
+          pushError(error, 'Não foi possível abrir a música')
           navigate('/musica/faixas')
         }
       } finally {
@@ -402,7 +402,7 @@ export function MusicEditorPage() {
       playAuthorizedRef.current = false
       setPlaying(false)
       if (error instanceof DOMException && error.name === 'AbortError') return
-      push(error instanceof Error ? error.message : 'Não foi possível reproduzir o áudio', 'error')
+      pushError(error, 'Não foi possível reproduzir o áudio')
     }
   }
 
@@ -580,7 +580,7 @@ export function MusicEditorPage() {
         push('Corte exportado.', 'success')
       }
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao exportar o corte', 'error')
+      pushError(error, 'Falha ao exportar o corte')
     } finally {
       setBusy(false)
     }
@@ -603,7 +603,7 @@ export function MusicEditorPage() {
         if (folder) setExportFolder(folder)
       }
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao exportar os cortes', 'error')
+      pushError(error, 'Falha ao exportar os cortes')
     } finally {
       setBusy(false)
     }

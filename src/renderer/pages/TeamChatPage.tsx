@@ -9,7 +9,7 @@ import { cn } from '../lib/utils'
 
 export function TeamChatPage({ account }: { account: AtlasAccount }) {
   const api = getAtlasApi()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const [messages, setMessages] = useState<TeamChatMessage[]>([])
   const [online, setOnline] = useState<TeamChatPeer[]>([])
   const [draft, setDraft] = useState('')
@@ -58,7 +58,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
         return [...current, message]
       })
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Não foi possível enviar.', 'error')
+      pushError(error, 'Não foi possível enviar.')
     } finally {
       setSending(false)
     }

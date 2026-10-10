@@ -30,8 +30,8 @@ export function HomeScheduledVideoCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const channelType = video.channelType === 'music' ? 'music' : video.channelType === 'history' ? 'history' : null
-  const TypeIcon = channelType === 'music' ? Music2 : BookOpen
+  const channelType = video.channelType === 'music' ? 'music' : null
+  const TypeIcon = Music2
   const date = dateParts(video.scheduledDate)
 
   useEffect(() => {

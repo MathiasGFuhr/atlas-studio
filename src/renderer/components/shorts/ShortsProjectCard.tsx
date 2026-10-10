@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Clapperboard, FolderOpen, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Clapperboard, FolderOpen, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import type { ShortsJob } from '@shared/shorts'
 import { formatShortsTimecode } from '@shared/shorts'
 import {
@@ -26,19 +26,24 @@ export function ShortsProjectCard({
   onOpen,
   onRename,
   onDelete,
+  analyzing = false,
+  statusLabel,
 }: {
   project: ShortsJob
   onOpen: () => void
   onRename: () => void
   onDelete: () => void
+  analyzing?: boolean
+  statusLabel?: string
 }) {
   const api = getAtlasApi()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const [menuOpen, setMenuOpen] = useState(false)
   const [thumbnailUrl, setThumbnailUrl] = useState(project.thumbnailUrl)
   const menuRef = useRef<HTMLDivElement>(null)
   const exported = exportedShortsCount(project.clips)
   const duration = project.probe?.duration ?? 0
+  const resolvedStatusLabel = statusLabel ?? shortsProjectStatusLabel(project)
 
   useEffect(() => {
     setThumbnailUrl(project.thumbnailUrl)
@@ -71,7 +76,7 @@ export function ShortsProjectCard({
     try {
       await api.shorts.openExportsFolder(project.id)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Não foi possível abrir a pasta de exports.', 'error')
+      pushError(error, 'Não foi possível abrir a pasta de exports.')
     }
   }
 
@@ -167,7 +172,12 @@ export function ShortsProjectCard({
         <p className="mt-2 text-xs font-medium text-muted">{shortsProfileLabel(project.profile)}</p>
         <div className="mt-2 space-y-1 text-xs text-muted">
           <p>Vídeo: {duration ? formatShortsTimecode(duration) : '—'}</p>
-          {project.clips.length ? (
+          {analyzing ? (
+            <p className="flex items-center gap-1.5 font-medium text-accent">
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+              <span className="truncate">{resolvedStatusLabel}</span>
+            </p>
+          ) : project.clips.length ? (
             <>
               <p>
                 {project.clips.length} {project.clips.length === 1 ? 'Short' : 'Shorts'}
@@ -177,7 +187,7 @@ export function ShortsProjectCard({
               </p>
             </>
           ) : (
-            <p>{shortsProjectStatusLabel(project)}</p>
+            <p>{resolvedStatusLabel}</p>
           )}
         </div>
         <p className="mt-2 text-xs text-muted-2">{formatEditedLabel(project.updatedAt)}</p>

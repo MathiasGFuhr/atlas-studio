@@ -79,7 +79,7 @@ export function createFromSourceVideoWith(
     sourcePath,
     sourceName: input.sourceName,
     projectId: input.projectId ?? null,
-    profile: input.profile ?? 'history',
+    profile: input.profile ?? 'music',
     probe: input.probe ?? null,
   })
   const resolved = resolveContentLanguage({

@@ -23,7 +23,7 @@ export const INTRO_TOUR_STEPS: TourStep[] = [
     icon: Sparkles,
     kicker: 'Primeiro acesso',
     title: 'Bem-vindo ao Atlas Studio',
-    body: 'O Atlas é o estúdio da sua produção. Roteiro, música, agenda e pendências ficam no mesmo lugar, no ritmo do canal.',
+    body: 'O Atlas é o estúdio da sua produção musical. Faixas, cortes, prompts, agenda e pendências ficam no mesmo lugar.',
     note: 'O passeio leva menos de um minuto. Esc pula, e dá para rever em Configurações.',
   },
   {
@@ -32,7 +32,7 @@ export const INTRO_TOUR_STEPS: TourStep[] = [
     icon: PanelLeft,
     kicker: 'Navegação',
     title: 'O mapa do estúdio',
-    body: 'O canal ativo fica no topo: calendário e atalhos seguem essa escolha. Abaixo estão Início, História, Música, Canais, Shorts Studio e Tarefas.',
+    body: 'O canal ativo fica no topo: calendário e atalhos seguem essa escolha. Abaixo estão Início, Música, Prompts, Canais, Shorts Studio e Tarefas.',
   },
   {
     id: 'topbar',
@@ -40,15 +40,15 @@ export const INTRO_TOUR_STEPS: TourStep[] = [
     icon: Search,
     kicker: 'Atalhos',
     title: 'Busque, crie e abra a conta',
-    body: 'A busca encontra projetos, roteiros, canais e temas. Novo cria projeto, canal ou tarefa a partir de qualquer tela. O perfil abre as configurações.',
+    body: 'A busca encontra projetos, canais e faixas. Novo cria projeto, canal ou tarefa a partir de qualquer tela. O perfil abre as configurações.',
   },
   {
     id: 'modules',
     target: '[data-tour="modules"]',
     icon: Layers,
     kicker: 'Produção',
-    title: 'História e Música',
-    body: 'História concentra pesquisa, roteiro e revisão. Música organiza projeto, faixa, corte e prompt. A agenda e as pendências do dia ficam logo abaixo.',
+    title: 'Música',
+    body: 'Música organiza projeto, faixa, corte e prompt. A agenda e as pendências do dia ficam logo abaixo.',
   },
   {
     id: 'ai',
@@ -56,7 +56,7 @@ export const INTRO_TOUR_STEPS: TourStep[] = [
     icon: Wand2,
     kicker: 'Inteligência',
     title: 'Conecte a IA do Atlas',
-    body: 'Este cartão mostra se o Codex e o Antigravity estão prontos. Com eles, o Atlas pesquisa, escreve, revisa e analisa títulos. A vinculação fica em Configurações.',
+    body: 'Este cartão mostra se o Codex e o Antigravity estão prontos. Com eles, o Atlas corta, analisa e sugere títulos. A vinculação fica em Configurações.',
   },
   {
     id: 'chat',
@@ -64,7 +64,7 @@ export const INTRO_TOUR_STEPS: TourStep[] = [
     icon: MessageSquare,
     kicker: 'Assistente',
     title: 'Fale com o Atlas',
-    body: 'Este botão abre o chat. Peça um roteiro, uma revisão ou uma ideia. O assistente acompanha o que você está produzindo.',
+    body: 'Este botão abre o chat. Peça um corte, um prompt ou uma ideia. O assistente acompanha o que você está produzindo.',
   },
   {
     id: 'done',

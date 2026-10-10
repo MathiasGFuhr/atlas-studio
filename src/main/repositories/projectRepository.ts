@@ -35,7 +35,7 @@ function mapProject(row: ProjectRow): Project {
     id: row.id,
     name: row.name,
     description: row.description ?? '',
-    projectType: isProjectType(row.project_type) ? row.project_type : 'history',
+    projectType: 'music',
     channelId,
     channelName: row.channel_name ?? null,
     projectFolderPath: folderPath,
@@ -131,7 +131,7 @@ export const projectRepository = {
     const rows = getDb()
       .prepare('SELECT project_type, COUNT(*) AS c FROM projects GROUP BY project_type')
       .all() as Array<{ project_type: string; c: number }>
-    const counts: Record<ProjectType, number> = { history: 0, music: 0 }
+    const counts: Record<ProjectType, number> = { music: 0 }
     for (const row of rows) {
       if (isProjectType(row.project_type)) counts[row.project_type] = Number(row.c)
     }

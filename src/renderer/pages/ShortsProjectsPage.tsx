@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Clapperboard, Plus, Search } from 'lucide-react'
+import { Clapperboard, Loader2, Plus, Search } from 'lucide-react'
 import type { ShortsJob } from '@shared/shorts'
+import { mergeShortsJobSnapshot, shortsAnalyzeProgressLabel } from '@shared/shortsGeneration'
 import {
   exportedShortsCount,
   matchesShortsProjectSearch,
   shortsProjectDeleteMessage,
+  shortsProjectStatusLabel,
 } from '@shared/shortsProject'
 import type { ShortsImportResult } from '@shared/shortsProjectIdentity'
 import { PageHeader } from '../components/PageHeader'
@@ -17,13 +19,16 @@ import { ConfirmDialog, Modal } from '../components/Modal'
 import { ShortsProjectCard } from '../components/shorts/ShortsProjectCard'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
+import { useShortsGeneration } from '../hooks/useShortsGeneration'
 
 export function ShortsProjectsPage() {
   const api = getAtlasApi()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const projectId = params.get('projectId')
-  const { push } = useToast()
+  const { push, pushError } = useToast()
+  const generation = useShortsGeneration()
+  const wasGeneratingRef = useRef(false)
 
   const [projects, setProjects] = useState<ShortsJob[]>([])
   const [query, setQuery] = useState('')
@@ -42,13 +47,26 @@ export function ShortsProjectsPage() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (wasGeneratingRef.current && !generation.hasActiveAnalysis) {
+      void load()
+    }
+    wasGeneratingRef.current = generation.hasActiveAnalysis
+  }, [generation.hasActiveAnalysis, load])
+
+  const liveProjects = useMemo(
+    () =>
+      projects.map((project) => mergeShortsJobSnapshot(project, generation.jobFor(project.id)) ?? project),
+    [generation, projects],
+  )
+
   const visible = useMemo(
-    () => projects.filter((project) => matchesShortsProjectSearch(project, query)),
-    [projects, query],
+    () => liveProjects.filter((project) => matchesShortsProjectSearch(project, query)),
+    [liveProjects, query],
   )
   const exportedTotal = useMemo(
-    () => projects.reduce((sum, project) => sum + exportedShortsCount(project.clips), 0),
-    [projects],
+    () => liveProjects.reduce((sum, project) => sum + exportedShortsCount(project.clips), 0),
+    [liveProjects],
   )
 
   function editorPath(id: string) {
@@ -67,7 +85,7 @@ export function ShortsProjectsPage() {
       push('Projeto criado. O arquivo original permanece no lugar.', 'success')
       navigate(editorPath(result.project.id))
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao criar o projeto de Shorts', 'error')
+      pushError(error, 'Falha ao criar o projeto de Shorts')
     } finally {
       setBusy(false)
     }
@@ -93,7 +111,7 @@ export function ShortsProjectsPage() {
       push('Novo projeto criado a partir do mesmo vídeo.', 'success')
       navigate(editorPath(result.project.id))
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao criar o projeto de Shorts', 'error')
+      pushError(error, 'Falha ao criar o projeto de Shorts')
     } finally {
       setBusy(false)
     }
@@ -114,7 +132,7 @@ export function ShortsProjectsPage() {
       setRenaming(null)
       push('Projeto renomeado.', 'success')
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao renomear o projeto', 'error')
+      pushError(error, 'Falha ao renomear o projeto')
     }
   }
 
@@ -126,7 +144,7 @@ export function ShortsProjectsPage() {
       setDeleting(null)
       push('Projeto excluído. O vídeo original e os exports foram preservados.', 'success')
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao excluir o projeto', 'error')
+      pushError(error, 'Falha ao excluir o projeto')
     }
   }
 
@@ -153,13 +171,23 @@ export function ShortsProjectsPage() {
         </Button>
       </div>
 
-      {projects.length > 0 ? (
+      {liveProjects.length > 0 ? (
         <p className="mb-4 text-xs text-muted-2">
-          {projects.length} {projects.length === 1 ? 'projeto' : 'projetos'}
+          {liveProjects.length} {liveProjects.length === 1 ? 'projeto' : 'projetos'}
           {exportedTotal > 0
             ? ` · ${exportedTotal} ${exportedTotal === 1 ? 'Short exportado' : 'Shorts exportados'}`
             : ''}
         </p>
+      ) : null}
+
+      {generation.hasActiveAnalysis ? (
+        <Card padding="sm" className="mb-4 flex items-center gap-2 text-sm text-accent">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          <span>
+            Geração de Shorts em andamento. Você pode navegar pelo Atlas; o progresso continua em
+            segundo plano.
+          </span>
+        </Card>
       ) : null}
 
       {visible.length === 0 ? (
@@ -186,18 +214,30 @@ export function ShortsProjectsPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {visible.map((project) => (
-            <ShortsProjectCard
-              key={project.id}
-              project={project}
-              onOpen={() => navigate(editorPath(project.id))}
-              onRename={() => {
-                setRenaming(project)
-                setRenameValue(project.name)
-              }}
-              onDelete={() => setDeleting(project)}
-            />
-          ))}
+          {visible.map((project) => {
+            const analyzing =
+              generation.isAnalyzing(project.id) || project.status === 'analyzing'
+            const progress = generation.progressFor(project.id)
+            const statusLabel = analyzing
+              ? progress
+                ? shortsAnalyzeProgressLabel(progress)
+                : 'Gerando Shorts...'
+              : shortsProjectStatusLabel(project)
+            return (
+              <ShortsProjectCard
+                key={project.id}
+                project={project}
+                analyzing={analyzing}
+                statusLabel={statusLabel}
+                onOpen={() => navigate(editorPath(project.id))}
+                onRename={() => {
+                  setRenaming(project)
+                  setRenameValue(project.name)
+                }}
+                onDelete={() => setDeleting(project)}
+              />
+            )
+          })}
         </div>
       )}
 

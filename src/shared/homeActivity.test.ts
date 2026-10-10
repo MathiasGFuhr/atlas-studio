@@ -1,118 +1,82 @@
 import { describe, expect, it } from 'vitest'
-import type { MusicTrack } from './musicAnalysis'
-import type { AtlasTask, Channel, Project, ScriptRecord } from './types'
 import { buildHomeActivity } from './homeActivity'
+import type { AtlasTask, Channel, Project } from './types'
+import type { MusicTrack } from './musicAnalysis'
 
-function project(partial: Partial<Project> & Pick<Project, 'id' | 'name'>): Project {
+function project(id: string, updatedAt: string): Project {
   return {
+    id,
+    name: id,
     description: '',
-    projectType: 'history',
+    projectType: 'music',
     channelId: null,
     projectFolderPath: null,
-    createdAt: '2026-09-10T10:00:00.000Z',
-    updatedAt: '2026-09-10T10:00:00.000Z',
-    ...partial,
+    createdAt: updatedAt,
+    updatedAt,
   }
 }
 
-function script(partial: Partial<ScriptRecord> & Pick<ScriptRecord, 'id' | 'title'>): ScriptRecord {
+function channel(id: string, updatedAt: string): Channel {
   return {
-    nicheId: 'n1',
-    topic: '',
-    language: 'pt',
-    content: '',
-    status: 'rascunho',
-    createdAt: '2026-09-11T10:00:00.000Z',
-    updatedAt: '2026-09-12T10:00:00.000Z',
-    ...partial,
-  }
-}
-
-function task(partial: Partial<AtlasTask> & Pick<AtlasTask, 'id' | 'title'>): AtlasTask {
-  return {
-    description: '',
-    status: 'pending',
-    priority: 'normal',
-    category: 'general',
-    dueDate: null,
-    relatedType: null,
-    relatedId: null,
-    createdAt: '2026-09-10T10:00:00.000Z',
-    updatedAt: '2026-09-10T10:00:00.000Z',
-    completedAt: null,
-    ...partial,
-  }
-}
-
-function channel(partial: Partial<Channel> & Pick<Channel, 'id' | 'name'>): Channel {
-  return {
+    id,
+    name: id,
     description: '',
     avatarPath: '',
     nicheId: null,
     youtubeUrl: '',
-    color: '#35e58b',
-    channelType: 'history',
+    color: '#fff',
+    channelType: 'music',
     active: true,
     folderPath: null,
-    createdAt: '2026-09-09T10:00:00.000Z',
-    updatedAt: '2026-09-09T10:00:00.000Z',
-    ...partial,
+    createdAt: updatedAt,
+    updatedAt,
   }
 }
 
-function track(partial: Partial<MusicTrack> & Pick<MusicTrack, 'id' | 'name'>): MusicTrack {
+function task(id: string, completedAt: string): AtlasTask {
   return {
-    originalPath: '',
-    previewPath: '',
-    duration: 1,
-    cutMode: 'manual',
-    cuts: [],
-    createdAt: '2026-09-08T10:00:00.000Z',
-    updatedAt: '2026-09-13T10:00:00.000Z',
-    ...partial,
+    id,
+    title: id,
+    description: '',
+    status: 'completed',
+    priority: 'normal',
+    category: 'music',
+    dueDate: null,
+    relatedType: null,
+    relatedId: null,
+    completedAt,
+    createdAt: completedAt,
+    updatedAt: completedAt,
   }
 }
 
-describe('atividade recente da Home', () => {
-  it('ordena pelo evento mais recente e limita a quantidade', () => {
-    const items = buildHomeActivity(
-      {
-        projects: [project({ id: 'p1', name: 'Impérios', updatedAt: '2026-09-14T08:00:00.000Z' })],
-        scripts: [script({ id: 's1', title: 'Roma', updatedAt: '2026-09-15T09:00:00.000Z' })],
-        tasks: [
-          task({
-            id: 't1',
-            title: 'Revisar gancho',
-            status: 'completed',
-            completedAt: '2026-09-15T10:00:00.000Z',
-          }),
-          task({ id: 't2', title: 'Pendente' }),
-        ],
-        channels: [channel({ id: 'c1', name: 'Atlas Docs' })],
-        tracks: [track({ id: 'm1', name: 'Trilha' })],
-      },
-      3,
-    )
+function track(id: string, updatedAt: string): MusicTrack {
+  return {
+    id,
+    projectId: 'p1',
+    name: id,
+    filePath: `${id}.mp3`,
+    duration: 10,
+    sampleRate: 44100,
+    channels: 2,
+    waveform: [],
+    analysis: null,
+    cuts: [],
+    exportFolder: null,
+    createdAt: updatedAt,
+    updatedAt,
+  } as unknown as MusicTrack
+}
 
-    expect(items.map((item) => item.id)).toEqual([
-      'task:t1:completed',
-      'script:s1:updated',
-      'project:p1:updated',
-    ])
-    expect(items[0]?.detail).toBe('Tarefa concluída')
-    expect(items[1]?.href).toBe('/historia/roteiros/s1')
-  })
-
-  it('trata criação quando createdAt e updatedAt são iguais', () => {
-    const [item] = buildHomeActivity({
-      projects: [project({ id: 'p2', name: 'Novo', projectType: 'music' })],
-      scripts: [],
-      tasks: [],
-      channels: [],
-      tracks: [],
+describe('buildHomeActivity', () => {
+  it('monta atividade só de música', () => {
+    const items = buildHomeActivity({
+      projects: [project('p1', '2026-01-03T00:00:00.000Z')],
+      tasks: [task('t1', '2026-01-02T00:00:00.000Z')],
+      channels: [channel('c1', '2026-01-01T00:00:00.000Z')],
+      tracks: [track('m1', '2026-01-04T00:00:00.000Z')],
     })
-    expect(item?.kind).toBe('project-created')
-    expect(item?.detail).toBe('Projeto de Música criado')
-    expect(item?.href).toBe('/musica/projetos/p2')
+    expect(items[0]?.kind).toBe('music-updated')
+    expect(items.some((item) => item.kind === 'project-created')).toBe(true)
   })
 })

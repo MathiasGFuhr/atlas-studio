@@ -24,7 +24,7 @@ describe('shortsAnalysis', () => {
       },
     })
     const history = buildShortsAnalysisPrompt({
-      profile: 'history',
+      profile: 'music',
       duration: 240,
       clipCount: 3,
       requestedDuration: 30,
@@ -50,10 +50,8 @@ describe('shortsAnalysis', () => {
     expect(music).toContain('candidatos fortes e temporalmente distintos')
     expect(music).not.toContain('virada narrativa')
 
-    expect(history).toContain('Perfil editorial: HISTÓRIA')
-    expect(history).toContain('gancho')
-    expect(history).toContain('unidade narrativa')
-    expect(history).not.toContain('clímax vocal')
+    expect(history).toContain('Perfil editorial: MÚSICA')
+    expect(history).toContain('refrão')
   })
 
   it('no modo aproximado preserva um refrão um pouco maior que o pedido', () => {

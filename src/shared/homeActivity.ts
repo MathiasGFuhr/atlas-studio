@@ -1,14 +1,13 @@
 import type { MusicTrack } from './musicAnalysis'
-import type { AtlasTask, Channel, Project, ProjectType, ScriptRecord } from './types'
+import type { AtlasTask, Channel, Project } from './types'
 
-function projectHref(type: ProjectType, id: string): string {
-  return type === 'music' ? `/musica/projetos/${id}` : `/historia/projetos/${id}`
+function projectHref(id: string): string {
+  return `/musica/projetos/${id}`
 }
 
 export type HomeActivityKind =
   | 'project-created'
   | 'project-updated'
-  | 'script-updated'
   | 'task-completed'
   | 'channel-created'
   | 'music-updated'
@@ -32,23 +31,9 @@ function projectActivity(project: Project): HomeActivityItem {
     id: `project:${project.id}:${created ? 'created' : 'updated'}`,
     kind: created ? 'project-created' : 'project-updated',
     title: project.name,
-    detail: created
-      ? `Projeto de ${project.projectType === 'music' ? 'Música' : 'História'} criado`
-      : `Projeto de ${project.projectType === 'music' ? 'Música' : 'História'} atualizado`,
+    detail: created ? 'Projeto de Música criado' : 'Projeto de Música atualizado',
     at: created ? project.createdAt : project.updatedAt,
-    href: projectHref(project.projectType, project.id),
-  }
-}
-
-function scriptActivity(script: ScriptRecord): HomeActivityItem {
-  const created = isCreateEvent(script.createdAt, script.updatedAt)
-  return {
-    id: `script:${script.id}:${created ? 'created' : 'updated'}`,
-    kind: 'script-updated',
-    title: script.title,
-    detail: created ? 'Roteiro criado' : 'Roteiro atualizado',
-    at: created ? script.createdAt : script.updatedAt,
-    href: `/historia/roteiros/${script.id}`,
+    href: projectHref(project.id),
   }
 }
 
@@ -91,7 +76,6 @@ function musicActivity(track: MusicTrack): HomeActivityItem {
 export function buildHomeActivity(
   input: {
     projects: Project[]
-    scripts: ScriptRecord[]
     tasks: AtlasTask[]
     channels: Channel[]
     tracks: MusicTrack[]
@@ -100,7 +84,6 @@ export function buildHomeActivity(
 ): HomeActivityItem[] {
   const items: HomeActivityItem[] = [
     ...input.projects.map(projectActivity),
-    ...input.scripts.map(scriptActivity),
     ...input.tasks.map(taskActivity).filter((item): item is HomeActivityItem => Boolean(item)),
     ...input.channels.map(channelActivity),
     ...input.tracks.map(musicActivity),

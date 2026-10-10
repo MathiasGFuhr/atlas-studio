@@ -156,28 +156,13 @@ export function buildLocalShortsCandidates(input: {
     }
   }
 
-  if (input.analysis && input.analysis.energy.length > 0 && input.profile === 'history') {
-    const step = Math.max(1.4, target * 0.4)
-    for (let t = 0; t + bounds.min <= duration; t += step) {
-      const window = makeWindow(duration, t, target, 'start')
-      const energy = windowEnergy(input.analysis, window.start, window.end)
-      pushCandidate(raw, {
-        start: window.start,
-        end: window.end,
-        score: Math.round(clamp(46 + energy * 140, 46, 84)),
-        reason: 'Trecho com energia de fala/áudio mais alta',
-        source: 'energy',
-      })
-    }
-  }
-
   for (const scene of input.scenes ?? []) {
     const window = makeWindow(duration, scene.time, target, 'start')
     pushCandidate(raw, {
       start: window.start,
       end: window.end,
-      score: input.profile === 'history' ? 74 : 66,
-      reason: input.profile === 'history' ? 'Mudança de cena / virada visual' : 'Corte de cena próximo de um climax',
+      score: 66,
+      reason: 'Corte de cena próximo de um climax',
       source: 'scene',
     })
   }

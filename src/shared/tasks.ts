@@ -12,13 +12,11 @@ export const TASK_PRIORITIES: TaskPriority[] = ['low', 'normal', 'high', 'urgent
 export const TASK_CATEGORIES: TaskCategory[] = [
   'general',
   'channel',
-  'history',
   'music',
-  'script',
   'audio',
   'publishing',
 ]
-export const TASK_RELATED_TYPES: TaskRelatedType[] = ['history', 'music', 'channel']
+export const TASK_RELATED_TYPES: TaskRelatedType[] = ['music', 'channel']
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   pending: 'Pendente',
@@ -35,15 +33,15 @@ export const TASK_PRIORITY_LABEL: Record<TaskPriority, string> = {
 export const TASK_CATEGORY_LABEL: Record<TaskCategory, string> = {
   general: 'Geral',
   channel: 'Canal',
-  history: 'História',
+  history: 'Música',
   music: 'Música',
-  script: 'Roteiro',
+  script: 'Áudio',
   audio: 'Áudio',
   publishing: 'Publicação',
 }
 
 export const TASK_RELATED_LABEL: Record<TaskRelatedType, string> = {
-  history: 'Projeto de História',
+  history: 'Projeto de Música',
   music: 'Projeto de Música',
   channel: 'Canal',
 }

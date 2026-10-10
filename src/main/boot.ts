@@ -10,9 +10,7 @@ import { createAtlasActionRegistry } from './services/actions/registerAtlasActio
 import { ChatService } from './services/chat/ChatService'
 import { createAgentModelCatalog } from './services/agents/createAgentModelCatalog'
 import { getWorkspaceRoot } from './paths'
-import { generationRunRepository } from './repositories/generationRunRepository'
 import { settingsRepository } from './repositories/settingsRepository'
-import { syncSkillLibrary } from './services/skills/SkillLibrarySync'
 import { registerAtlasMediaProtocol } from './services/media/atlasMediaProtocol'
 
 let mainWindow: BrowserWindow | null = null
@@ -72,10 +70,6 @@ export async function bootAtlasApp(): Promise<{
   await initDatabase(workspaceRoot)
   registerAtlasMediaProtocol()
   migratePackagedPaths(workspaceRoot)
-  const synced = syncSkillLibrary()
-  console.log(
-    `[atlas][skills] biblioteca sincronizada: ${synced.total} skills, ${synced.nichesCreated} nichos novos`,
-  )
 
   runtimeManager = new CodexRuntimeManager({
     getWindow: getMainWindow,
@@ -132,11 +126,6 @@ export async function bootAtlasApp(): Promise<{
       void agentModelCatalog.refresh('antigravity')
     })
     .catch(() => undefined)
-
-  const interrupted = generationRunRepository.markInterruptedAbandoned(2)
-  if (interrupted > 0) {
-    console.log(`[atlas] marked ${interrupted} abandoned generation run(s) as interrupted`)
-  }
 
   return {
     workspaceRoot,

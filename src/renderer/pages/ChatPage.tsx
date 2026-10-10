@@ -64,7 +64,7 @@ export function ChatPage({
 }) {
   const api = getAtlasApi()
   const navigate = useNavigate()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
 
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -269,7 +269,7 @@ export function ChatPage({
       await loadConversation(result.conversation.id)
       notifyFromActions(result.assistantMessage)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Não foi possível enviar a mensagem.', 'error')
+      pushError(error, 'Não foi possível enviar a mensagem.')
       setAttachments(pendingAttachments)
     } finally {
       setSending(false)
@@ -286,7 +286,7 @@ export function ChatPage({
       await loadConversation(result.conversation.id)
       if (accepted) notifyFromActions(result.assistantMessage)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Não foi possível confirmar.', 'error')
+      pushError(error, 'Não foi possível confirmar.')
     } finally {
       setConfirming(false)
     }
@@ -351,7 +351,7 @@ export function ChatPage({
         return [...byPath.values()]
       })
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao anexar arquivo.', 'error')
+      pushError(error, 'Falha ao anexar arquivo.')
     }
   }
 

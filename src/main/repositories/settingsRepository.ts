@@ -3,6 +3,7 @@ import { getDb } from '../db/database'
 import type { AppSettings } from '../../shared/types'
 import { CHAT_DOCK_DEFAULT_HEIGHT, CHAT_DOCK_DEFAULT_WIDTH } from '../../shared/chat/chatDockSize'
 import { normalizeNotificationReadKeys } from '../../shared/notifications'
+import { DEFAULT_WORLD_CLOCKS, normalizeWorldClocks } from '../../shared/worldClocks'
 import {
   isRealCodexModelId,
   readConfiguredEffort,
@@ -62,6 +63,7 @@ const DEFAULTS: AppSettings = {
   chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
   chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
   musicExportFolder: '',
+  worldClocks: DEFAULT_WORLD_CLOCKS.map((clock) => ({ ...clock })),
 }
 
 export const settingsRepository = {
@@ -110,6 +112,7 @@ export const settingsRepository = {
     settings.seenProductTours = Array.isArray(settings.seenProductTours)
       ? settings.seenProductTours.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
       : []
+    settings.worldClocks = normalizeWorldClocks(settings.worldClocks)
 
     return settings
   },

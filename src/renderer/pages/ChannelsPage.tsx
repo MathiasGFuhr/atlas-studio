@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, CheckCircle2, FolderOpen, MessageSquareText, Plus, Search, Trash2, Tv } from 'lucide-react'
-import type { Channel, Niche } from '@shared/types'
+import type { Channel } from '@shared/types'
 import { PROJECT_TYPE_LABEL } from '@shared/types'
 import { channelAgendaPath, channelPublishedPath } from '@shared/channelVideos'
 import { PageHeader } from '../components/PageHeader'
@@ -21,7 +21,6 @@ import { useToast } from '../components/Toast'
 import { MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { ENVIRONMENTS } from '../lib/environments'
 import { notifyChannelsChanged } from '../lib/channelEvents'
-import { useWorkspaceCapabilities } from '../hooks/useWorkspaceCapabilities'
 
 function folderTail(folderPath: string): string {
   const parts = folderPath.split(/[/\\]/).filter(Boolean)
@@ -35,10 +34,8 @@ function folderPrompt(channel: Channel): string {
 export function ChannelsPage() {
   const api = getAtlasApi()
   const navigate = useNavigate()
-  const { push } = useToast()
-  const { capabilities } = useWorkspaceCapabilities()
+  const { push, pushError } = useToast()
   const [channels, setChannels] = useState<Channel[]>([])
-  const [niches, setNiches] = useState<Niche[]>([])
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Channel | null>(null)
@@ -47,12 +44,8 @@ export function ChannelsPage() {
   const [form, setForm] = useState<ChannelFormValues>(EMPTY_CHANNEL_FORM)
 
   async function load() {
-    const [list, nicheList] = await Promise.all([
-      api.channels.list({ query: query || undefined }),
-      api.niches.list(),
-    ])
+    const list = await api.channels.list({ query: query || undefined })
     setChannels(list)
-    setNiches(nicheList)
   }
 
   useEffect(() => {
@@ -76,7 +69,7 @@ export function ChannelsPage() {
       nicheId: channel.nicheId ?? '',
       youtubeUrl: channel.youtubeUrl,
       color: channel.color || CHANNEL_COLORS[0],
-      channelType: channel.channelType ?? 'history',
+      channelType: 'music',
       active: channel.active,
       folderPath: channel.folderPath ?? null,
     })
@@ -94,7 +87,7 @@ export function ChannelsPage() {
         const updated = await api.channels.get(editing.id)
         if (updated) setEditing(updated)
       } catch (error) {
-        push(error instanceof Error ? error.message : 'Falha ao salvar a foto', 'error')
+        pushError(error, 'Falha ao salvar a foto')
       }
       return
     }
@@ -135,7 +128,7 @@ export function ChannelsPage() {
       notifyChannelsChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao salvar canal', 'error')
+      pushError(error, 'Falha ao salvar canal')
     }
   }
 
@@ -154,7 +147,7 @@ export function ChannelsPage() {
       notifyChannelsChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao vincular a pasta', 'error')
+      pushError(error, 'Falha ao vincular a pasta')
     }
   }
 
@@ -163,7 +156,7 @@ export function ChannelsPage() {
     try {
       await api.system.openPath(channel.folderPath)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao abrir a pasta', 'error')
+      pushError(error, 'Falha ao abrir a pasta')
     }
   }
 
@@ -176,7 +169,7 @@ export function ChannelsPage() {
       notifyChannelsChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao remover canal', 'error')
+      pushError(error, 'Falha ao remover canal')
     }
   }
 
@@ -209,15 +202,13 @@ export function ChannelsPage() {
           >
             Publicados
           </Button>
-          {capabilities.musicEnabled ? (
-            <Button
-              variant="secondary"
-              icon={<MessageSquareText className="h-4 w-4" />}
-              onClick={() => navigate(MUSIC_PROMPTS_PATH)}
-            >
-              Prompts
-            </Button>
-          ) : null}
+          <Button
+            variant="secondary"
+            icon={<MessageSquareText className="h-4 w-4" />}
+            onClick={() => navigate(MUSIC_PROMPTS_PATH)}
+          >
+            Prompts
+          </Button>
           <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
             Novo canal
           </Button>
@@ -268,16 +259,10 @@ export function ChannelsPage() {
                 </span>
                 <span
                   className="min-w-0 truncate"
-                  style={{ color: ENVIRONMENTS[channel.channelType ?? 'history'].color }}
+                  style={{ color: ENVIRONMENTS.music.color }}
                 >
-                  {PROJECT_TYPE_LABEL[channel.channelType ?? 'history']}
+                  {PROJECT_TYPE_LABEL.music}
                 </span>
-                {capabilities.historyEnabled &&
-                (channels.some((item) => (item.channelType ?? 'history') === 'history') ||
-                  channels.length === 0) &&
-                channel.nicheName ? (
-                  <span className="min-w-0 truncate">Nicho: {channel.nicheName}</span>
-                ) : null}
               </div>
 
               <button
@@ -341,9 +326,9 @@ export function ChannelsPage() {
         open={modalOpen}
         editing={editing}
         form={form}
-        niches={niches}
+        niches={[]}
         pendingAvatar={pendingAvatar}
-        hideNiche={!capabilities.historyEnabled}
+        hideNiche
         onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
         onClose={() => setModalOpen(false)}
         onSubmit={() => void save()}

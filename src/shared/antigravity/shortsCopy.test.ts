@@ -40,7 +40,7 @@ describe('shortsCopy', () => {
       ],
     })
     const history = buildShortsCopiesPrompt({
-      profile: 'history',
+      profile: 'music',
       editorial: {
         language: 'pt-BR',
         contentLanguage: 'pt-BR',
@@ -82,12 +82,10 @@ describe('shortsCopy', () => {
     expect(music).toContain('Não gere título/descrição só com a análise global')
     expect(music).toContain('NÃO invente tema político')
 
-    expect(history).toContain('Perfil editorial: HISTÓRIA')
+    expect(history).toContain('Perfil editorial: MÚSICA')
     expect(history).toContain('idiomaObrigatorio: pt-BR')
     expect(history).toContain('contentLanguage: pt-BR')
     expect(history).toContain('Brazilian Portuguese')
-    expect(history).toContain('revelação')
-    expect(history).not.toContain('clímax')
   })
 
   it('pede títulos únicos e bloqueia genéricos', () => {

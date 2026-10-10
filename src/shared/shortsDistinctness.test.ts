@@ -28,7 +28,7 @@ describe('validateDistinctShorts', () => {
       videoDuration: 56.6,
       requestedDuration: 30,
       durationMode: 'approximate',
-      profile: 'history',
+      profile: 'music',
     })
     expect(result.clips.length).toBeGreaterThan(0)
     expect(result.clips.length).toBeLessThan(5)

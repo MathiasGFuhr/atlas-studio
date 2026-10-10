@@ -1,7 +1,9 @@
+import type { WorldClock } from './worldClocks'
+
 export type ScriptStatus = 'pronto' | 'em_revisao' | 'rascunho' | 'erro'
 export type ChannelVideoStatus = 'colocando' | 'editando' | 'agendando' | 'publicado'
 /** Ambiente de produção ao qual um projeto pertence. */
-export type ProjectType = 'history' | 'music'
+export type ProjectType = 'music'
 /** Classificação opcional de canais por ambiente. */
 export type ChannelType = ProjectType
 export type AntigravityAuthState =
@@ -17,15 +19,14 @@ export type DurationOption = '10' | '15' | '20' | '30' | 'custom'
 
 export type SkillValidationStatus = 'valid' | 'invalid' | 'warning'
 
-export const PROJECT_TYPES: ProjectType[] = ['history', 'music']
+export const PROJECT_TYPES: ProjectType[] = ['music']
 
 export function isProjectType(value: unknown): value is ProjectType {
-  return value === 'history' || value === 'music'
+  return value === 'music'
 }
 
 /** Rótulo do ambiente exibido na interface. */
 export const PROJECT_TYPE_LABEL: Record<ProjectType, string> = {
-  history: 'História',
   music: 'Música',
 }
 
@@ -510,6 +511,8 @@ export interface AppSettings {
   chatPanelHeight: number
   /** Última pasta usada para exportar cortes de música. */
   musicExportFolder: string
+  /** Fusos horários exibidos no topo do Início (upload por país/canal). */
+  worldClocks: WorldClock[]
 }
 
 export type CodexAuthState =
@@ -720,12 +723,6 @@ export const IPC = {
     linkFolder: 'projects:linkFolder',
     openFolder: 'projects:openFolder',
   },
-  niches: {
-    list: 'niches:list',
-    get: 'niches:get',
-    create: 'niches:create',
-    update: 'niches:update',
-  },
   channels: {
     list: 'channels:list',
     get: 'channels:get',
@@ -816,20 +813,6 @@ export const IPC = {
     openExportsFolder: 'shorts:openExportsFolder',
     progress: 'shorts:progress',
   },
-  skills: {
-    list: 'skills:list',
-    rescan: 'skills:rescan',
-    validate: 'skills:validate',
-  },
-  scripts: {
-    list: 'scripts:list',
-    get: 'scripts:get',
-    recent: 'scripts:recent',
-    summary: 'scripts:summary',
-    export: 'scripts:export',
-    saveVersion: 'scripts:saveVersion',
-    versions: 'scripts:versions',
-  },
   settings: {
     get: 'settings:get',
     update: 'settings:update',
@@ -877,13 +860,6 @@ export const IPC = {
     setDefaultModel: 'agents:setDefaultModel',
     setReasoningEffort: 'agents:setReasoningEffort',
     capabilitiesChanged: 'agents:capabilitiesChanged',
-  },
-  generation: {
-    start: 'generation:start',
-    adjust: 'generation:adjust',
-    cancel: 'generation:cancel',
-    progress: 'generation:progress',
-    interrupted: 'generation:interrupted',
   },
   chat: {
     listConversations: 'chat:listConversations',

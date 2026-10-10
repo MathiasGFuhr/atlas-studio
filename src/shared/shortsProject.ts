@@ -82,6 +82,7 @@ export function shortsProjectStatus(project: Pick<ShortsJob, 'status' | 'clips'>
 }
 
 export function shortsProjectStatusLabel(project: Pick<ShortsJob, 'status' | 'clips'>): string {
+  if (project.status === 'analyzing') return 'Gerando Shorts...'
   const status = shortsProjectStatus(project)
   if (status === 'error') return 'Erro'
   if (status === 'pending') return 'Análise pendente'

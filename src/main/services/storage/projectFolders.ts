@@ -4,7 +4,6 @@ import type { ProjectType } from '../../../shared/types'
 import { settingsRepository, DEFAULT_PROJECTS_ROOT } from '../../repositories/settingsRepository'
 
 const ENVIRONMENT_DIR: Record<ProjectType, string> = {
-  history: 'Historia',
   music: 'Musica',
 }
 

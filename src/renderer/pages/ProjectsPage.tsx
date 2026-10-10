@@ -9,17 +9,17 @@ import { Button } from '../components/Button'
 import { MusicPublicationCard } from '../components/MusicPublicationCard'
 import { ConfirmDialog } from '../components/Modal'
 import {
+  EMPTY_PROJECT_FORM,
   ProjectEditorModal,
+  projectToFormValues,
   type ProjectFormValues,
 } from '../components/ProjectEditorModal'
 import { getAtlasApi } from '../lib/api'
 import { notifyProjectsChanged, onProjectsChanged } from '../lib/projectEvents'
-import { onVideosChanged } from '../lib/videoEvents'
+import { notifyVideosChanged, onVideosChanged } from '../lib/videoEvents'
 import { useToast } from '../components/Toast'
 import { ENVIRONMENTS, environmentBreadcrumb, projectPath } from '../lib/environments'
 import { cn, formatRelativeDate } from '../lib/utils'
-
-const EMPTY_FORM: ProjectFormValues = { name: '', description: '', channelId: '' }
 
 type ProjectListTab = 'active' | 'published' | 'music' | 'videos'
 
@@ -28,13 +28,12 @@ function hasLinkedVideo(project: Project) {
 }
 
 /**
- * Lista de projetos de um ambiente. A mesma tela serve História e Música —
- * o `projectType` decide o filtro, o destaque visual e o tipo do novo projeto.
+ * Lista de projetos musicais.
  */
 export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
   const api = getAtlasApi()
   const navigate = useNavigate()
-  const { push } = useToast()
+  const { push, pushError } = useToast()
   const env = ENVIRONMENTS[projectType]
 
   const [projects, setProjects] = useState<Project[]>([])
@@ -44,8 +43,10 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Project | null>(null)
   const [deleting, setDeleting] = useState<Project | null>(null)
-  const [form, setForm] = useState<ProjectFormValues>(EMPTY_FORM)
+  const [form, setForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
   const [saving, setSaving] = useState(false)
+  const [pendingThumb, setPendingThumb] = useState<string | null>(null)
+  const [pendingThumbPreview, setPendingThumbPreview] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const [projectList, channelList] = await Promise.all([
@@ -103,18 +104,34 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
 
   function openCreate() {
     setEditing(null)
-    setForm(EMPTY_FORM)
+    setForm(EMPTY_PROJECT_FORM)
+    setPendingThumb(null)
+    setPendingThumbPreview(null)
     setModalOpen(true)
   }
 
   function openEdit(project: Project) {
     setEditing(project)
-    setForm({
-      name: project.name,
-      description: project.description,
-      channelId: project.channelId ?? '',
-    })
+    setForm(projectToFormValues(project))
+    setPendingThumb(null)
+    setPendingThumbPreview(null)
     setModalOpen(true)
+  }
+
+  function closeModal() {
+    setModalOpen(false)
+    setEditing(null)
+    setForm(EMPTY_PROJECT_FORM)
+    setPendingThumb(null)
+    setPendingThumbPreview(null)
+  }
+
+  async function pickThumbnail() {
+    const file = await api.dialog.selectImage()
+    if (!file) return
+    const preview = await api.dialog.readImageDataUrl(file)
+    setPendingThumb(file)
+    setPendingThumbPreview(preview)
   }
 
   async function saveProject() {
@@ -122,19 +139,43 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
       push('Informe o nome do projeto.', 'error')
       return
     }
+    if (editing?.scheduledVideoId) {
+      if (!form.publicationTitle.trim()) {
+        push('Informe o título da publicação.', 'error')
+        return
+      }
+      if (!form.scheduledDate) {
+        push('Escolha a data da publicação.', 'error')
+        return
+      }
+    }
     setSaving(true)
     try {
       if (editing) {
+        if (editing.scheduledVideoId) {
+          const updatedVideo = await api.videos.update(editing.scheduledVideoId, {
+            title: form.publicationTitle.trim(),
+            description: form.publicationDescription,
+            scheduledDate: form.scheduledDate,
+            status: form.publicationStatus,
+          })
+          if (!updatedVideo) throw new Error('Publicação não encontrada.')
+          if (pendingThumb) {
+            await api.videos.setThumbnail(editing.scheduledVideoId, pendingThumb)
+          }
+          notifyVideosChanged()
+        }
         const updated = await api.projects.update(editing.id, {
           name: form.name.trim(),
           description: form.description.trim(),
           channelId: form.channelId || null,
         })
         if (!updated) throw new Error('Projeto não encontrado.')
-        setModalOpen(false)
-        setEditing(null)
-        setForm(EMPTY_FORM)
-        push('Projeto atualizado.', 'success')
+        closeModal()
+        push(
+          editing.scheduledVideoId ? 'Projeto e publicação atualizados.' : 'Projeto atualizado.',
+          'success',
+        )
         notifyProjectsChanged()
         await load()
         return
@@ -145,12 +186,11 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
         projectType,
         channelId: form.channelId || null,
       })
-      setModalOpen(false)
-      setForm(EMPTY_FORM)
+      closeModal()
       notifyProjectsChanged()
       navigate(projectPath(projectType, project.id))
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao salvar projeto', 'error')
+      pushError(error, 'Falha ao salvar projeto')
     } finally {
       setSaving(false)
     }
@@ -172,7 +212,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
       notifyProjectsChanged()
       await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao remover projeto', 'error')
+      pushError(error, 'Falha ao remover projeto')
     }
   }
 
@@ -194,32 +234,13 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
             className="h-11 w-full rounded-xl border border-border bg-card-2 pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
           />
         </div>
-        {projectType === 'history' ? (
-          <>
-            <Button
-              variant="secondary"
-              icon={<Files className="h-4 w-4" />}
-              onClick={() => navigate('/historia/roteiros')}
-            >
-              Roteiros
-            </Button>
-            <Button
-              variant="secondary"
-              icon={<Tag className="h-4 w-4" />}
-              onClick={() => navigate('/historia/nichos')}
-            >
-              Nichos
-            </Button>
-          </>
-        ) : (
-          <Button
-            variant="secondary"
-            icon={<Scissors className="h-4 w-4" />}
-            onClick={() => navigate('/musica/faixas')}
-          >
-            Faixas
-          </Button>
-        )}
+        <Button
+          variant="secondary"
+          icon={<Scissors className="h-4 w-4" />}
+          onClick={() => navigate('/musica/faixas')}
+        >
+          Faixas
+        </Button>
         <Button
           icon={<Plus className="h-4 w-4" />}
           style={{ backgroundColor: env.color }}
@@ -394,9 +415,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
 
               <div className="flex items-center justify-between text-xs text-muted">
                 <span>
-                  {projectType === 'history'
-                    ? `${project.scriptCount ?? 0} ${(project.scriptCount ?? 0) === 1 ? 'roteiro' : 'roteiros'}`
-                    : `${project.trackCount ?? 0} ${(project.trackCount ?? 0) === 1 ? 'faixa' : 'faixas'}`}
+                  {`${project.trackCount ?? 0} ${(project.trackCount ?? 0) === 1 ? 'faixa' : 'faixas'}`}
                 </span>
                 <span>{formatRelativeDate(project.updatedAt)}</span>
               </div>
@@ -444,11 +463,10 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
         editing={editing}
         form={form}
         saving={saving}
+        thumbPreviewSrc={pendingThumbPreview || editing?.scheduledVideoThumbnailDataUrl}
         onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
-        onClose={() => {
-          setModalOpen(false)
-          setEditing(null)
-        }}
+        onPickThumbnail={editing?.scheduledVideoId ? () => void pickThumbnail() : undefined}
+        onClose={closeModal}
         onSubmit={() => void saveProject()}
       />
 

@@ -392,7 +392,7 @@ export function buildShortsCopiesPrompt(input: {
   fields: ShortsCopyFields
   clips: ShortsCopyClipInput[]
 }): string {
-  const profileLabel = input.profile === 'music' ? 'MÚSICA' : 'HISTÓRIA'
+  const profileLabel = 'MÚSICA'
   const contentLanguage = input.editorial.contentLanguage?.trim() || input.editorial.language.trim()
   const languageName = input.editorial.languageName?.trim() || contentLanguage || 'the source material language'
   const language = contentLanguage || languageName

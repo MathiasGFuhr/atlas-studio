@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Clapperboard, FileText, MessageSquare, Music2, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
-import type { Channel, Project, ProjectType, ScriptRecord } from '@shared/types'
+import { ArrowLeft, Clapperboard, MessageSquare, Music2, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
+import type { Channel, Project, ProjectType } from '@shared/types'
 import type { MusicTrack } from '@shared/musicAnalysis'
 import { formatTimecode } from '@shared/musicAnalysis'
 import { channelVideoPath } from '@shared/channelVideos'
@@ -11,41 +11,40 @@ import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { ConfirmDialog } from '../components/Modal'
 import {
+  EMPTY_PROJECT_FORM,
   ProjectEditorModal,
+  projectToFormValues,
   type ProjectFormValues,
 } from '../components/ProjectEditorModal'
-import { StatusBadge } from '../components/StatusBadge'
 import { MusicPublicationCard } from '../components/MusicPublicationCard'
 import { ProjectFolderPanel } from '../components/ProjectFolderPanel'
 import { getAtlasApi } from '../lib/api'
 import { notifyProjectsChanged } from '../lib/projectEvents'
-import { onVideosChanged } from '../lib/videoEvents'
+import { notifyVideosChanged, onVideosChanged } from '../lib/videoEvents'
 import { useToast } from '../components/Toast'
 import { openAtlasChat } from '../lib/chatEvents'
 import { ENVIRONMENTS, environmentBreadcrumb } from '../lib/environments'
 import { formatRelativeDate } from '../lib/utils'
 
-/**
- * Tela de um projeto. O conteúdo listado depende do ambiente:
- * História mostra roteiros, Música mostra faixas do cortador.
- */
+/** Tela de um projeto musical: faixas do cortador e publicação vinculada. */
 export function ProjectDetailPage({ projectType }: { projectType: ProjectType }) {
   const api = getAtlasApi()
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
-  const { push } = useToast()
-  const env = ENVIRONMENTS[projectType]
+  const { push, pushError } = useToast()
+  const env = ENVIRONMENTS.music
 
   const [project, setProject] = useState<Project | null>(null)
   const [channels, setChannels] = useState<Channel[]>([])
-  const [scripts, setScripts] = useState<ScriptRecord[]>([])
   const [tracks, setTracks] = useState<MusicTrack[]>([])
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState<ProjectFormValues>({ name: '', description: '', channelId: '' })
+  const [form, setForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
+  const [pendingThumb, setPendingThumb] = useState<string | null>(null)
+  const [pendingThumbPreview, setPendingThumbPreview] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -57,28 +56,17 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
         navigate(env.basePath, { replace: true })
         return
       }
-      // Projeto aberto pela rota do ambiente errado: redireciona sem perder o contexto.
-      if (found.projectType !== projectType) {
-        navigate(`${ENVIRONMENTS[found.projectType].projectsPath}/${found.id}`, { replace: true })
-        return
-      }
       setProject(found)
-      const [channelList, content] = await Promise.all([
-        api.channels.list({ channelType: projectType }),
-        found.projectType === 'history'
-          ? api.scripts.list({ projectId: found.id })
-          : api.music.list({ projectId: found.id }),
+      const [channelList, trackList] = await Promise.all([
+        api.channels.list({ channelType: 'music' }),
+        api.music.list({ projectId: found.id }),
       ])
       setChannels(channelList)
-      if (found.projectType === 'history') {
-        setScripts(content as ScriptRecord[])
-      } else {
-        setTracks(content as MusicTrack[])
-      }
+      setTracks(trackList)
     } finally {
       setLoading(false)
     }
-  }, [api, env.basePath, id, navigate, projectType, push])
+  }, [api, env.basePath, id, navigate, push])
 
   useEffect(() => {
     void load()
@@ -99,7 +87,7 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
       push('Música importada. Abrindo o editor de cortes.', 'success')
       navigate(`/musica/faixas/${track.id}`)
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao importar a música', 'error')
+      pushError(error, 'Falha ao importar a música')
     } finally {
       setImporting(false)
     }
@@ -107,12 +95,24 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
 
   function openEdit() {
     if (!project) return
-    setForm({
-      name: project.name,
-      description: project.description,
-      channelId: project.channelId ?? '',
-    })
+    setForm(projectToFormValues(project))
+    setPendingThumb(null)
+    setPendingThumbPreview(null)
     setEditOpen(true)
+  }
+
+  function closeEdit() {
+    setEditOpen(false)
+    setPendingThumb(null)
+    setPendingThumbPreview(null)
+  }
+
+  async function pickThumbnail() {
+    const file = await api.dialog.selectImage()
+    if (!file) return
+    const preview = await api.dialog.readImageDataUrl(file)
+    setPendingThumb(file)
+    setPendingThumbPreview(preview)
   }
 
   async function saveProject() {
@@ -121,8 +121,32 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
       push('Informe o nome do projeto.', 'error')
       return
     }
+    if (project.scheduledVideoId) {
+      if (!form.publicationTitle.trim()) {
+        push('Informe o título da publicação.', 'error')
+        return
+      }
+      if (!form.scheduledDate) {
+        push('Escolha a data da publicação.', 'error')
+        return
+      }
+    }
     setSaving(true)
     try {
+      if (project.scheduledVideoId) {
+        const updatedVideo = await api.videos.update(project.scheduledVideoId, {
+          title: form.publicationTitle.trim(),
+          description: form.publicationDescription,
+          scheduledDate: form.scheduledDate,
+          status: form.publicationStatus,
+        })
+        if (!updatedVideo) throw new Error('Publicação não encontrada.')
+        if (pendingThumb) {
+          await api.videos.setThumbnail(project.scheduledVideoId, pendingThumb)
+        }
+        notifyVideosChanged()
+      }
+
       const updated = await api.projects.update(project.id, {
         name: form.name.trim(),
         description: form.description.trim(),
@@ -130,11 +154,15 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
       })
       if (!updated) throw new Error('Projeto não encontrado.')
       setProject(updated)
-      setEditOpen(false)
+      closeEdit()
       notifyProjectsChanged()
-      push('Projeto atualizado.', 'success')
+      push(
+        project.scheduledVideoId ? 'Projeto e publicação atualizados.' : 'Projeto atualizado.',
+        'success',
+      )
+      if (project.scheduledVideoId) await load()
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao salvar projeto', 'error')
+      pushError(error, 'Falha ao salvar projeto')
     } finally {
       setSaving(false)
     }
@@ -154,7 +182,7 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
       )
       navigate(env.basePath, { replace: true })
     } catch (error) {
-      push(error instanceof Error ? error.message : 'Falha ao remover projeto', 'error')
+      pushError(error, 'Falha ao remover projeto')
     }
   }
 
@@ -182,7 +210,7 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-4">
-          {projectType === 'music' && project.scheduledVideoId ? (
+          {project.scheduledVideoId ? (
             <div className="space-y-3">
               <h2 className="text-base font-semibold text-text">Publicação</h2>
               <MusicPublicationCard
@@ -211,61 +239,18 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
           ) : null}
 
           <div data-tour="page-actions" className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-text">
-              {projectType === 'history' ? 'Roteiros do projeto' : 'Faixas do projeto'}
-            </h2>
-            {projectType === 'history' ? (
-              <Button
-                icon={<Plus className="h-4 w-4" />}
-                style={{ backgroundColor: env.color }}
-                onClick={() => navigate(`/historia/criar?projectId=${project.id}`)}
-              >
-                Criar roteiro
-              </Button>
-            ) : (
-              <Button
-                icon={<Plus className="h-4 w-4" />}
-                style={{ backgroundColor: env.color }}
-                disabled={importing}
-                onClick={() => void importTrack()}
-              >
-                {importing ? 'Importando...' : 'Importar música'}
-              </Button>
-            )}
+            <h2 className="text-base font-semibold text-text">Faixas do projeto</h2>
+            <Button
+              icon={<Plus className="h-4 w-4" />}
+              style={{ backgroundColor: env.color }}
+              disabled={importing}
+              onClick={() => void importTrack()}
+            >
+              {importing ? 'Importando...' : 'Importar música'}
+            </Button>
           </div>
 
-          {projectType === 'history' ? (
-            scripts.length === 0 ? (
-              <EmptyState
-                icon={<FileText className="h-8 w-8 text-muted-2" />}
-                title="Nenhum roteiro neste projeto"
-                message="Gere um roteiro para começar. As Skills e os Nichos da sua biblioteca continuam disponíveis."
-              />
-            ) : (
-              <div className="space-y-3">
-                {scripts.map((script) => (
-                  <Card
-                    key={script.id}
-                    padding="sm"
-                    className="flex cursor-pointer items-center gap-3 transition-colors hover:border-[#334049]"
-                    onClick={() => navigate(`/historia/roteiros/${script.id}`)}
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-dark text-accent">
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-text">{script.title}</div>
-                      <div className="text-xs text-muted-2">
-                        {script.nicheName ? `${script.nicheName} · ` : ''}
-                        {formatRelativeDate(script.updatedAt)}
-                      </div>
-                    </div>
-                    <StatusBadge status={script.status} />
-                  </Card>
-                ))}
-              </div>
-            )
-          ) : tracks.length === 0 ? (
+          {tracks.length === 0 ? (
             <EmptyState
               icon={<Music2 className="h-8 w-8 text-muted-2" />}
               title="Nenhuma faixa neste projeto"
@@ -372,8 +357,10 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
         editing={project}
         form={form}
         saving={saving}
+        thumbPreviewSrc={pendingThumbPreview || project.scheduledVideoThumbnailDataUrl}
         onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
-        onClose={() => setEditOpen(false)}
+        onPickThumbnail={() => void pickThumbnail()}
+        onClose={closeEdit}
         onSubmit={() => void saveProject()}
       />
 
