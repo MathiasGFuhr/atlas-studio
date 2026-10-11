@@ -10,6 +10,7 @@ import {
   getRuntimeManager,
   setMainWindow,
 } from './boot'
+import { flushDatabasePersist } from './db/database'
 import {
   registerAtlasMediaScheme,
 } from './services/media/atlasMediaProtocol'
@@ -150,6 +151,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  flushDatabasePersist()
   splashController?.dispose()
   splashController = null
   void getRuntimeManager()?.shutdown()

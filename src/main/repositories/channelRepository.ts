@@ -55,6 +55,36 @@ type VideoRow = {
 
 const VIDEO_STATUSES: ChannelVideoStatus[] = ['colocando', 'editando', 'agendando', 'publicado']
 
+function videoFilterClause(filters: VideoListFilters): { whereSql: string; params: unknown[] } {
+  let whereSql = 'WHERE 1=1'
+  const params: unknown[] = []
+  if (filters.channelId) {
+    whereSql += ' AND v.channel_id = ?'
+    params.push(filters.channelId)
+  }
+  if (filters.projectId) {
+    whereSql += ' AND v.project_id = ?'
+    params.push(filters.projectId)
+  }
+  if (filters.from) {
+    whereSql += ' AND v.scheduled_date >= ?'
+    params.push(filters.from)
+  }
+  if (filters.to) {
+    whereSql += ' AND v.scheduled_date <= ?'
+    params.push(filters.to)
+  }
+  if (filters.status && VIDEO_STATUSES.includes(filters.status)) {
+    whereSql += ' AND v.status = ?'
+    params.push(filters.status)
+  }
+  if (filters.excludeStatus && VIDEO_STATUSES.includes(filters.excludeStatus)) {
+    whereSql += ' AND v.status != ?'
+    params.push(filters.excludeStatus)
+  }
+  return { whereSql, params }
+}
+
 function normalizeVideoStatus(value: string): ChannelVideoStatus {
   if (value === 'planejado') return 'colocando'
   if (value === 'gravado') return 'editando'
@@ -249,45 +279,30 @@ export const channelRepository = {
 
   listVideos(filters: VideoListFilters = {}): ChannelVideo[] {
     const db = getDb()
+    const { whereSql, params } = videoFilterClause(filters)
     let sql = `
       SELECT v.*, c.name AS channel_name, c.channel_type AS channel_type, c.color AS channel_color,
         p.name AS project_name
       FROM channel_videos v
       LEFT JOIN channels c ON c.id = v.channel_id
       LEFT JOIN projects p ON p.id = v.project_id
-      WHERE 1=1
+      ${whereSql}
+      ORDER BY v.scheduled_date ASC, v.created_at ASC
     `
-    const params: unknown[] = []
-    if (filters.channelId) {
-      sql += ' AND v.channel_id = ?'
-      params.push(filters.channelId)
-    }
-    if (filters.projectId) {
-      sql += ' AND v.project_id = ?'
-      params.push(filters.projectId)
-    }
-    if (filters.from) {
-      sql += ' AND v.scheduled_date >= ?'
-      params.push(filters.from)
-    }
-    if (filters.to) {
-      sql += ' AND v.scheduled_date <= ?'
-      params.push(filters.to)
-    }
-    if (filters.status && VIDEO_STATUSES.includes(filters.status)) {
-      sql += ' AND v.status = ?'
-      params.push(filters.status)
-    }
-    if (filters.excludeStatus && VIDEO_STATUSES.includes(filters.excludeStatus)) {
-      sql += ' AND v.status != ?'
-      params.push(filters.excludeStatus)
-    }
-    sql += ' ORDER BY v.scheduled_date ASC, v.created_at ASC'
+    const queryParams = [...params]
     if (filters.limit != null) {
       sql += ' LIMIT ?'
-      params.push(Math.max(1, Math.min(filters.limit, 200)))
+      queryParams.push(Math.max(1, Math.min(filters.limit, 200)))
     }
-    return (db.prepare(sql).all(...params) as VideoRow[]).map(mapVideo)
+    return (db.prepare(sql).all(...queryParams) as VideoRow[]).map(mapVideo)
+  },
+
+  countVideos(filters: VideoListFilters = {}): number {
+    const { whereSql, params } = videoFilterClause(filters)
+    const row = getDb()
+      .prepare(`SELECT COUNT(*) AS c FROM channel_videos v ${whereSql}`)
+      .get(...params) as { c: number } | undefined
+    return Number(row?.c ?? 0)
   },
 
   listRecentTitles(channelId: string, opts?: { excludeVideoId?: string; limit?: number }): string[] {

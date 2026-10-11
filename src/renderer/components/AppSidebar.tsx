@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useRef, useState, type ComponentType } from 'react'
+import { startTransition, useEffect, useRef, useState, type ComponentType, type MouseEvent } from 'react'
 import {
   CheckSquare,
   ChevronLeft,
@@ -198,6 +198,24 @@ export function AppSidebar({
 
   const collapseLabel = collapsed ? 'Expandir menu' : 'Recolher menu'
 
+  function goToTab(event: MouseEvent<HTMLAnchorElement>, to: string) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.shiftKey
+    ) {
+      return
+    }
+    event.preventDefault()
+    // Mantém a sidebar responsiva enquanto a próxima página monta.
+    startTransition(() => {
+      navigate(to)
+    })
+  }
+
   function renderNavLink(item: NavItem) {
     return (
       <NavLink
@@ -205,6 +223,7 @@ export function AppSidebar({
         to={item.to}
         end={item.end}
         title={collapsed ? item.label : undefined}
+        onClick={(event) => goToTab(event, item.to)}
         className={({ isActive }) => {
           const active = isSidebarLinkActive(item.to, pathname, isActive)
           return cn(

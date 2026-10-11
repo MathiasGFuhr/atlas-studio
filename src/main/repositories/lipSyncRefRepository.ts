@@ -5,10 +5,19 @@ import type {
   LipSyncRef,
   LipSyncRefCreateInput,
   LipSyncRefListFilters,
+  LipSyncRefStatus,
   LipSyncRefUpdateInput,
 } from '../../shared/lipSyncRefs'
+import { isLipSyncRefStatus } from '../../shared/lipSyncRefs'
 import { readImageDataUrl } from '../services/storage/profilePhoto'
-import { importLipSyncImage, removeLipSyncImage } from '../services/storage/lipSyncMedia'
+import {
+  archiveLipSyncRefToProjectFolder,
+  importLipSyncImage,
+  removeLipSyncImage,
+} from '../services/storage/lipSyncMedia'
+import { createProjectFolder, folderExists } from '../services/storage/projectFolders'
+import { channelRepository } from './channelRepository'
+import { projectRepository } from './projectRepository'
 
 type Row = {
   id: string
@@ -17,6 +26,8 @@ type Row = {
   image_path: string
   project_id: string | null
   project_name: string | null
+  project_folder_path: string | null
+  status: string | null
   sort_order: number
   created_at: string
   updated_at: string
@@ -30,12 +41,18 @@ const SELECT = `
     r.image_path,
     r.project_id,
     p.name AS project_name,
+    p.folder_path AS project_folder_path,
+    r.status,
     r.sort_order,
     r.created_at,
     r.updated_at
   FROM lipsync_refs r
   LEFT JOIN projects p ON p.id = r.project_id
 `
+
+function mapStatus(value: string | null | undefined): LipSyncRefStatus {
+  return isLipSyncRefStatus(value) ? value : 'active'
+}
 
 function mapRow(row: Row): LipSyncRef {
   return {
@@ -46,6 +63,7 @@ function mapRow(row: Row): LipSyncRef {
     imageDataUrl: readImageDataUrl(row.image_path),
     projectId: row.project_id?.trim() || null,
     projectName: row.project_name?.trim() || null,
+    status: mapStatus(row.status),
     sortOrder: Number(row.sort_order) || 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -71,6 +89,25 @@ function assertProjectExists(projectId: string | null) {
   if (!row) throw new Error('Projeto não encontrado.')
 }
 
+function ensureProjectFolder(projectId: string): string {
+  const project = projectRepository.get(projectId)
+  if (!project) throw new Error('Projeto não encontrado.')
+  if (project.projectFolderPath && folderExists(project.projectFolderPath)) {
+    return path.resolve(project.projectFolderPath)
+  }
+  const parentFolder = project.channelId
+    ? channelRepository.get(project.channelId)?.folderPath ?? null
+    : null
+  const folder = createProjectFolder({
+    name: project.name,
+    projectType: project.projectType,
+    parentFolder,
+  })
+  const updated = projectRepository.update(projectId, { projectFolderPath: folder })
+  if (!updated?.projectFolderPath) throw new Error('Não foi possível criar a pasta do projeto.')
+  return path.resolve(updated.projectFolderPath)
+}
+
 export const lipSyncRefRepository = {
   list(filters?: LipSyncRefListFilters): LipSyncRef[] {
     let sql = `${SELECT} WHERE 1=1`
@@ -84,6 +121,12 @@ export const lipSyncRefRepository = {
         sql += ' AND r.project_id = ?'
         params.push(projectId)
       }
+    }
+
+    const status = filters?.status ?? 'active'
+    if (status !== 'all') {
+      sql += ' AND COALESCE(NULLIF(TRIM(r.status), \'\'), \'active\') = ?'
+      params.push(status)
     }
 
     sql += ' ORDER BY r.sort_order ASC, r.created_at ASC'
@@ -115,8 +158,8 @@ export const lipSyncRefRepository = {
 
     getDb()
       .prepare(
-        `INSERT INTO lipsync_refs (id, label, prompt, image_path, project_id, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO lipsync_refs (id, label, prompt, image_path, project_id, status, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
       )
       .run(id, label, prompt, stored, projectId, sortOrder, now, now)
 
@@ -151,10 +194,54 @@ export const lipSyncRefRepository = {
   },
 
   remove(id: string): boolean {
-    const current = this.get(id)
-    if (!current) return false
+    const row = getDb().prepare(`${SELECT} WHERE r.id = ?`).get(id) as Row | undefined
+    if (!row) return false
     getDb().prepare('DELETE FROM lipsync_refs WHERE id = ?').run(id)
-    removeLipSyncImage(current.imagePath)
+    removeLipSyncImage(row.image_path, {
+      projectFolder: row.project_folder_path,
+    })
     return true
+  },
+
+  removeByProject(projectId: string): number {
+    const id = normalizeProjectId(projectId)
+    if (!id) throw new Error('Informe o projeto.')
+    assertProjectExists(id)
+    const rows = getDb()
+      .prepare(`${SELECT} WHERE r.project_id = ?`)
+      .all(id) as Row[]
+    let removed = 0
+    for (const row of rows) {
+      if (this.remove(row.id)) removed += 1
+    }
+    return removed
+  },
+
+  archiveByProject(projectId: string): LipSyncRef[] {
+    const id = normalizeProjectId(projectId)
+    if (!id) throw new Error('Informe o projeto.')
+    assertProjectExists(id)
+
+    const active = this.list({ projectId: id, status: 'all' })
+    if (active.length === 0) {
+      throw new Error('Não há referências neste projeto para salvar.')
+    }
+
+    const projectFolder = ensureProjectFolder(id)
+    const archived: LipSyncRef[] = []
+
+    for (const item of active) {
+      archiveLipSyncRefToProjectFolder({
+        sourceImagePath: item.imagePath,
+        projectFolder,
+        label: item.label,
+        prompt: item.prompt,
+        refId: item.id,
+      })
+      archived.push(item)
+      this.remove(item.id)
+    }
+
+    return archived
   },
 }

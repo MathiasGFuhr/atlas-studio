@@ -35,4 +35,17 @@ describe('readImageDataUrl', () => {
   it('retorna null quando o arquivo não existe', () => {
     expect(readImageDataUrl(path.join(os.tmpdir(), 'atlas-missing-thumb.png'))).toBeNull()
   })
+
+  it('reusa o data URL em leituras seguintes do mesmo arquivo', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-thumb-cache-'))
+    const file = path.join(dir, 'thumb.png')
+    try {
+      fs.writeFileSync(file, TINY_PNG)
+      const first = readImageDataUrl(file)
+      const second = readImageDataUrl(file)
+      expect(second).toBe(first)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

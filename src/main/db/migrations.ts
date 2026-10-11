@@ -19,7 +19,7 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 18
+export const CURRENT_SCHEMA_VERSION = 19
 
 type SchemaStepResult = {
   historyCreated: number
@@ -150,6 +150,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'lipsync-refs-project',
     backup: false,
     up: applyLipSyncRefsProject,
+  },
+  {
+    version: 19,
+    name: 'lipsync-refs-status',
+    backup: false,
+    up: applyLipSyncRefsStatus,
   },
 ]
 
@@ -297,6 +303,21 @@ function applyLipSyncRefsProject(database: AppDatabase): SchemaStepResult {
   }
   ensureColumn(database, 'lipsync_refs', 'project_id', 'TEXT')
   database.exec('CREATE INDEX IF NOT EXISTS idx_lipsync_refs_project ON lipsync_refs(project_id)')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyLipSyncRefsStatus(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'lipsync_refs')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'lipsync_refs', 'status', "TEXT NOT NULL DEFAULT 'active'")
+  database.exec(
+    `UPDATE lipsync_refs SET status = 'active' WHERE status IS NULL OR TRIM(status) = ''`,
+  )
+  database.exec('CREATE INDEX IF NOT EXISTS idx_lipsync_refs_status ON lipsync_refs(status)')
   return { historyCreated: 0, musicCreated: 0 }
 }
 

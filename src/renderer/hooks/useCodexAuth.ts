@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   CodexAuthState,
   CodexAccountInfo,
@@ -84,9 +84,10 @@ export function useCodexAuth(): CodexAuth {
     }
   }, [api])
 
-  // Periodic health check
+  // Periodic health check (pausa com a janela oculta)
   useEffect(() => {
     const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       void api.codex.status().then(setStatus)
     }, 30000)
     return () => clearInterval(timer)
@@ -162,23 +163,46 @@ export function useCodexAuth(): CodexAuth {
   }, [api, pendingAuthUrl, deviceCode])
 
   const authState = status?.authState ?? 'initializing'
+  const account = status?.account ?? null
+  const isConnected = authState === 'connected'
+  const isLinking = authState === 'authenticating'
 
-  return {
-    authState,
-    account: status?.account ?? null,
-    status,
-    isConnected: authState === 'connected',
-    isLinking: authState === 'authenticating',
-    showOnboarding,
-    deviceCode,
-    pendingAuthUrl,
-    startLink,
-    startDeviceCodeLink,
-    cancelLink,
-    logout,
-    refresh,
-    dismissOnboarding,
-    testConnection,
-    openPendingAuthUrl,
-  }
+  return useMemo(
+    () => ({
+      authState,
+      account,
+      status,
+      isConnected,
+      isLinking,
+      showOnboarding,
+      deviceCode,
+      pendingAuthUrl,
+      startLink,
+      startDeviceCodeLink,
+      cancelLink,
+      logout,
+      refresh,
+      dismissOnboarding,
+      testConnection,
+      openPendingAuthUrl,
+    }),
+    [
+      authState,
+      account,
+      status,
+      isConnected,
+      isLinking,
+      showOnboarding,
+      deviceCode,
+      pendingAuthUrl,
+      startLink,
+      startDeviceCodeLink,
+      cancelLink,
+      logout,
+      refresh,
+      dismissOnboarding,
+      testConnection,
+      openPendingAuthUrl,
+    ],
+  )
 }

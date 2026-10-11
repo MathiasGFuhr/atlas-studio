@@ -16,20 +16,61 @@ function profileDir(): string {
   return path.join(getUserDataPath(), 'profile')
 }
 
+type ImageCacheEntry = {
+  mtimeMs: number
+  size: number
+  dataUrl: string | null
+}
+
+/** Evita re-ler e re-encodar a mesma thumbnail/avatar a cada troca de aba. */
+const imageDataUrlCache = new Map<string, ImageCacheEntry>()
+
 export function readImageDataUrl(filePath: string): string | null {
   if (!filePath?.trim()) return null
   const resolved = path.resolve(filePath)
-  if (!fs.existsSync(resolved)) return null
   const ext = path.extname(resolved).toLowerCase()
   const mime = MIME_BY_EXT[ext]
   if (!mime) return null
+
+  let stat: fs.Stats
   try {
-    const buffer = fs.readFileSync(resolved)
-    if (buffer.byteLength === 0) return null
-    return `data:${mime};base64,${buffer.toString('base64')}`
+    stat = fs.statSync(resolved)
+    if (!stat.isFile()) {
+      imageDataUrlCache.delete(resolved)
+      return null
+    }
   } catch {
+    imageDataUrlCache.delete(resolved)
     return null
   }
+
+  const cached = imageDataUrlCache.get(resolved)
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    return cached.dataUrl
+  }
+
+  try {
+    const buffer = fs.readFileSync(resolved)
+    const dataUrl =
+      buffer.byteLength === 0 ? null : `data:${mime};base64,${buffer.toString('base64')}`
+    imageDataUrlCache.set(resolved, {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      dataUrl,
+    })
+    return dataUrl
+  } catch {
+    imageDataUrlCache.delete(resolved)
+    return null
+  }
+}
+
+export function clearImageDataUrlCache(filePath?: string) {
+  if (!filePath?.trim()) {
+    imageDataUrlCache.clear()
+    return
+  }
+  imageDataUrlCache.delete(path.resolve(filePath))
 }
 
 export function importProfilePhoto(sourcePath: string): string {

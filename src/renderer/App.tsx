@@ -247,7 +247,7 @@ export default function App() {
         </ShortsGenerationProvider>
         </CreateActionsProvider>
         </WorkspaceCapabilitiesProvider>
-        </AppUpdateProvider>
+      </AppUpdateProvider>
       </HashRouter>
     </ToastProvider>
   )

@@ -88,11 +88,22 @@ export function resolveFolderDialogStart(
   return fallback
 }
 
+const folderExistsCache = new Map<string, { at: number; exists: boolean }>()
+const FOLDER_EXISTS_TTL_MS = 4000
+
 export function folderExists(folderPath: string | null | undefined): boolean {
   if (!folderPath?.trim()) return false
+  const resolved = path.resolve(folderPath)
+  const now = Date.now()
+  const cached = folderExistsCache.get(resolved)
+  if (cached && now - cached.at < FOLDER_EXISTS_TTL_MS) return cached.exists
+
+  let exists = false
   try {
-    return fs.statSync(folderPath).isDirectory()
+    exists = fs.statSync(resolved).isDirectory()
   } catch {
-    return false
+    exists = false
   }
+  folderExistsCache.set(resolved, { at: now, exists })
+  return exists
 }

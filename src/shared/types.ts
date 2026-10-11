@@ -742,6 +742,7 @@ export const IPC = {
   },
   videos: {
     list: 'videos:list',
+    count: 'videos:count',
     get: 'videos:get',
     create: 'videos:create',
     update: 'videos:update',
@@ -770,6 +771,8 @@ export const IPC = {
     createMany: 'lipSyncRefs:createMany',
     update: 'lipSyncRefs:update',
     remove: 'lipSyncRefs:remove',
+    removeByProject: 'lipSyncRefs:removeByProject',
+    archiveByProject: 'lipSyncRefs:archiveByProject',
   },
   prompts: {
     list: 'prompts:list',

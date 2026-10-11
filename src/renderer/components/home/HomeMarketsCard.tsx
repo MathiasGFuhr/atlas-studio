@@ -33,8 +33,17 @@ export function HomeMarketsCard({
   const [selectedZone, setSelectedZone] = useState(WORLD_CLOCK_CATALOG[0]?.timeZone ?? '')
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000)
-    return () => window.clearInterval(timer)
+    let timer = 0
+    const schedule = () => {
+      // Relógio exibe só HH:MM — atualiza no próximo minuto em vez de a cada segundo.
+      const msUntilNextMinute = 60_000 - (Date.now() % 60_000) + 40
+      timer = window.setTimeout(() => {
+        setNow(new Date())
+        schedule()
+      }, msUntilNextMinute)
+    }
+    schedule()
+    return () => window.clearTimeout(timer)
   }, [])
 
   const filteredCatalog = useMemo(() => {

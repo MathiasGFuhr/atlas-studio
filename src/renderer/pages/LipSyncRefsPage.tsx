@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Copy, FolderPlus, ImagePlus, Pencil, Trash2 } from 'lucide-react'
+import { Archive, Copy, FolderPlus, ImagePlus, Pencil, Trash2 } from 'lucide-react'
 import type { LipSyncRef } from '@shared/lipSyncRefs'
 import type { Channel, Project } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
+import { ConfirmDialog } from '../components/Modal'
 import {
   EMPTY_PROJECT_FORM,
   ProjectEditorModal,
@@ -37,6 +38,7 @@ export function LipSyncRefsPage() {
   const [attachProjectId, setAttachProjectId] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [discardOpen, setDiscardOpen] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [editorOpen, setEditorOpen] = useState(false)
   const [projectForm, setProjectForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
@@ -48,9 +50,9 @@ export function LipSyncRefsPage() {
   }, [filterChannelId, projects])
 
   const listFilters = useMemo(() => {
-    if (filterProjectId === FILTER_NONE) return { unassignedOnly: true as const }
-    if (filterProjectId === FILTER_ALL) return undefined
-    return { projectId: filterProjectId }
+    if (filterProjectId === FILTER_NONE) return { unassignedOnly: true as const, status: 'active' as const }
+    if (filterProjectId === FILTER_ALL) return { status: 'active' as const }
+    return { projectId: filterProjectId, status: 'active' as const }
   }, [filterProjectId])
 
   const refresh = useCallback(async () => {
@@ -272,6 +274,62 @@ export function LipSyncRefsPage() {
 
   const projectOptions = projectsInFilter
 
+  const finishProjectId = useMemo(() => {
+    if (filterProjectId !== FILTER_ALL && filterProjectId !== FILTER_NONE) return filterProjectId
+    if (items.length === 0) return null
+    const first = items[0]?.projectId
+    if (!first) return null
+    return items.every((item) => item.projectId === first) ? first : null
+  }, [filterProjectId, items])
+
+  const finishProject = finishProjectId
+    ? projects.find((project) => project.id === finishProjectId) ?? null
+    : null
+  const canFinishProject = Boolean(finishProjectId) && items.length > 0
+
+  async function archiveProjectRefs() {
+    if (!finishProjectId) {
+      push('Selecione um projeto (ou deixe só refs do mesmo projeto) para salvar.')
+      return
+    }
+    setBusy(true)
+    try {
+      const archived = await api.lipSyncRefs.archiveByProject(finishProjectId)
+      notifyProjectsChanged()
+      await refresh()
+      push(
+        archived.length === 1
+          ? 'Salvo na pasta do projeto. A referência saiu da fila.'
+          : `${archived.length} referências salvas na pasta do projeto e removidas da fila.`,
+        'success',
+      )
+    } catch (error) {
+      pushError(error, 'Não foi possível salvar as referências no projeto.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function discardProjectRefs() {
+    if (!finishProjectId) return
+    setBusy(true)
+    try {
+      const removed = await api.lipSyncRefs.removeByProject(finishProjectId)
+      setDiscardOpen(false)
+      await refresh()
+      push(
+        removed === 1
+          ? 'Referência de lipsync descartada.'
+          : `${removed} referências de lipsync descartadas.`,
+        'success',
+      )
+    } catch (error) {
+      pushError(error, 'Não foi possível descartar as referências.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <PageShell className="flex min-h-0 flex-col">
       <PageHeader
@@ -333,6 +391,30 @@ export function LipSyncRefsPage() {
           </select>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {canFinishProject ? (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                className="shrink-0"
+                icon={<Archive className="h-4 w-4" />}
+                disabled={busy}
+                onClick={() => void archiveProjectRefs()}
+              >
+                Salvar e limpar fila
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="shrink-0"
+                icon={<Trash2 className="h-4 w-4" />}
+                disabled={busy}
+                onClick={() => setDiscardOpen(true)}
+              >
+                Descartar
+              </Button>
+            </>
+          ) : null}
           <Button
             type="button"
             variant="secondary"
@@ -376,7 +458,7 @@ export function LipSyncRefsPage() {
           <p className="text-sm font-medium text-text">Nenhuma referência neste filtro</p>
           <p className="mt-1 max-w-md text-sm text-muted">
             Escolha o canal e o projeto acima e anexe fotos do cantor ou da banda. O prompt fica
-            colado embaixo de cada imagem.
+            colado embaixo de cada imagem. Ao terminar, use Salvar e limpar fila ou Descartar.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             <Button
@@ -569,6 +651,19 @@ export function LipSyncRefsPage() {
           setProjectForm(EMPTY_PROJECT_FORM)
         }}
         onSubmit={() => void saveNewProject()}
+      />
+
+      <ConfirmDialog
+        open={discardOpen}
+        title="Descartar referências de lipsync?"
+        message={
+          finishProject
+            ? `As imagens e prompts de lipsync de “${finishProject.name}” serão apagados da fila. O projeto de música continua.`
+            : 'As imagens e prompts de lipsync deste projeto serão apagados da fila. O projeto de música continua.'
+        }
+        confirmLabel="Descartar"
+        onConfirm={() => void discardProjectRefs()}
+        onClose={() => setDiscardOpen(false)}
       />
     </PageShell>
   )

@@ -29,19 +29,23 @@ export function ChannelPublishedVideosPage() {
 
   useEffect(() => {
     void load()
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null
     const refresh = () => {
-      void load()
+      if (refreshTimer) clearTimeout(refreshTimer)
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null
+        void load()
+      }, 180)
     }
     const stop = onVideosChanged(refresh)
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh()
     }
     document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', refresh)
     return () => {
+      if (refreshTimer) clearTimeout(refreshTimer)
       stop()
       document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', refresh)
     }
   }, [load])
 

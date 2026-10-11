@@ -179,11 +179,8 @@ export function ChatDock() {
         >
           {open ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
           {!open ? (
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/80" />
-              <span className="relative inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white text-[8px] font-bold leading-none text-black">
-                1
-              </span>
+            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white text-[8px] font-bold leading-none text-black">
+              1
             </span>
           ) : null}
         </button>

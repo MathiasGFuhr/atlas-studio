@@ -1,12 +1,25 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getUserDataPath } from '../../paths'
+import { sanitizeWindowsFolderName } from './projectFolders'
 
 const MAX_BYTES = 12 * 1024 * 1024
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
+const ARCHIVE_SUBDIR = 'Lipsync'
 
 function refsDir(): string {
   return path.join(getUserDataPath(), 'lipsync-refs')
+}
+
+function projectLipsyncDir(projectFolder: string): string {
+  return path.join(path.resolve(projectFolder), ARCHIVE_SUBDIR)
+}
+
+function isPathInside(root: string, candidate: string): boolean {
+  const resolvedRoot = path.resolve(root)
+  const resolvedCandidate = path.resolve(candidate)
+  const relative = path.relative(resolvedRoot, resolvedCandidate)
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
 export function importLipSyncImage(sourcePath: string, refId: string): string {
@@ -31,14 +44,78 @@ export function importLipSyncImage(sourcePath: string, refId: string): string {
   return dest
 }
 
-export function removeLipSyncImage(filePath: string | null | undefined) {
+export function archiveLipSyncRefToProjectFolder(input: {
+  sourceImagePath: string
+  projectFolder: string
+  label: string
+  prompt: string
+  refId: string
+}): { imagePath: string; promptPath: string } {
+  const source = path.resolve(input.sourceImagePath)
+  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
+    throw new Error('Arquivo de imagem não encontrado.')
+  }
+
+  const destDir = projectLipsyncDir(input.projectFolder)
+  fs.mkdirSync(destDir, { recursive: true })
+
+  const ext = path.extname(source).toLowerCase() || '.png'
+  const baseName = sanitizeWindowsFolderName(input.label || 'Referencia', 'Referencia')
+  let stem = baseName
+  let attempt = 2
+  let imagePath = path.join(destDir, `${stem}${ext}`)
+  while (fs.existsSync(imagePath) && !isSameFile(source, imagePath)) {
+    stem = `${baseName}-${input.refId.slice(0, 8)}`
+    if (attempt > 2) stem = `${baseName}-${input.refId.slice(0, 8)}-${attempt}`
+    imagePath = path.join(destDir, `${stem}${ext}`)
+    attempt += 1
+    if (attempt > 999) throw new Error('Não foi possível criar um nome único na pasta do projeto.')
+  }
+
+  if (!isSameFile(source, imagePath)) {
+    fs.copyFileSync(source, imagePath)
+  }
+
+  const promptPath = path.join(destDir, `${stem}.txt`)
+  fs.writeFileSync(promptPath, input.prompt ?? '', 'utf8')
+
+  return { imagePath, promptPath }
+}
+
+function isSameFile(a: string, b: string): boolean {
+  try {
+    return path.resolve(a) === path.resolve(b)
+  } catch {
+    return false
+  }
+}
+
+export function removeLipSyncImage(
+  filePath: string | null | undefined,
+  options?: { projectFolder?: string | null },
+) {
   if (!filePath?.trim()) return
   try {
     const resolved = path.resolve(filePath)
-    const root = path.resolve(refsDir())
-    if (!resolved.startsWith(root)) return
+    const allowedRoots = [refsDir()]
+    const projectFolder = options?.projectFolder?.trim()
+    if (projectFolder) {
+      allowedRoots.push(projectLipsyncDir(projectFolder))
+    }
+
+    if (!allowedRoots.some((root) => isPathInside(root, resolved))) return
     if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
       fs.unlinkSync(resolved)
+    }
+
+    const promptSibling = resolved.replace(/\.[^.]+$/, '.txt')
+    if (
+      promptSibling !== resolved &&
+      allowedRoots.some((root) => isPathInside(root, promptSibling)) &&
+      fs.existsSync(promptSibling) &&
+      fs.statSync(promptSibling).isFile()
+    ) {
+      fs.unlinkSync(promptSibling)
     }
   } catch {
     /* ignore */

@@ -519,6 +519,17 @@ export const mockApi = {
         })
       return filters?.limit != null ? matched.slice(0, filters.limit) : matched
     },
+    count: async (filters?: VideoListFilters) => {
+      return videos.filter((v) => {
+        if (filters?.channelId && v.channelId !== filters.channelId) return false
+        if (filters?.projectId && v.projectId !== filters.projectId) return false
+        if (filters?.from && v.scheduledDate < filters.from) return false
+        if (filters?.to && v.scheduledDate > filters.to) return false
+        if (filters?.status && v.status !== filters.status) return false
+        if (filters?.excludeStatus && v.status === filters.excludeStatus) return false
+        return true
+      }).length
+    },
     get: async (id: string) => videos.find((v) => v.id === id) ?? null,
     create: async (input: ChannelVideoWriteInput) => {
       const channel = channels.find((c) => c.id === input.channelId)
@@ -1281,6 +1292,10 @@ export const mockApi = {
       } else if (filters?.projectId) {
         list = list.filter((item) => item.projectId === filters.projectId)
       }
+      const status = filters?.status ?? 'active'
+      if (status !== 'all') {
+        list = list.filter((item) => item.status === status)
+      }
       return list.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt))
     },
     create: async (input: LipSyncRefCreateInput) => {
@@ -1296,6 +1311,7 @@ export const mockApi = {
           'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="400"><rect width="100%" height="100%" fill="%231a1a1a"/><text x="50%" y="50%" fill="%2388ff99" font-size="18" text-anchor="middle" dy=".3em">Lipsync</text></svg>',
         projectId,
         projectName: project?.name ?? null,
+        status: 'active',
         sortOrder: lipSyncRefs.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1,
         createdAt: now,
         updatedAt: now,
@@ -1333,6 +1349,23 @@ export const mockApi = {
       if (index < 0) return false
       lipSyncRefs.splice(index, 1)
       return true
+    },
+    removeByProject: async (projectId: string) => {
+      const before = lipSyncRefs.length
+      const remaining = lipSyncRefs.filter((item) => item.projectId !== projectId)
+      lipSyncRefs.length = 0
+      lipSyncRefs.push(...remaining)
+      return before - remaining.length
+    },
+    archiveByProject: async (projectId: string) => {
+      const archived = lipSyncRefs.filter((item) => item.projectId === projectId)
+      if (archived.length === 0) {
+        throw new Error('Não há referências neste projeto para salvar.')
+      }
+      const remaining = lipSyncRefs.filter((item) => item.projectId !== projectId)
+      lipSyncRefs.length = 0
+      lipSyncRefs.push(...remaining)
+      return archived
     },
   },
   system: {

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getUserDataPath } from '../../paths'
+import { clearImageDataUrlCache } from './profilePhoto'
 
 const MAX_BYTES = 8 * 1024 * 1024
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
@@ -42,12 +43,14 @@ export function importChannelImage(
 
   const dest = path.join(destDir, `${filenameStem}${ext}`)
   fs.copyFileSync(resolved, dest)
+  clearImageDataUrlCache(dest)
   return dest
 }
 
 export function removeChannelMedia(channelId: string) {
   const destDir = channelDir(channelId)
   if (!fs.existsSync(destDir)) return
+  clearImageDataUrlCache()
   fs.rmSync(destDir, { recursive: true, force: true })
 }
 
@@ -55,6 +58,7 @@ export function removeVideoThumbnailFile(filePath: string) {
   if (!filePath?.trim()) return
   try {
     const resolved = path.resolve(filePath)
+    clearImageDataUrlCache(resolved)
     if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
       fs.unlinkSync(resolved)
     }

@@ -138,6 +138,8 @@ const api = {
   videos: {
     list: (filters?: VideoListFilters) =>
       ipcRenderer.invoke(IPC.videos.list, filters) as Promise<ChannelVideo[]>,
+    count: (filters?: VideoListFilters) =>
+      ipcRenderer.invoke(IPC.videos.count, filters) as Promise<number>,
     get: (id: string) => ipcRenderer.invoke(IPC.videos.get, id) as Promise<ChannelVideo | null>,
     create: (input: ChannelVideoWriteInput) =>
       ipcRenderer.invoke(IPC.videos.create, input) as Promise<ChannelVideo>,
@@ -516,6 +518,10 @@ const api = {
     update: (id: string, patch: LipSyncRefUpdateInput) =>
       ipcRenderer.invoke(IPC.lipSyncRefs.update, id, patch) as Promise<LipSyncRef | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.lipSyncRefs.remove, id) as Promise<boolean>,
+    removeByProject: (projectId: string) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.removeByProject, projectId) as Promise<number>,
+    archiveByProject: (projectId: string) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.archiveByProject, projectId) as Promise<LipSyncRef[]>,
   },
   system: {
     copyText: (text: string) => ipcRenderer.invoke(IPC.system.copyText, text) as Promise<boolean>,

@@ -92,7 +92,7 @@ export function HomePage() {
         channelList,
         trackList,
         videoList,
-        publishedList,
+        publishedTotal,
         settings,
         online,
       ] = await Promise.all([
@@ -105,7 +105,7 @@ export function HomePage() {
           limit: AGENDA_UPCOMING_VIDEO_LIMIT,
           excludeStatus: 'publicado',
         }),
-        api.videos.list({ status: 'publicado', limit: 100 }).catch(() => [] as ChannelVideo[]),
+        api.videos.count({ status: 'publicado' }).catch(() => 0),
         api.settings.get(),
         api.teamChat.listOnline().catch(() => [] as TeamChatPeer[]),
       ])
@@ -115,7 +115,7 @@ export function HomePage() {
       setChannels(channelList)
       setTracks(trackList)
       setUpcomingVideos(videoList)
-      setPublishedCount(publishedList.length)
+      setPublishedCount(publishedTotal)
       setAccountName(settings.accountName?.trim() ?? '')
       setWorldClocks(normalizeWorldClocks(settings.worldClocks))
       setChatOnline(online)
@@ -127,22 +127,35 @@ export function HomePage() {
 
   useEffect(() => {
     void load()
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null
     const refresh = () => {
-      void load()
+      if (refreshTimer) clearTimeout(refreshTimer)
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null
+        void load()
+      }, 180)
     }
     const stopTasks = onTasksChanged(refresh)
     const stopProjects = onProjectsChanged(refresh)
     const stopVideos = onVideosChanged(refresh)
     const stopChannels = onChannelsChanged(refresh)
-    const stopSettings = onSettingsChanged(refresh)
+    const stopSettings = onSettingsChanged(() => {
+      void api.settings
+        .get()
+        .then((settings) => {
+          setAccountName(settings.accountName?.trim() ?? '')
+          setWorldClocks(normalizeWorldClocks(settings.worldClocks))
+        })
+        .catch(() => undefined)
+    })
     const stopPresence = api.teamChat.onPresence((peers) => setChatOnline(peers))
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh()
     }
     document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', refresh)
     return () => {
       loadSeq.current += 1
+      if (refreshTimer) clearTimeout(refreshTimer)
       stopTasks()
       stopProjects()
       stopVideos()
@@ -150,7 +163,6 @@ export function HomePage() {
       stopSettings()
       stopPresence()
       document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', refresh)
     }
   }, [api, load])
 
@@ -208,8 +220,14 @@ export function HomePage() {
   async function completeTask(task: AtlasTask) {
     try {
       await api.tasks.setStatus(task.id, 'completed')
+      setTasks((current) =>
+        current.map((item) =>
+          item.id === task.id
+            ? { ...item, status: 'completed', completedAt: new Date().toISOString() }
+            : item,
+        ),
+      )
       notifyTasksChanged()
-      await load()
     } catch (error) {
       pushError(error, 'Falha ao atualizar tarefa')
     }

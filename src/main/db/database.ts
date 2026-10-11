@@ -27,6 +27,15 @@ export type AppDatabase = {
 let db: AppDatabase | null = null
 let raw: SqlJsDatabase | null = null
 let dbFilePath = ''
+let flushPendingPersist: (() => void) | null = null
+
+/** Atraso para agrupar várias escritas SQL num único export/gravação em disco. */
+const PERSIST_DEBOUNCE_MS = 250
+
+/** Garante que alterações pendentes do sql.js estejam no arquivo antes de sair. */
+export function flushDatabasePersist() {
+  flushPendingPersist?.()
+}
 
 function resolveWasmPath(): string {
   let sqlJsDist = ''
@@ -375,21 +384,47 @@ function ensureDefaultSkillLibrary(database: AppDatabase) {
 }
 
 function wrapDatabase(database: SqlJsDatabase): AppDatabase {
-  const persist = () => {
+  let dirty = false
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
+
+  const writeToDisk = () => {
     const data = database.export()
     fs.writeFileSync(dbFilePath, Buffer.from(data))
   }
 
+  const flush = () => {
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+    if (!dirty) return
+    dirty = false
+    writeToDisk()
+  }
+
+  const schedulePersist = () => {
+    dirty = true
+    if (persistTimer) return
+    persistTimer = setTimeout(() => {
+      persistTimer = null
+      if (!dirty) return
+      dirty = false
+      writeToDisk()
+    }, PERSIST_DEBOUNCE_MS)
+  }
+
+  flushPendingPersist = flush
+
   return {
     exec(sql: string) {
       database.run(sql)
-      persist()
+      schedulePersist()
     },
     prepare(sql: string): Stmt {
       return {
         run(...params: unknown[]) {
           database.run(sql, params as never[])
-          persist()
+          schedulePersist()
         },
         get(...params: unknown[]) {
           const stmt = database.prepare(sql)
@@ -414,7 +449,7 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
         },
       }
     },
-    persist,
+    persist: flush,
   }
 }
 

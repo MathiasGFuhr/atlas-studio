@@ -17,6 +17,7 @@ export function useAntigravityStatus(): AntigravityStatus | null {
 
   useEffect(() => {
     const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       void api.antigravity.status().then(setStatus).catch(() => undefined)
     }, 30000)
     return () => clearInterval(timer)

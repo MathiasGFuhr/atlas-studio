@@ -277,6 +277,10 @@ export function registerIpcHandlers(deps: {
     IPC.videos.list,
     (_e, filters?: VideoListFilters) => channelRepository.listVideos(filters ?? {}),
   )
+  ipcMain.handle(
+    IPC.videos.count,
+    (_e, filters?: VideoListFilters) => channelRepository.countVideos(filters ?? {}),
+  )
   ipcMain.handle(IPC.videos.get, (_e, id: string) => channelRepository.getVideo(id))
   ipcMain.handle(IPC.videos.create, (_e, input: ChannelVideoWriteInput) => createChannelVideo(input))
   ipcMain.handle(
@@ -1079,6 +1083,12 @@ export function registerIpcHandlers(deps: {
     lipSyncRefRepository.update(id, patch),
   )
   ipcMain.handle(IPC.lipSyncRefs.remove, (_e, id: string) => lipSyncRefRepository.remove(id))
+  ipcMain.handle(IPC.lipSyncRefs.removeByProject, (_e, projectId: string) =>
+    lipSyncRefRepository.removeByProject(projectId),
+  )
+  ipcMain.handle(IPC.lipSyncRefs.archiveByProject, (_e, projectId: string) =>
+    lipSyncRefRepository.archiveByProject(projectId),
+  )
 
   ipcMain.handle(IPC.dialog.selectFiles, async () => {
     const win = getMainWindow()
