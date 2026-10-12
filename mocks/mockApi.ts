@@ -1181,6 +1181,8 @@ export const mockApi = {
       }
     },
     setActiveRoom: async () => undefined,
+    setTyping: async () => undefined,
+    onTyping: () => () => undefined,
     onPeerOnline: () => () => undefined,
     onOpenChat: () => () => undefined,
   },

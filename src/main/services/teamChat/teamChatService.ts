@@ -16,6 +16,7 @@ import {
   type TeamChatRoom,
   type TeamChatRoomKind,
   type TeamChatSendInput,
+  type TeamChatTyping,
 } from '../../../shared/account'
 import { getAtlasSupabase } from '../supabase/atlasSupabase'
 import { accountService } from '../account/accountService'
@@ -82,7 +83,9 @@ let channel: RealtimeChannel | null = null
 let getWindow: (() => BrowserWindow | null) | null = null
 let online: TeamChatPeer[] = []
 let presenceSelfId = ''
+let presenceSelfName = ''
 let presenceReady = false
+let channelReady = false
 let activeRoomId: string | null = null
 
 function onlineOthers(): TeamChatPeer[] {
@@ -178,6 +181,16 @@ function mapMessage(row: TeamMessageRow): TeamChatMessage | null {
 function emit(channelName: string, payload: unknown) {
   const win = getWindow?.()
   if (win && !win.isDestroyed()) win.webContents.send(channelName, payload)
+}
+
+function mapTyping(payload: unknown): TeamChatTyping | null {
+  if (!payload || typeof payload !== 'object') return null
+  const row = payload as Record<string, unknown>
+  const roomId = typeof row.roomId === 'string' ? row.roomId.trim() : ''
+  const userId = typeof row.userId === 'string' ? row.userId.trim() : ''
+  const name = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : 'Usuário'
+  if (!roomId || !userId) return null
+  return { roomId, userId, name, typing: row.typing === true }
 }
 
 function peersFromPresence(state: Record<string, Array<Record<string, unknown>>>): TeamChatPeer[] {
@@ -324,6 +337,23 @@ export const teamChatService = {
 
   setActiveRoom(roomId: string | null) {
     activeRoomId = roomId?.trim() || null
+  },
+
+  setTyping(roomId: string, typing: boolean) {
+    const id = roomId.trim()
+    if (!id || !channel || !channelReady || !presenceSelfId) return
+    void channel
+      .send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: {
+          roomId: id,
+          userId: presenceSelfId,
+          name: presenceSelfName || 'Usuário',
+          typing,
+        },
+      })
+      .catch(() => undefined)
   },
 
   listOnline(): TeamChatPeer[] {
@@ -611,6 +641,7 @@ export const teamChatService = {
     this.stop()
     const user = session.user
     presenceSelfId = user.id
+    presenceSelfName = user.name?.trim() || 'Usuário'
     await accountService.syncProfile(user)
     channel = supabase.channel('atlas-team', {
       config: { presence: { key: user.id } },
@@ -625,6 +656,15 @@ export const teamChatService = {
         showMessageToast(message)
       },
     )
+    channel.on('broadcast', { event: 'typing' }, (message) => {
+      const raw =
+        message && typeof message === 'object' && 'payload' in message
+          ? (message as { payload?: unknown }).payload
+          : message
+      const event = mapTyping(raw)
+      if (!event || event.userId === presenceSelfId) return
+      emit(IPC.teamChat.typing, event)
+    })
     channel.on('presence', { event: 'sync' }, () => {
       const next = peersFromPresence(channel?.presenceState() ?? {})
       if (presenceReady) {
@@ -637,9 +677,11 @@ export const teamChatService = {
       online = next
       emit(IPC.teamChat.presence, onlineOthers())
     })
-    await channel.subscribe(async (status) => {
-      if (status !== 'SUBSCRIBED' || !channel) return
-      await channel.track({
+    const realtime = channel
+    await realtime.subscribe(async (status) => {
+      if (status !== 'SUBSCRIBED' || channel !== realtime) return
+      channelReady = true
+      await realtime.track({
         id: user.id,
         name: user.name,
         email: user.email,
@@ -654,7 +696,9 @@ export const teamChatService = {
     }
     online = []
     presenceSelfId = ''
+    presenceSelfName = ''
     presenceReady = false
+    channelReady = false
     activeRoomId = null
     emit(IPC.teamChat.presence, [])
   },

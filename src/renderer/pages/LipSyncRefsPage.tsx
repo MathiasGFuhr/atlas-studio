@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Archive, Copy, FolderPlus, ImagePlus, Pencil, Trash2 } from 'lucide-react'
+import { Archive, Copy, FolderPlus, ImagePlus, Library, Pencil, Trash2 } from 'lucide-react'
 import type { LipSyncRef } from '@shared/lipSyncRefs'
+import type { CustomPrompt } from '@shared/quickPrompts'
 import type { Channel, Project } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { ConfirmDialog } from '../components/Modal'
+import { SavedPromptPicker } from '../components/SavedPromptPicker'
 import {
   EMPTY_PROJECT_FORM,
   ProjectEditorModal,
@@ -43,6 +45,7 @@ export function LipSyncRefsPage() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [projectForm, setProjectForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
   const [projectSaving, setProjectSaving] = useState(false)
+  const [pickerItemId, setPickerItemId] = useState<string | null>(null)
 
   const projectsInFilter = useMemo(() => {
     if (filterChannelId === FILTER_ALL) return projects
@@ -255,6 +258,50 @@ export function LipSyncRefsPage() {
       pushError(error, 'Não foi possível remover.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function applySavedPrompt(prompt: CustomPrompt) {
+    const id = pickerItemId
+    if (!id) return
+    const draft = drafts[id]
+    const item = items.find((entry) => entry.id === id)
+    if (!draft && !item) return
+    const next: Draft = {
+      label: draft?.label ?? item?.label ?? '',
+      prompt: prompt.text,
+      projectId: draft?.projectId ?? item?.projectId ?? '',
+    }
+    setPickerItemId(null)
+    setDrafts((current) => ({ ...current, [id]: next }))
+    try {
+      const updated = await api.lipSyncRefs.update(id, {
+        label: next.label,
+        prompt: next.prompt,
+        projectId: next.projectId || null,
+      })
+      if (!updated) return
+      if (itemLeavesCurrentFilter(updated.projectId)) {
+        setItems((current) => current.filter((entry) => entry.id !== id))
+        setDrafts((current) => {
+          const following = { ...current }
+          delete following[id]
+          return following
+        })
+        return
+      }
+      setItems((current) => current.map((entry) => (entry.id === id ? updated : entry)))
+      setDrafts((current) => ({
+        ...current,
+        [id]: {
+          label: updated.label,
+          prompt: updated.prompt,
+          projectId: updated.projectId ?? '',
+        },
+      }))
+      push(`“${prompt.name}” aplicado nesta imagem.`, 'success')
+    } catch (error) {
+      pushError(error, 'Não foi possível aplicar o prompt salvo.')
     }
   }
 
@@ -578,6 +625,19 @@ export function LipSyncRefsPage() {
                     />
                     <Pencil className="h-3 w-3 shrink-0 text-muted-2" aria-hidden />
                   </label>
+                  <div className="flex items-center justify-between gap-2 px-2.5 pt-1.5">
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-muted-2">
+                      Prompt
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-accent transition-colors hover:bg-accent/10"
+                      onClick={() => setPickerItemId(item.id)}
+                    >
+                      <Library className="h-3 w-3" />
+                      Usar salvo
+                    </button>
+                  </div>
                   <label className="relative block">
                     <textarea
                       value={draft.prompt}
@@ -651,6 +711,12 @@ export function LipSyncRefsPage() {
           setProjectForm(EMPTY_PROJECT_FORM)
         }}
         onSubmit={() => void saveNewProject()}
+      />
+
+      <SavedPromptPicker
+        open={pickerItemId !== null}
+        onClose={() => setPickerItemId(null)}
+        onPick={(prompt) => void applySavedPrompt(prompt)}
       />
 
       <ConfirmDialog

@@ -59,6 +59,14 @@ export type TeamChatPeer = {
   email: string
 }
 
+/** Aviso em tempo real de que alguém está escrevendo numa conversa. */
+export type TeamChatTyping = {
+  roomId: string
+  userId: string
+  name: string
+  typing: boolean
+}
+
 export type TeamChatMember = TeamChatPeer & {
   role: TeamChatMemberRole
 }

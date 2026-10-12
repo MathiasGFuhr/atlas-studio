@@ -71,6 +71,7 @@ import type {
   TeamChatPeer,
   TeamChatRoom,
   TeamChatSendInput,
+  TeamChatTyping,
 } from '../shared/account'
 import type {
   LipSyncRef,
@@ -363,11 +364,20 @@ const api = {
     listOnline: () => ipcRenderer.invoke(IPC.teamChat.listOnline) as Promise<TeamChatPeer[]>,
     setActiveRoom: (roomId: string | null) =>
       ipcRenderer.invoke(IPC.teamChat.setActiveRoom, roomId) as Promise<void>,
+    setTyping: (roomId: string, typing: boolean) =>
+      ipcRenderer.invoke(IPC.teamChat.setTyping, roomId, typing) as Promise<void>,
     onMessage: (callback: (message: TeamChatMessage) => void) => {
       const listener = (_: Electron.IpcRendererEvent, data: TeamChatMessage) => callback(data)
       ipcRenderer.on(IPC.teamChat.message, listener)
       return () => {
         ipcRenderer.removeListener(IPC.teamChat.message, listener)
+      }
+    },
+    onTyping: (callback: (event: TeamChatTyping) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: TeamChatTyping) => callback(data)
+      ipcRenderer.on(IPC.teamChat.typing, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.teamChat.typing, listener)
       }
     },
     onPresence: (callback: (peers: TeamChatPeer[]) => void) => {

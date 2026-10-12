@@ -66,6 +66,53 @@ function formatMessageClock(iso: string) {
   return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+const TYPING_TTL_MS = 4500
+
+type TypingPeer = {
+  userId: string
+  name: string
+  until: number
+}
+
+function typingLabel(peers: TypingPeer[], kind: 'dm' | 'group'): string | null {
+  if (peers.length === 0) return null
+  if (kind === 'dm') return 'digitando'
+  if (peers.length === 1) return `${peers[0]?.name ?? 'Alguém'} está digitando`
+  if (peers.length === 2) {
+    return `${peers[0]?.name ?? 'Alguém'} e ${peers[1]?.name ?? 'alguém'} estão digitando`
+  }
+  return `${peers[0]?.name ?? 'Alguém'} e mais ${peers.length - 1} estão digitando`
+}
+
+function withoutTypingPeer(
+  current: Record<string, TypingPeer[]>,
+  roomId: string,
+  userId: string,
+): Record<string, TypingPeer[]> {
+  const list = current[roomId]
+  if (!list) return current
+  const nextList = list.filter((peer) => peer.userId !== userId)
+  const next = { ...current }
+  if (nextList.length === 0) delete next[roomId]
+  else next[roomId] = nextList
+  return next
+}
+
+function TypingStatus({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2" aria-live="polite">
+      <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/[0.06] bg-white/[0.04] px-3 py-2">
+        <span className="flex items-center gap-1" aria-hidden>
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:300ms]" />
+        </span>
+        <span className="text-xs italic text-accent">{label}</span>
+      </div>
+    </div>
+  )
+}
+
 function ChatAvatar({
   name,
   size = 'md',
@@ -113,6 +160,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
   const [directory, setDirectory] = useState<TeamChatPeer[]>([])
   const [online, setOnline] = useState<TeamChatPeer[]>([])
   const [draft, setDraft] = useState('')
+  const [typingByRoom, setTypingByRoom] = useState<Record<string, TypingPeer[]>>({})
   const [sending, setSending] = useState(false)
   const [attachmentPath, setAttachmentPath] = useState<string | null>(null)
   const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null)
@@ -135,6 +183,9 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
     () => rooms.find((room) => room.id === activeRoomId) ?? null,
     [activeRoomId, rooms],
   )
+  const activeTypingLabel = activeRoom
+    ? typingLabel(typingByRoom[activeRoom.id] ?? [], activeRoom.kind)
+    : null
 
   const refreshRooms = useCallback(async () => {
     const next = await api.teamChat.listRooms()
@@ -201,13 +252,29 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
           return [...current, message]
         })
       }
+      setTypingByRoom((current) => withoutTypingPeer(current, message.roomId, message.authorId))
+    })
+    const offTyping = api.teamChat.onTyping((event) => {
+      if (event.userId === account.id) return
+      setTypingByRoom((current) => {
+        if (!event.typing) return withoutTypingPeer(current, event.roomId, event.userId)
+        const list = (current[event.roomId] ?? []).filter((peer) => peer.userId !== event.userId)
+        return {
+          ...current,
+          [event.roomId]: [
+            ...list,
+            { userId: event.userId, name: event.name, until: Date.now() + TYPING_TTL_MS },
+          ],
+        }
+      })
     })
     const offPresence = api.teamChat.onPresence(setOnline)
     return () => {
       offMessage()
+      offTyping()
       offPresence()
     }
-  }, [api, loadRoom, pushError, refreshRooms])
+  }, [account.id, api, loadRoom, pushError, refreshRooms])
 
   useEffect(() => {
     if (!requestedRoomId || requestedRoomId === activeRoomIdRef.current) return
@@ -217,7 +284,40 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
   useEffect(() => {
     const node = scroller.current
     if (node) node.scrollTop = node.scrollHeight
-  }, [messages])
+  }, [messages, activeTypingLabel])
+
+  const composing = Boolean(activeRoomId && draft.trim())
+
+  useEffect(() => {
+    if (!activeRoomId || !composing) return
+    const roomId = activeRoomId
+    const ping = () => {
+      void api.teamChat.setTyping(roomId, true)
+    }
+    ping()
+    const interval = window.setInterval(ping, 2000)
+    return () => {
+      window.clearInterval(interval)
+      void api.teamChat.setTyping(roomId, false)
+    }
+  }, [activeRoomId, api, composing])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = Date.now()
+      setTypingByRoom((current) => {
+        let changed = false
+        const next: Record<string, TypingPeer[]> = {}
+        for (const [roomId, peers] of Object.entries(current)) {
+          const alive = peers.filter((peer) => peer.until > now)
+          if (alive.length !== peers.length) changed = true
+          if (alive.length > 0) next[roomId] = alive
+        }
+        return changed ? next : current
+      })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!emojiOpen) return
@@ -545,6 +645,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                     const active = room.id === activeRoomId
                     const peerOnline =
                       room.kind === 'dm' && room.peer ? onlineIds.has(room.peer.id) : false
+                    const roomTyping = typingLabel(typingByRoom[room.id] ?? [], room.kind)
                     return (
                       <li key={room.id} className="group/room min-w-0">
                         <div
@@ -576,8 +677,14 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                                 </span>
                               </div>
                               <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                                <p className="min-w-0 flex-1 truncate text-xs text-muted">
-                                  {room.lastMessagePreview ||
+                                <p
+                                  className={cn(
+                                    'min-w-0 flex-1 truncate text-xs',
+                                    roomTyping ? 'italic text-accent' : 'text-muted',
+                                  )}
+                                >
+                                  {roomTyping ||
+                                    room.lastMessagePreview ||
                                     (room.kind === 'dm' ? 'Conversa privada' : 'Grupo')}
                                 </p>
                                 <span className="shrink-0 rounded-md border border-white/[0.05] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-2">
@@ -649,12 +756,18 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                       <p className="truncate text-[15px] font-semibold tracking-tight text-text">
                         {activeRoom.title}
                       </p>
-                      <p className="mt-0.5 truncate text-xs text-muted">
-                        {activeRoom.kind === 'dm'
-                          ? activePeerOnline
-                            ? 'Online agora · conversa privada'
-                            : 'Conversa privada · só vocês dois'
-                          : `${members.length} membro${members.length === 1 ? '' : 's'} no grupo`}
+                      <p
+                        className={cn(
+                          'mt-0.5 truncate text-xs',
+                          activeTypingLabel ? 'italic text-accent' : 'text-muted',
+                        )}
+                      >
+                        {activeTypingLabel ??
+                          (activeRoom.kind === 'dm'
+                            ? activePeerOnline
+                              ? 'Online agora · conversa privada'
+                              : 'Conversa privada · só vocês dois'
+                            : `${members.length} membro${members.length === 1 ? '' : 's'} no grupo`)}
                       </p>
                     </div>
                   </div>
@@ -799,6 +912,12 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                     })
                   )}
                 </div>
+
+                {activeTypingLabel ? (
+                  <div className="border-t border-white/[0.04] bg-black/10 px-4 py-2.5">
+                    <TypingStatus label={activeTypingLabel} />
+                  </div>
+                ) : null}
 
                 <form
                   className="min-w-0 border-t border-white/[0.05] bg-black/15 px-3 py-3 sm:px-4"

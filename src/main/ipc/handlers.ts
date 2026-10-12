@@ -427,6 +427,9 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.teamChat.setActiveRoom, (_e, roomId: string | null) => {
     teamChatService.setActiveRoom(roomId)
   })
+  ipcMain.handle(IPC.teamChat.setTyping, (_e, roomId: string, typing: boolean) => {
+    teamChatService.setTyping(roomId, Boolean(typing))
+  })
 
   ipcMain.handle(IPC.antigravity.status, () => antigravityService.getStatus())
   ipcMain.handle(IPC.antigravity.healthCheck, async () => {
