@@ -25,6 +25,7 @@ export type LipSyncRefUpdateInput = {
   label?: string
   prompt?: string
   projectId?: string | null
+  imagePath?: string
 }
 
 export type LipSyncRefListFilters = {

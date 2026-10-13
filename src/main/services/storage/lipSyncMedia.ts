@@ -40,7 +40,9 @@ export function importLipSyncImage(sourcePath: string, refId: string): string {
   const destDir = refsDir()
   fs.mkdirSync(destDir, { recursive: true })
   const dest = path.join(destDir, `${refId}${ext}`)
-  fs.copyFileSync(resolved, dest)
+  if (path.resolve(resolved) !== path.resolve(dest)) {
+    fs.copyFileSync(resolved, dest)
+  }
   return dest
 }
 

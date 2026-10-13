@@ -223,4 +223,38 @@ describe('shortsCopy', () => {
     expect(copy.title.toLowerCase()).toContain('zu viel von allem')
     expect(copy.title).not.toMatch(/momento incrível/i)
   })
+
+  it('sem fala, fallback vira legenda de Short — não cola a nota de corte', () => {
+    const copy = fallbackShortsCopy({
+      index: 1,
+      hook: '',
+      reason:
+        'Abertura narrativa poética que instiga a reflexão sobre o significado de Maria e o nascimento de Jesus. · Planos cinematográficos de contemplação que capturam a atenção imediatamente. · Voz empostada e poética sem ruídos de fundo, com ambiência acústica envolvente.',
+      transcript: [],
+      songTitle: 'Ave Maria',
+      artistName: 'Coral Atlas',
+    })
+    expect(copy.title.toLowerCase()).toContain('maria')
+    expect(copy.description.toLowerCase()).toContain('maria')
+    expect(copy.description.toLowerCase()).not.toMatch(
+      /planos cinematogr|ambiência acústica|voz empostada|ruídos|abertura narrativa/i,
+    )
+    expect(copy.description).not.toContain('·')
+    expect(copy.hashtags).toEqual(expect.arrayContaining(['CoralAtlas', 'AveMaria']))
+  })
+
+  it('sem fala, grounding apaga ficha técnica e nota de corte na descrição', () => {
+    const cleaned = groundShortsCopy(
+      {
+        index: 1,
+        title: 'Abertura narrativa sobre o significado de Maria',
+        description:
+          'Abertura narrativa poética. · Planos cinematográficos. · Ambiência acústica envolvente.',
+        hashtags: [],
+      },
+      { transcript: [] },
+    )
+    expect(cleaned.title.toLowerCase()).toContain('maria')
+    expect(cleaned.description).toBe('')
+  })
 })

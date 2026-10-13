@@ -99,16 +99,20 @@ export class ShortMetadataService {
           next.description = copy.description.trim()
           if (copy.hashtags.length) next.hashtags = copy.hashtags
         }
-        if (!next.title.trim() || !next.description.trim()) {
+        if (!next.title.trim() || !next.description.trim() || (input.fields !== 'title' && !next.hashtags.length)) {
           const fallback = fallbackShortsCopy({
             index: clip.index,
             hook: clip.hook,
             reason: clip.reason,
             transcript: cuesForClip(input.job.transcript, clip.start, clip.end),
             songTitle: input.editorial.songTitle,
+            artistName: input.editorial.artistName,
           })
           if (!next.title.trim()) next.title = fallback.title
           if (!next.description.trim()) next.description = fallback.description
+          if (input.fields !== 'title' && !next.hashtags.length && fallback.hashtags.length) {
+            next.hashtags = fallback.hashtags
+          }
         }
         return next
       })
@@ -122,11 +126,18 @@ export class ShortMetadataService {
           reason: clip.reason,
           transcript: cuesForClip(input.job.transcript, clip.start, clip.end),
           songTitle: input.editorial.songTitle,
+          artistName: input.editorial.artistName,
         })
         return {
           ...clip,
           title: input.fields === 'description' ? clip.title : clip.title.trim() || fallback.title,
           description: input.fields === 'title' ? clip.description : clip.description.trim() || fallback.description,
+          hashtags:
+            input.fields === 'title' || clip.hashtags.length
+              ? clip.hashtags
+              : fallback.hashtags.length
+                ? fallback.hashtags
+                : clip.hashtags,
         }
       })
     }

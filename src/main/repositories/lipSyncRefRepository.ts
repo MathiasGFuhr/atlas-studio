@@ -182,14 +182,32 @@ export const lipSyncRefRepository = {
     const projectId =
       patch.projectId !== undefined ? normalizeProjectId(patch.projectId) : current.projectId
     assertProjectExists(projectId)
+
+    let imagePath = current.imagePath
+    let previousImage: string | null = null
+    if (patch.imagePath !== undefined) {
+      const source = patch.imagePath.trim()
+      if (!source) throw new Error('Selecione uma imagem.')
+      const stored = importLipSyncImage(source, id)
+      if (path.resolve(stored) !== path.resolve(current.imagePath)) {
+        previousImage = current.imagePath
+      }
+      imagePath = stored
+    }
+
     const now = new Date().toISOString()
     getDb()
       .prepare(
         `UPDATE lipsync_refs
-         SET label = ?, prompt = ?, project_id = ?, updated_at = ?
+         SET label = ?, prompt = ?, project_id = ?, image_path = ?, updated_at = ?
          WHERE id = ?`,
       )
-      .run(label, prompt, projectId, now, id)
+      .run(label, prompt, projectId, imagePath, now, id)
+
+    if (previousImage) {
+      removeLipSyncImage(previousImage)
+    }
+
     return this.get(id)
   },
 

@@ -1335,10 +1335,14 @@ export const mockApi = {
       const projectId =
         patch.projectId !== undefined ? patch.projectId?.trim() || null : current.projectId
       const project = projectId ? projects.find((item) => item.id === projectId) : null
+      if (patch.imagePath !== undefined && !patch.imagePath.trim()) {
+        throw new Error('Selecione uma imagem.')
+      }
       const next: LipSyncRef = {
         ...current,
         label: patch.label !== undefined ? patch.label.trim() : current.label,
         prompt: patch.prompt !== undefined ? patch.prompt : current.prompt,
+        imagePath: patch.imagePath !== undefined ? patch.imagePath.trim() : current.imagePath,
         projectId,
         projectName: project?.name ?? null,
         updatedAt: new Date().toISOString(),

@@ -113,7 +113,8 @@ function spokenSourceBlock(cues: TranscriptCue[]): string {
   if (lines.length === 0) {
     return [
       'O QUE É DITO NESTE TRECHO: (sem transcrição)',
-      'Sem fala utilizável: não invente letra e não preencha título/descrição com instrumento, clima ou “abertura intimista”.',
+      'Sem fala utilizável: NÃO invente letra. Ainda assim PREENCHA título e descrição com o tema narrativo/visual deste intervalo.',
+      'Proibido ficha de arranjo (instrumento, clima, “abertura intimista”). Use o assunto concreto do motivoDoCorte deste Short.',
     ].join('\n')
   }
   return [
@@ -146,7 +147,26 @@ const ARRANGEMENT_WORDS = new Set([
   'emocional',
   'gitarre',
   'klavier',
+  'cinematografico',
+  'cinematograficos',
+  'contemplacao',
+  'ambiencia',
+  'empostada',
+  'empostado',
+  'ruidos',
+  'planos',
+  'enquadramento',
+  'envolvente',
+  'instiga',
+  'capturam',
+  'captura',
+  'takes',
+  'closeup',
 ])
+
+/** Nota interna de corte / ficha técnica — nunca vira descrição de Short. */
+const CUT_ANALYSIS_SIGNAL =
+  /\b(planos?\s+cinematogr\w*|ambi[eê]ncia\s+ac[uú]stica|voz\s+empostad\w*|sem\s+ru[ií]dos|capturam?\s+a\s+aten[cç][aã]o|abertura\s+narrativa|introdu[cç][aã]o\s+serena|o\s+int[eé]rprete\s+entra)\b/i
 
 const STOP_WORDS = new Set([
   'que',
@@ -344,16 +364,121 @@ export function speechCopyNeedsRepair(
   return false
 }
 
+function arrangementDensity(text: string): number {
+  const words = fold(text)
+    .split(' ')
+    .filter((word) => word.length > 3)
+  if (words.length === 0) return 0
+  const hits = words.filter((word) => ARRANGEMENT_WORDS.has(word)).length
+  return hits / words.length
+}
+
+export function looksLikeCutAnalysisCopy(text: string): boolean {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  if (!clean) return false
+  if (/[·•]/.test(clean)) return true
+  if (CUT_ANALYSIS_SIGNAL.test(clean)) return true
+  if (arrangementDensity(clean) >= 0.28) return true
+  return false
+}
+
+/** Extrai só o tema publicável do motivo interno — nunca a ficha técnica. */
+export function extractViewerTheme(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  if (!clean) return ''
+  const chunks = clean
+    .split(/\s*[·•]\s*|(?<=[.!?…])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const ranked = chunks
+    .map((chunk) => {
+      const about = chunk.match(
+        /\b(?:sobre|about|sobre\s+o|sobre\s+a|sobre\s+os|sobre\s+as)\s+(.+)$/i,
+      )
+      const focus = (about?.[1] || chunk)
+        .replace(
+          /^(abertura|introdu[cç][aã]o|cl[ií]max|refr[aã]o|solo|momento)\s+([\p{L}\p{N}'-]+\s+){0,4}(que\s+)?(instiga\s+)?(a\s+)?(reflex[aã]o\s+)?(com|de|sobre|do|da|dos|das)?\s*/iu,
+          '',
+        )
+        .replace(/^(uma\s+)?reflex[aã]o\s+(sobre\s+)?/i, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      return { focus, density: arrangementDensity(focus || chunk), raw: chunk }
+    })
+    .filter((item) => item.focus && item.density < 0.4 && !looksLikeCutAnalysisCopy(item.focus))
+    .sort((a, b) => a.density - b.density || b.focus.length - a.focus.length)
+  const best = ranked[0]?.focus || ''
+  if (!best || looksLikeCutAnalysisCopy(best)) return ''
+  return polishPhrase(best.replace(/[.!?…]+$/g, ''))
+}
+
+/** Remove ficha de arranjo e mantém o tema narrativo do trecho. */
+export function sanitizeClipContextCopy(text: string): string {
+  return extractViewerTheme(text)
+}
+
+function viewerFacingDescription(theme: string, songTitle?: string, artistName?: string): string {
+  const clean = polishPhrase(theme.replace(/[.!?…]+$/g, ''))
+  if (clean) {
+    const sentence = /[.!?…]$/.test(clean) ? clean : `${clean}.`
+    return sentence.slice(0, 220)
+  }
+  if (songTitle?.trim()) {
+    return polishPhrase(
+      artistName?.trim() ? `${songTitle.trim()} — ${artistName.trim()}` : songTitle.trim(),
+    ).slice(0, 220)
+  }
+  return ''
+}
+
+function copyFromClipContext(input: {
+  index: number
+  hook: string
+  reason: string
+  songTitle?: string
+  artistName?: string
+}): ShortsAiCopy {
+  const theme =
+    extractViewerTheme(input.hook) ||
+    extractViewerTheme(input.reason) ||
+    input.songTitle?.trim() ||
+    ''
+  const title = clipTitle(theme) || `Short #${input.index}`
+  const description = viewerFacingDescription(theme, input.songTitle, input.artistName) || title
+  const hashtags = normalizeHashtags(
+    [input.artistName, input.songTitle].filter((item): item is string => Boolean(item?.trim())),
+  ).slice(0, 5)
+  return {
+    index: input.index,
+    title,
+    description,
+    hashtags,
+    hook: title,
+  }
+}
+
 export function groundShortsCopy(
   copy: ShortsAiCopy,
   input: { transcript: TranscriptCue[]; songTitle?: string },
 ): ShortsAiCopy {
   const lines = usableSpeechLines(input.transcript)
   if (lines.length === 0) {
+    const rawTitle = copy.title.trim()
+    const rawDescription = copy.description.trim()
+    const title = looksLikeCutAnalysisCopy(rawTitle)
+      ? extractViewerTheme(rawTitle)
+      : arrangementHits(rawTitle, '')
+        ? extractViewerTheme(rawTitle) || rawTitle
+        : rawTitle
+    const description = looksLikeCutAnalysisCopy(rawDescription)
+      ? ''
+      : arrangementHits(rawDescription, '')
+        ? ''
+        : rawDescription
     return {
       ...copy,
-      title: arrangementHits(copy.title, '') ? '' : copy.title,
-      description: arrangementHits(copy.description, '') ? '' : copy.description,
+      title,
+      description,
     }
   }
   const local = clickableCopyFromSpeech(input.transcript, input.songTitle)
@@ -373,15 +498,21 @@ export function fallbackShortsCopy(input: {
   reason: string
   transcript: TranscriptCue[]
   songTitle?: string
+  artistName?: string
 }): ShortsAiCopy {
   const local = clickableCopyFromSpeech(input.transcript, input.songTitle)
-  return {
-    index: input.index,
-    title: local.title,
-    description: local.description,
-    hashtags: [],
-    hook: local.title,
+  if (local.title.trim()) {
+    return {
+      index: input.index,
+      title: local.title,
+      description: local.description || local.title,
+      hashtags: normalizeHashtags(
+        [input.artistName, input.songTitle].filter((item): item is string => Boolean(item?.trim())),
+      ).slice(0, 5),
+      hook: local.title,
+    }
   }
+  return copyFromClipContext(input)
 }
 
 export function buildShortsCopiesPrompt(input: {
@@ -392,7 +523,7 @@ export function buildShortsCopiesPrompt(input: {
   fields: ShortsCopyFields
   clips: ShortsCopyClipInput[]
 }): string {
-  const profileLabel = 'MÚSICA'
+  const profileLabel = input.profile === 'music' ? 'MÚSICA' : 'HISTÓRIA'
   const contentLanguage = input.editorial.contentLanguage?.trim() || input.editorial.language.trim()
   const languageName = input.editorial.languageName?.trim() || contentLanguage || 'the source material language'
   const language = contentLanguage || languageName
@@ -407,19 +538,22 @@ export function buildShortsCopiesPrompt(input: {
     input.profile === 'music'
       ? [
           'Estratégia Música (título clicável a partir do que é dito/cantado NESTE trecho):',
-          '- título e descrição nascem da FALA/LETRA transcrita deste Short',
+          '- COM fala/letra: título e descrição nascem da FALA/LETRA transcrita deste Short',
           '- o título é uma frase LITERAL do bloco "O QUE É DITO": verso, confissão ou pergunta, cortada para dar vontade de ouvir a próxima linha',
           '- pode cortar a frase; não pode trocar as palavras por clima, instrumento ou sinônimo',
           '- comece pela frase forte. O nome da música não substitui o que é dito',
           '- cada Short usa palavras diferentes daquele intervalo',
+          '- SEM fala utilizável: NÃO deixe título/descrição vazios. Use o tema narrativo/visual DESTE intervalo (motivoDoCorte, o que se vê/ouve), em 4–12 palavras',
+          '- SEM fala: foque no assunto, revelação ou imagem específica do trecho — nunca ficha de arranjo',
           '- PROIBIDO descrever arranjo, instrumento, clima ou estrutura: "abertura intimista", "voz, violão e piano", "introdução serena", "o intérprete entra", "tom emocional", "a canção se inicia"',
           '- PROIBIDO clickbait vazio que não esteja nas palavras: "momento incrível", "você precisa ouvir", "não perca"',
         ]
       : [
           'Estratégia História (título clicável a partir do que é dito NESTE trecho):',
-          '- título e descrição nascem da fala transcrita deste Short',
+          '- COM fala: título e descrição nascem da fala transcrita deste Short',
           '- título clicável: descoberta, consequência, pergunta implícita, fato específico, revelação ou conflito dito no trecho',
           '- o título deve funcionar sozinho, sem o episódio completo',
+          '- SEM fala utilizável: NÃO deixe título/descrição vazios. Extraia o gancho do motivoDoCorte e do conteúdo visual/áudio deste intervalo',
           '- NÃO invente fatos que não estejam no trecho',
           '- NÃO use clickbait falso nem resumo genérico do episódio',
         ]
@@ -518,8 +652,8 @@ export function buildShortsCopiesPrompt(input: {
     musicRules.join('\n'),
     '- NÃO invente tema político, social ou letra que não esteja em "O QUE É DITO NESTE TRECHO".',
     '- Se houver fala transcrita, ignore arranjo, instrumento, plateia e clima. Isso não é título nem descrição.',
-    '- O título precisa conter uma sequência literal de palavras desse bloco. fraseLiteralParaOTitulo é a frase forte; use ela ou outro corte literal do mesmo bloco.',
-    '- Sem fala transcrita: não invente letra e não substitua por "abertura", "violão", "piano" ou "tom intimista".',
+    '- Com fala: o título precisa conter uma sequência literal de palavras desse bloco. fraseLiteralParaOTitulo é a frase forte; use ela ou outro corte literal do mesmo bloco.',
+    '- Sem fala transcrita: não invente letra; não use "abertura", "violão", "piano" ou "tom intimista"; ainda assim entregue título e descrição com o tema concreto deste Short.',
     '',
     'Regras de título (clicável):',
     '- um título por Short, feito SÓ com o que é dito naquele intervalo',
@@ -530,13 +664,14 @@ export function buildShortsCopiesPrompt(input: {
     '- proibido "Nome da música: abertura/clima/instrumento"',
     `- proibido títulos genéricos como: ${GENERIC_TITLE_HINTS.map((item) => `"${item}"`).join(', ')}`,
     '',
-    'Regras de descrição:',
-    '- 1 a 3 frases curtas com o que é falado ou cantado NESTE trecho',
-    '- cite as falas reais do intervalo, para quem lê saber o conteúdo antes de ouvir',
-    '- cada frase precisa trazer palavras que estão na transcrição deste Short',
-    '- proibido: "a canção se inicia", "introdução serena", "o intérprete entra", "estabelecendo a premissa emocional"',
+    'Regras de descrição (texto do YouTube Short, para o espectador):',
+    '- 1 a 2 frases curtas que digam o ASSUNTO do Short — o que a pessoa vai ouvir/ver',
+    '- COM fala: cite as falas reais do intervalo',
+    '- SEM fala: uma legenda curta sobre o tema (ex.: "O significado de Maria e o nascimento de Jesus.")',
+    '- NUNCA copie motivoDoCorte, nota de análise, ficha técnica, planos, ambiência, voz empostada, ruídos ou qualidade de áudio',
+    '- proibido: "a canção se inicia", "introdução serena", "o intérprete entra", "planos cinematográficos", "ambiência acústica"',
     '- não copiar a descrição do vídeo original',
-    '- sem enrolação',
+    '- sem enrolação e sem bullet points de análise',
     '',
     'Hashtags:',
     '- 0 a 5, só se forem relevantes a este trecho',

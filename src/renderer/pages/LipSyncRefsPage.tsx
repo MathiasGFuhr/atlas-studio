@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Archive, Copy, FolderPlus, ImagePlus, Library, Pencil, Trash2 } from 'lucide-react'
+import { Archive, Copy, FolderPlus, ImagePlus, Library, Pencil, Replace, Trash2 } from 'lucide-react'
 import type { LipSyncRef } from '@shared/lipSyncRefs'
 import type { CustomPrompt } from '@shared/quickPrompts'
 import type { Channel, Project } from '@shared/types'
@@ -241,6 +241,47 @@ export function LipSyncRefsPage() {
       }))
     } catch (error) {
       pushError(error, 'Não foi possível salvar.')
+    }
+  }
+
+  async function replaceImage(id: string) {
+    const draft = drafts[id]
+    const item = items.find((entry) => entry.id === id)
+    if (!draft && !item) return
+    setBusy(true)
+    try {
+      const file = await api.dialog.selectImage()
+      if (!file) return
+      const updated = await api.lipSyncRefs.update(id, {
+        imagePath: file,
+        label: draft?.label ?? item?.label ?? '',
+        prompt: draft?.prompt ?? item?.prompt ?? '',
+        projectId: (draft?.projectId ?? item?.projectId) || null,
+      })
+      if (!updated) return
+      if (itemLeavesCurrentFilter(updated.projectId)) {
+        setItems((current) => current.filter((entry) => entry.id !== id))
+        setDrafts((current) => {
+          const next = { ...current }
+          delete next[id]
+          return next
+        })
+        return
+      }
+      setItems((current) => current.map((entry) => (entry.id === id ? updated : entry)))
+      setDrafts((current) => ({
+        ...current,
+        [id]: {
+          label: updated.label,
+          prompt: updated.prompt,
+          projectId: updated.projectId ?? '',
+        },
+      }))
+      push('Imagem trocada.', 'success')
+    } catch (error) {
+      pushError(error, 'Não foi possível trocar a imagem.')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -555,6 +596,16 @@ export function LipSyncRefsPage() {
                       Imagem indisponível
                     </div>
                   )}
+                  <button
+                    type="button"
+                    className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-black/85 disabled:opacity-50"
+                    disabled={busy}
+                    title="Trocar imagem"
+                    onClick={() => void replaceImage(item.id)}
+                  >
+                    <Replace className="h-3 w-3" />
+                    Trocar
+                  </button>
                 </div>
 
                 <div className="border-t border-border bg-bg/40">
