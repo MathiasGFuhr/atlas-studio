@@ -173,8 +173,8 @@ function NotFoundContent({
 }) {
   return (
     <div className="space-y-4 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10">
-        <AlertCircle className="h-7 w-7 text-amber-500" />
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-warning-subtle">
+        <AlertCircle className="h-7 w-7 text-warning" />
       </div>
       <div>
         <h3 className="text-base font-semibold text-text">Codex não instalado</h3>
@@ -226,7 +226,7 @@ function ReadyToLinkContent({
       <div className="text-center">
         <AtlasLogo
           variant="mark"
-          className="mx-auto mb-4 h-14 w-14 rounded-2xl shadow-[0_0_22px_rgba(53,229,139,0.2)]"
+          className="mx-auto mb-4 h-14 w-14 rounded-2xl"
         />
         <p className="text-sm leading-relaxed text-muted">
           {required
@@ -286,7 +286,7 @@ function LinkingContent({
 }) {
   return (
     <div className="space-y-5 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-dark">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-subtle">
         <Loader2 className="h-7 w-7 animate-spin text-accent" />
       </div>
       <div>
@@ -336,13 +336,13 @@ function DeviceCodeContent({
       </div>
 
       <div className="flex items-center justify-center gap-3">
-        <code className="rounded-xl border border-border bg-card-2 px-6 py-3 text-2xl font-bold tracking-[0.3em] text-accent">
+        <code className="rounded-xl border border-border bg-elevated px-6 py-3 text-2xl font-bold tracking-[0.3em] text-accent">
           {userCode}
         </code>
         <button
           type="button"
           onClick={copyCode}
-          className="rounded-lg p-2 text-muted transition-colors hover:bg-white/5 hover:text-text"
+          className="rounded-lg p-2 text-muted transition-colors hover:bg-hover hover:text-text"
           title="Copiar código"
         >
           <Copy className="h-5 w-5" />

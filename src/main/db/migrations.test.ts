@@ -331,27 +331,11 @@ describe('migração para projetos de História e Música', () => {
     expect(first.backedUp).toBe(false)
     expect(migrateSchema(db).backedUp).toBe(false)
     expect(db.prepare('SELECT COUNT(*) AS c FROM scripts').get()).toEqual({ c: 2 })
-    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([
-      expect.objectContaining({ version: 1 }),
-      expect.objectContaining({ version: 2 }),
-      expect.objectContaining({ version: 3 }),
-      expect.objectContaining({ version: 4 }),
-      expect.objectContaining({ version: 5 }),
-      expect.objectContaining({ version: 6 }),
-      expect.objectContaining({ version: 7 }),
-      expect.objectContaining({ version: 8 }),
-      expect.objectContaining({ version: 9 }),
-      expect.objectContaining({ version: 10 }),
-      expect.objectContaining({ version: 11 }),
-      expect.objectContaining({ version: 12 }),
-      expect.objectContaining({ version: 13 }),
-      expect.objectContaining({ version: 14 }),
-      expect.objectContaining({ version: 15 }),
-      expect.objectContaining({ version: 16 }),
-      expect.objectContaining({ version: 17 }),
-      expect.objectContaining({ version: 18 }),
-      expect.objectContaining({ version: 19 }),
-    ])
+    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual(
+      Array.from({ length: CURRENT_SCHEMA_VERSION }, (_, index) =>
+        expect.objectContaining({ version: index + 1 }),
+      ),
+    )
   })
 
   it('adiciona pasta do projeto mesmo em banco já migrado até a versão 2', async () => {

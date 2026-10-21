@@ -146,7 +146,7 @@ export function ChatDock() {
         {!open ? (
           <div
             id="atlas-chat-hint"
-            className="pointer-events-none absolute bottom-[calc(100%+10px)] right-0 whitespace-nowrap rounded-xl bg-card px-2.5 py-1.5 text-[11px] font-medium text-text shadow-[0_8px_24px_rgba(0,0,0,0.4)] ring-1 ring-border"
+            className="pointer-events-none absolute bottom-[calc(100%+10px)] right-0 whitespace-nowrap rounded-xl bg-card px-2.5 py-1.5 text-[11px] font-medium text-text shadow-card ring-1 ring-border"
           >
             <span className="flex items-center gap-1.5">
               <Sparkles className="h-3 w-3 text-accent" />
@@ -171,15 +171,15 @@ export function ChatDock() {
             setOpen(true)
           }}
           className={cn(
-            'relative flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-colors',
+            'relative flex h-12 w-12 items-center justify-center rounded-full shadow-popover transition-colors',
             open
-              ? 'bg-card-2 text-text ring-1 ring-border hover:bg-white/10'
-              : 'bg-accent text-black hover:bg-accent-hover',
+              ? 'bg-elevated text-text ring-1 ring-border hover:bg-hover'
+              : 'bg-accent text-on-accent hover:bg-accent-hover',
           )}
         >
           {open ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
           {!open ? (
-            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white text-[8px] font-bold leading-none text-black">
+            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-text text-[8px] font-bold leading-none text-bg">
               1
             </span>
           ) : null}
@@ -189,7 +189,7 @@ export function ChatDock() {
       {open ? (
         <div
           className={cn(
-            'fixed bottom-20 right-5 z-[44] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-bg shadow-[0_16px_48px_rgba(0,0,0,0.45)]',
+            'fixed bottom-20 right-5 z-[44] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-bg shadow-popover',
             dragging ? 'select-none' : null,
           )}
           style={{ width: size.width, height: size.height }}
@@ -200,7 +200,7 @@ export function ChatDock() {
             aria-label="Redimensionar largura do chat"
             className={cn(
               'absolute inset-y-2 left-0 z-10 w-2 cursor-ew-resize touch-none select-none rounded-full',
-              dragging === 'left' || dragging === 'corner' ? 'bg-accent/35' : 'bg-transparent hover:bg-white/15',
+              dragging === 'left' || dragging === 'corner' ? 'bg-accent/35' : 'bg-transparent hover:bg-border-strong',
             )}
             onPointerDown={(event) => beginResize('left', event)}
             onPointerMove={(event) => onResizeMove('left', event)}
@@ -213,7 +213,7 @@ export function ChatDock() {
             aria-label="Redimensionar altura do chat"
             className={cn(
               'absolute inset-x-2 top-0 z-10 h-2 cursor-ns-resize touch-none select-none rounded-full',
-              dragging === 'top' || dragging === 'corner' ? 'bg-accent/35' : 'bg-transparent hover:bg-white/15',
+              dragging === 'top' || dragging === 'corner' ? 'bg-accent/35' : 'bg-transparent hover:bg-border-strong',
             )}
             onPointerDown={(event) => beginResize('top', event)}
             onPointerMove={(event) => onResizeMove('top', event)}
@@ -225,7 +225,7 @@ export function ChatDock() {
             aria-label="Redimensionar chat"
             className={cn(
               'absolute left-0 top-0 z-20 h-3.5 w-3.5 cursor-nwse-resize touch-none select-none rounded-tl-2xl',
-              dragging === 'corner' ? 'bg-accent/40' : 'bg-transparent hover:bg-white/20',
+              dragging === 'corner' ? 'bg-accent/40' : 'bg-transparent hover:bg-border-strong',
             )}
             onPointerDown={(event) => beginResize('corner', event)}
             onPointerMove={(event) => onResizeMove('corner', event)}

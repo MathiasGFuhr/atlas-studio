@@ -1068,6 +1068,7 @@ function sanitizeUserFacingError(raw: string): string {
 }
 
 function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex -- sequências ANSI começam com ESC
   return text.replace(/\u001b\[[0-9;]*m/g, '')
 }
 

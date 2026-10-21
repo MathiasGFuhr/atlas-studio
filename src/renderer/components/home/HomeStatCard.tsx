@@ -20,13 +20,13 @@ export function HomeStatCard({
   const classes = cn(
     'group/stat relative flex min-h-[100px] min-w-0 items-center gap-4 px-5 py-5 text-left',
     'transition-colors duration-200',
-    interactive && 'cursor-pointer hover:bg-white/[0.028]',
+    interactive && 'cursor-pointer hover:bg-hover/60',
     className,
   )
 
   const content = (
     <>
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-gradient-to-b from-white/[0.07] to-white/[0.02] text-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-colors group-hover/stat:border-white/[0.1] group-hover/stat:text-text">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border-soft bg-elevated text-muted transition-colors group-hover/stat:border-border-strong group-hover/stat:text-text">
         {icon}
       </div>
       <div className="min-w-0">

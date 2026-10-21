@@ -5,6 +5,7 @@ import { app } from 'electron'
 import { getDatabasePath } from '../paths'
 import { seedIfEmpty } from './seed'
 import { migrateSchema } from './migrations'
+import { logger } from '../services/logging/logger'
 
 const require = createRequire(import.meta.url)
 // sql.js is CommonJS — load at runtime to avoid ESM __dirname breakage when bundled
@@ -388,8 +389,35 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
   let persistTimer: ReturnType<typeof setTimeout> | null = null
 
   const writeToDisk = () => {
-    const data = database.export()
-    fs.writeFileSync(dbFilePath, Buffer.from(data))
+    const data = Buffer.from(database.export())
+    const tmpPath = `${dbFilePath}.tmp`
+    // Grava num temporário e troca de uma vez: um crash no meio nunca deixa o .db truncado.
+    const fd = fs.openSync(tmpPath, 'w')
+    try {
+      fs.writeSync(fd, data, 0, data.length, 0)
+      fs.fsyncSync(fd)
+    } finally {
+      fs.closeSync(fd)
+    }
+    try {
+      fs.renameSync(tmpPath, dbFilePath)
+    } catch (error) {
+      // Antivírus/indexador podem segurar o .db no Windows; cai para escrita direta.
+      logger.warn('db.persist.rename_failed', { message: (error as Error).message })
+      fs.writeFileSync(dbFilePath, data)
+      fs.rmSync(tmpPath, { force: true })
+    }
+  }
+
+  const writeDirty = () => {
+    if (!dirty) return
+    dirty = false
+    try {
+      writeToDisk()
+    } catch (error) {
+      dirty = true
+      throw error
+    }
   }
 
   const flush = () => {
@@ -397,9 +425,7 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
       clearTimeout(persistTimer)
       persistTimer = null
     }
-    if (!dirty) return
-    dirty = false
-    writeToDisk()
+    writeDirty()
   }
 
   const schedulePersist = () => {
@@ -407,9 +433,12 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
     if (persistTimer) return
     persistTimer = setTimeout(() => {
       persistTimer = null
-      if (!dirty) return
-      dirty = false
-      writeToDisk()
+      try {
+        writeDirty()
+      } catch (error) {
+        logger.error('db.persist.failed', { message: (error as Error).message })
+        schedulePersist()
+      }
     }, PERSIST_DEBOUNCE_MS)
   }
 
@@ -428,24 +457,25 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
         },
         get(...params: unknown[]) {
           const stmt = database.prepare(sql)
-          stmt.bind(params as never[])
-          if (stmt.step()) {
-            const row = stmt.getAsObject()
+          try {
+            stmt.bind(params as never[])
+            return stmt.step() ? (stmt.getAsObject() as Record<string, unknown>) : undefined
+          } finally {
             stmt.free()
-            return row as Record<string, unknown>
           }
-          stmt.free()
-          return undefined
         },
         all(...params: unknown[]) {
           const stmt = database.prepare(sql)
-          stmt.bind(params as never[])
-          const rows: Record<string, unknown>[] = []
-          while (stmt.step()) {
-            rows.push(stmt.getAsObject() as Record<string, unknown>)
+          try {
+            stmt.bind(params as never[])
+            const rows: Record<string, unknown>[] = []
+            while (stmt.step()) {
+              rows.push(stmt.getAsObject() as Record<string, unknown>)
+            }
+            return rows
+          } finally {
+            stmt.free()
           }
-          stmt.free()
-          return rows
         },
       }
     },

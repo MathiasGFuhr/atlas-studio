@@ -130,8 +130,8 @@ export function HomeCalendarCard({
           alt=""
           className="h-full w-full object-cover object-center"
         />
-        <div className="absolute inset-0 bg-[#070b0e]/70" />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#070b0e]/45 via-[#070b0e]/60 to-[#070b0e]/88" />
+        <div className="absolute inset-0 bg-bg/70" />
+        <div className="absolute inset-0 bg-gradient-to-b from-bg/45 via-bg/60 to-bg/88" />
       </div>
 
       <div className="relative mb-3 flex items-start justify-between gap-3">
@@ -145,7 +145,7 @@ export function HomeCalendarCard({
           <button
             type="button"
             onClick={() => onOpenChannel(selectedChannel.id)}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-medium text-muted transition-colors hover:bg-white/[0.04] hover:text-text"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-medium text-muted transition-colors hover:bg-hover hover:text-text"
           >
             <CalendarDays className="h-3.5 w-3.5" />
             Abrir
@@ -174,7 +174,7 @@ export function HomeCalendarCard({
               <button
                 type="button"
                 onClick={() => shiftMonth(-1)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-black/30 text-muted backdrop-blur-sm transition-colors hover:text-text"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border-soft bg-bg/30 text-muted backdrop-blur-sm transition-colors hover:text-text"
                 aria-label="Mês anterior"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -185,7 +185,7 @@ export function HomeCalendarCard({
               <button
                 type="button"
                 onClick={() => shiftMonth(1)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-black/30 text-muted backdrop-blur-sm transition-colors hover:text-text"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border-soft bg-bg/30 text-muted backdrop-blur-sm transition-colors hover:text-text"
                 aria-label="Próximo mês"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -225,7 +225,7 @@ export function HomeCalendarCard({
                   className={cn(
                     'relative flex aspect-square flex-col items-center justify-center rounded-lg text-[11px] tabular-nums transition-colors',
                     !cell.inMonth && 'text-muted-2/35',
-                    cell.inMonth && !hasVideos && 'text-muted hover:bg-white/[0.04] hover:text-text',
+                    cell.inMonth && !hasVideos && 'text-muted hover:bg-hover hover:text-text',
                     cell.inMonth &&
                       hasVideos &&
                       'bg-accent/12 font-semibold text-accent hover:bg-accent/18',

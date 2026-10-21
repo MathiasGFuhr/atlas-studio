@@ -163,7 +163,7 @@ export function ShortsProjectsPage() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar projeto..."
-            className="h-11 w-full rounded-xl border border-border bg-card-2 pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+            className="h-11 w-full rounded-xl border border-border bg-elevated pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
           />
         </div>
         <Button icon={<Plus className="h-4 w-4" />} disabled={busy} onClick={() => void createProject()}>

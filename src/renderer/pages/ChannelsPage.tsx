@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, CheckCircle2, FolderOpen, MessageSquareText, Plus, Search, Trash2, Tv } from 'lucide-react'
 import type { Channel } from '@shared/types'
@@ -18,6 +18,7 @@ import { Card } from '../components/Card'
 import { StatusBadge } from '../components/StatusBadge'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { ENVIRONMENTS } from '../lib/environments'
 import { notifyChannelsChanged } from '../lib/channelEvents'
@@ -43,15 +44,19 @@ export function ChannelsPage() {
   const [deleting, setDeleting] = useState<Channel | null>(null)
   const [form, setForm] = useState<ChannelFormValues>(EMPTY_CHANNEL_FORM)
 
+  const searchQuery = useDebouncedValue(query, 200)
+  const loadSeq = useRef(0)
+
   async function load() {
-    const list = await api.channels.list({ query: query || undefined })
-    setChannels(list)
+    const seq = ++loadSeq.current
+    const list = await api.channels.list({ query: searchQuery || undefined })
+    if (seq === loadSeq.current) setChannels(list)
   }
 
   useEffect(() => {
-    void load()
+    void load().catch((error) => pushError(error, 'Não foi possível carregar os canais.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
+  }, [searchQuery])
 
   function openCreate() {
     setEditing(null)
@@ -188,7 +193,7 @@ export function ChannelsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar canal..."
-            className="h-11 w-full min-w-0 rounded-xl border border-border bg-card-2 pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+            className="h-11 w-full min-w-0 rounded-xl border border-border bg-elevated pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
           />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
@@ -229,11 +234,11 @@ export function ChannelsPage() {
       ) : (
         <div className="grid min-w-0 w-full grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] gap-4">
           {channels.map((channel) => (
-            <Card key={channel.id} className="flex min-w-0 w-full flex-col gap-4 transition-colors hover:border-[#334049]">
+            <Card key={channel.id} className="flex min-w-0 w-full flex-col gap-4 transition-colors hover:border-border-strong">
               <div className="flex min-w-0 gap-3">
                 <div
                   className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border-soft"
-                  style={{ background: `linear-gradient(145deg, ${channel.color}33, #10161a)` }}
+                  style={{ background: `linear-gradient(145deg, ${channel.color}33, var(--color-elevated))` }}
                 >
                   {channel.avatarDataUrl ? (
                     <img src={channel.avatarDataUrl} alt="" className="h-full w-full object-cover" />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Clapperboard, Loader2, Pencil, Scissors, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -87,7 +87,7 @@ function FieldSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full min-w-0 rounded-xl border border-border bg-card-2 px-3.5 text-sm text-text transition-colors hover:border-[#334049] focus:border-accent/60 focus:outline-none"
+        className="h-11 w-full min-w-0 rounded-xl border border-border bg-elevated px-3.5 text-sm text-text transition-colors hover:border-border-strong focus:border-accent/60 focus:outline-none"
       >
         {children}
       </select>
@@ -158,14 +158,24 @@ export function ShortsStudioPage() {
       setLoading(false)
       return
     }
-    const found = await api.shorts.get(jobId)
+    const requested = jobId
+    const found = await api.shorts.get(requested)
+    // Trocar de projeto no meio da leitura não pode aplicar o job anterior.
+    if (jobIdRef.current !== requested) return
     setJob((current) => mergeShortsJobSnapshot(current, found))
     setMissing(!found)
     setLoading(false)
   }
 
+  const jobIdRef = useRef(jobId)
+  jobIdRef.current = jobId
   useEffect(() => {
-    void loadJob()
+    void loadJob().catch((error) => {
+      if (jobIdRef.current !== jobId) return
+      pushError(error, 'Não foi possível abrir o projeto de shorts.')
+      setLoading(false)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId])
 
   useEffect(() => {
@@ -414,10 +424,19 @@ export function ShortsStudioPage() {
       setMediaUrl(null)
       return
     }
+    let active = true
     void api.shorts
       .mediaUrl(job.id)
-      .then(setMediaUrl)
-      .catch(() => setMediaUrl(null))
+      .then((url) => {
+        if (active) setMediaUrl(url)
+      })
+      .catch(() => {
+        if (active) setMediaUrl(null)
+      })
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, job?.id, job?.sourcePath])
 
   useEffect(() => {

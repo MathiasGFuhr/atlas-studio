@@ -24,6 +24,26 @@ type ImageCacheEntry = {
 
 /** Evita re-ler e re-encodar a mesma thumbnail/avatar a cada troca de aba. */
 const imageDataUrlCache = new Map<string, ImageCacheEntry>()
+/** Teto do cache (LRU por tamanho) para não reter centenas de MB de base64 no processo principal. */
+const IMAGE_CACHE_MAX_CHARS = 48 * 1024 * 1024
+let imageCacheChars = 0
+
+function cacheDelete(key: string) {
+  const entry = imageDataUrlCache.get(key)
+  if (!entry) return
+  imageCacheChars -= entry.dataUrl?.length ?? 0
+  imageDataUrlCache.delete(key)
+}
+
+function cacheSet(key: string, entry: ImageCacheEntry) {
+  cacheDelete(key)
+  imageDataUrlCache.set(key, entry)
+  imageCacheChars += entry.dataUrl?.length ?? 0
+  for (const oldest of imageDataUrlCache.keys()) {
+    if (imageCacheChars <= IMAGE_CACHE_MAX_CHARS || oldest === key) break
+    cacheDelete(oldest)
+  }
+}
 
 export function readImageDataUrl(filePath: string): string | null {
   if (!filePath?.trim()) return null
@@ -36,16 +56,19 @@ export function readImageDataUrl(filePath: string): string | null {
   try {
     stat = fs.statSync(resolved)
     if (!stat.isFile()) {
-      imageDataUrlCache.delete(resolved)
+      cacheDelete(resolved)
       return null
     }
   } catch {
-    imageDataUrlCache.delete(resolved)
+    cacheDelete(resolved)
     return null
   }
 
   const cached = imageDataUrlCache.get(resolved)
   if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    // Reinsere para marcar como usado recentemente.
+    imageDataUrlCache.delete(resolved)
+    imageDataUrlCache.set(resolved, cached)
     return cached.dataUrl
   }
 
@@ -53,14 +76,14 @@ export function readImageDataUrl(filePath: string): string | null {
     const buffer = fs.readFileSync(resolved)
     const dataUrl =
       buffer.byteLength === 0 ? null : `data:${mime};base64,${buffer.toString('base64')}`
-    imageDataUrlCache.set(resolved, {
+    cacheSet(resolved, {
       mtimeMs: stat.mtimeMs,
       size: stat.size,
       dataUrl,
     })
     return dataUrl
   } catch {
-    imageDataUrlCache.delete(resolved)
+    cacheDelete(resolved)
     return null
   }
 }
@@ -68,9 +91,10 @@ export function readImageDataUrl(filePath: string): string | null {
 export function clearImageDataUrlCache(filePath?: string) {
   if (!filePath?.trim()) {
     imageDataUrlCache.clear()
+    imageCacheChars = 0
     return
   }
-  imageDataUrlCache.delete(path.resolve(filePath))
+  cacheDelete(path.resolve(filePath))
 }
 
 export function importProfilePhoto(sourcePath: string): string {

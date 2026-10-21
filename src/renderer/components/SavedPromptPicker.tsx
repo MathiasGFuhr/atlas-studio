@@ -164,7 +164,7 @@ export function SavedPromptPicker({
                 type="button"
                 aria-label="Limpar busca"
                 onClick={() => setQuery('')}
-                className="absolute right-2 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-2 hover:bg-white/5 hover:text-text"
+                className="absolute right-2 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-2 hover:bg-hover hover:text-text"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -213,7 +213,7 @@ export function SavedPromptPicker({
                       'w-full rounded-xl border px-3 py-2.5 text-left transition-colors',
                       selected
                         ? 'border-accent/60 bg-accent/10'
-                        : 'border-border bg-card-2 hover:border-accent/50 hover:bg-accent/5',
+                        : 'border-border bg-elevated hover:border-accent/50 hover:bg-accent/5',
                     )}
                   >
                     <span className="flex items-center gap-2">
@@ -221,7 +221,7 @@ export function SavedPromptPicker({
                         className={cn(
                           'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold',
                           selected
-                            ? 'bg-accent text-black'
+                            ? 'bg-accent text-on-accent'
                             : 'border border-border text-transparent',
                         )}
                         aria-hidden
@@ -232,7 +232,7 @@ export function SavedPromptPicker({
                         {prompt.name}
                       </span>
                       {tabName ? (
-                        <span className="shrink-0 rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                        <span className="shrink-0 rounded-md bg-elevated px-1.5 py-0.5 text-[10px] font-medium text-muted">
                           {tabName}
                         </span>
                       ) : null}

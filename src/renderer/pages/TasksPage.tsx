@@ -194,7 +194,7 @@ export function TasksPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar tarefa..."
-            className="h-11 w-full rounded-xl border border-border bg-card-2 pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+            className="h-11 w-full rounded-xl border border-border bg-elevated pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
           />
         </div>
         <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
@@ -211,8 +211,8 @@ export function TasksPage() {
             className={cn(
               'rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors',
               filter === item
-                ? 'border-accent/40 bg-accent-dark/55 text-accent'
-                : 'border-border bg-card-2 text-muted hover:text-text',
+                ? 'border-accent/40 bg-accent-subtle/55 text-accent'
+                : 'border-border bg-elevated text-muted hover:text-text',
             )}
           >
             {TASK_FILTER_LABEL[item]}
@@ -253,8 +253,8 @@ export function TasksPage() {
                   className={cn(
                     'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border',
                     completed
-                      ? 'border-accent bg-accent text-black'
-                      : 'border-border bg-card-2 hover:border-accent/60',
+                      ? 'border-accent bg-accent text-on-accent'
+                      : 'border-border bg-elevated hover:border-accent/60',
                   )}
                   aria-label={completed ? 'Reabrir tarefa' : 'Marcar como concluída'}
                 >
@@ -310,7 +310,7 @@ export function TasksPage() {
                   <button
                     type="button"
                     onClick={() => openEdit(task)}
-                    className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text"
+                    className="rounded-lg p-2 text-muted hover:bg-hover hover:text-text"
                     aria-label="Editar tarefa"
                   >
                     <Pencil className="h-4 w-4" />
@@ -318,7 +318,7 @@ export function TasksPage() {
                   <button
                     type="button"
                     onClick={() => setDeleting(task)}
-                    className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-danger"
+                    className="rounded-lg p-2 text-muted hover:bg-hover hover:text-danger"
                     aria-label="Excluir tarefa"
                   >
                     <Trash2 className="h-4 w-4" />

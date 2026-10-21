@@ -30,7 +30,7 @@ function CompactSelect({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         className={cn(
-          'appearance-none rounded-xl border border-border bg-card-2 px-2.5 pr-7 text-text',
+          'appearance-none rounded-xl border border-border bg-elevated px-2.5 pr-7 text-text',
           compact ? 'h-8 text-xs' : 'h-9 text-sm',
           'focus:border-accent/60 focus:outline-none disabled:opacity-60',
         )}

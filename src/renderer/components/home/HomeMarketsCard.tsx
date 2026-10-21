@@ -77,9 +77,8 @@ export function HomeMarketsCard({
             alt=""
             className="h-full w-full object-cover object-center"
           />
-          <div className="absolute inset-0 bg-[#070b0e]/68" />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#070b0e]/50 via-[#070b0e]/58 to-[#070b0e]/85" />
-          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-accent/[0.08] to-transparent" />
+          <div className="absolute inset-0 bg-bg/68" />
+          <div className="absolute inset-0 bg-gradient-to-b from-bg/50 via-bg/58 to-bg/85" />
         </div>
 
         <div className="relative mb-3.5 flex shrink-0 items-end justify-between gap-3">
@@ -100,16 +99,16 @@ export function HomeMarketsCard({
               setAddOpen(true)
             }}
             disabled={saving}
-            className="inline-flex h-8 items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 text-[11px] font-medium text-muted transition-colors hover:border-accent/30 hover:text-accent disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-border-soft bg-elevated px-2.5 text-[11px] font-medium text-muted transition-colors hover:border-accent/30 hover:text-accent disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
             Adicionar
           </button>
         </div>
 
-        <div className="relative flex flex-col gap-2">
+        <div className="@container relative flex flex-col gap-2">
           {visible.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.08] bg-black/20 px-4 py-8 text-center backdrop-blur-sm">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border-soft bg-bg/20 px-4 py-8 text-center backdrop-blur-sm">
               <p className="text-sm font-medium text-text">Nenhum fuso configurado</p>
               <p className="mt-1 text-xs text-muted-2">
                 Adicione mercados para publicar no horário certo.
@@ -122,7 +121,7 @@ export function HomeMarketsCard({
               return (
                 <div
                   key={clock.id}
-                  className="group relative overflow-hidden rounded-2xl border border-white/[0.07] bg-black/30 backdrop-blur-md"
+                  className="group relative overflow-hidden rounded-2xl border border-border-soft bg-bg/30 backdrop-blur-md"
                 >
                   {countryCode ? (
                     <div
@@ -135,18 +134,18 @@ export function HomeMarketsCard({
                       }}
                     />
                   ) : null}
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#0a1014]/92 via-[#0a1014]/82 to-[#0a1014]/55" />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-bg/92 via-bg/82 to-bg/55" />
 
-                  <div className="relative flex items-center gap-3 px-3 py-3">
-                    <div className="relative h-11 w-11 shrink-0">
+                  <div className="relative flex items-center gap-2 px-2.5 py-3 @[15rem]:gap-3 @[15rem]:px-3">
+                    <div className="relative h-9 w-9 shrink-0 @[15rem]:h-11 @[15rem]:w-11">
                       <div
                         className={cn(
-                          'flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]',
+                          'flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border @[15rem]:h-11 @[15rem]:w-11',
                           countryCode
-                            ? 'border-white/15 bg-[#12181d]'
+                            ? 'border-border bg-elevated'
                             : daytime
                               ? 'border-accent/25 bg-accent/15 text-accent'
-                              : 'border-white/[0.08] bg-white/[0.06] text-muted',
+                              : 'border-border-soft bg-hover text-muted',
                         )}
                       >
                         {countryCode ? (
@@ -163,8 +162,8 @@ export function HomeMarketsCard({
                       </div>
                       <span
                         className={cn(
-                          'absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-[#0a1014] shadow-sm',
-                          daytime ? 'bg-accent text-black' : 'bg-[#1c2430] text-muted',
+                          'absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-bg shadow-sm',
+                          daytime ? 'bg-accent text-on-accent' : 'bg-hover text-muted',
                         )}
                         title={daytime ? 'Dia' : 'Noite'}
                       >
@@ -188,14 +187,14 @@ export function HomeMarketsCard({
                     </div>
 
                     <div className="shrink-0 text-right">
-                      <p className="text-[22px] font-semibold leading-none tabular-nums tracking-tight text-text">
+                      <p className="text-[18px] font-semibold leading-none tabular-nums tracking-tight text-text @[15rem]:text-[22px]">
                         {formatWorldClockTime(now, clock.timeZone)}
                       </p>
                     </div>
 
                     <button
                       type="button"
-                      className="absolute right-1.5 top-1.5 z-[2] rounded-md p-1 text-muted-2 opacity-0 transition-opacity hover:bg-white/[0.06] hover:text-danger group-hover:opacity-100"
+                      className="absolute right-1.5 top-1.5 z-[2] rounded-md p-1 text-muted-2 opacity-0 transition-opacity hover:bg-hover hover:text-danger group-hover:opacity-100"
                       aria-label={`Remover ${clock.label}`}
                       disabled={saving}
                       onClick={() => void onChange(clocks.filter((item) => item.id !== clock.id))}
@@ -230,13 +229,13 @@ export function HomeMarketsCard({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar cidade ou fuso..."
-            className="h-11 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+            className="h-11 w-full rounded-xl border border-border-soft bg-elevated px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
           />
           <input
             value={customLabel}
             onChange={(event) => setCustomLabel(event.target.value)}
             placeholder="Nome personalizado (opcional)"
-            className="h-11 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+            className="h-11 w-full rounded-xl border border-border-soft bg-elevated px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
           />
           <ul className="max-h-56 space-y-1 overflow-y-auto">
             {filteredCatalog.map((item) => (
@@ -247,7 +246,7 @@ export function HomeMarketsCard({
                     'flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm',
                     selectedZone === item.timeZone
                       ? 'bg-accent/12 ring-1 ring-accent/20'
-                      : 'hover:bg-white/[0.04]',
+                      : 'hover:bg-hover',
                   )}
                   onClick={() => setSelectedZone(item.timeZone)}
                 >

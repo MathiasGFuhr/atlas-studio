@@ -13,7 +13,7 @@ export function HomeFeaturedProject({
   if (!project) {
     return (
       <Card padding="lg" className="flex min-h-[280px] flex-col items-center justify-center text-center">
-        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] text-muted-2">
+        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-border-soft bg-elevated text-muted-2">
           <Music2 className="h-5 w-5" />
         </div>
         <p className="text-sm font-medium text-text">Nenhum projeto em destaque</p>
@@ -39,19 +39,19 @@ export function HomeFeaturedProject({
             className="h-full w-full"
             style={{
               background:
-                'linear-gradient(145deg, rgba(53,229,139,0.18), #10161a 45%, #0b1014)',
+                'linear-gradient(145deg, var(--color-elevated), var(--color-card))',
             }}
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-overlay via-overlay/55 to-overlay/10" />
       </div>
 
       <div className="relative z-[1] flex h-full min-h-[280px] flex-col justify-between p-5">
         <div className="flex items-start justify-between gap-3">
-          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/70">
+          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-text/70">
             Em destaque
           </p>
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/80 backdrop-blur">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-bg/30 text-text/80 backdrop-blur">
             <ArrowUpRight className="h-3.5 w-3.5" />
           </span>
         </div>
@@ -60,19 +60,19 @@ export function HomeFeaturedProject({
           {project.scheduledVideoStatus ? (
             <StatusBadge
               status={project.scheduledVideoStatus}
-              className="mb-3 bg-black/45 px-2 py-0.5 text-[10px] backdrop-blur"
+              className="mb-3 bg-bg/45 px-2 py-0.5 text-[10px] backdrop-blur"
             />
           ) : null}
-          <h2 className="text-[1.55rem] font-semibold leading-tight tracking-tight text-white">
+          <h2 className="text-[1.55rem] font-semibold leading-tight tracking-tight text-text">
             {project.name}
           </h2>
-          <p className="mt-2 line-clamp-2 text-sm text-white/70">
+          <p className="mt-2 line-clamp-2 text-sm text-text/70">
             {project.description?.trim() ||
               project.scheduledVideoTitle ||
               project.channelName ||
               'Projeto de Música'}
           </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/55">
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-text/55">
             <span>Música</span>
             {project.scheduledDate ? (
               <>

@@ -149,12 +149,19 @@ export function ShortsGenerationProvider({ children }: { children: ReactNode }) 
     }
 
     void refresh()
+    // Com a janela oculta o polling pausa; ao voltar, atualiza na hora.
     const timer = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') return
       void refresh()
     }, 2500)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       cancelled = true
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [analyzingJobIds, api, finishAnalyzing, rememberJob])
 
@@ -209,7 +216,7 @@ export function ShortsGenerationProvider({ children }: { children: ReactNode }) 
       inFlightRef.current.set(input.jobId, run)
       return run
     },
-    [api, clearAnalyzeProgress, finishAnalyzing, markAnalyzing, push, rememberJob],
+    [api, clearAnalyzeProgress, finishAnalyzing, markAnalyzing, pushError, rememberJob],
   )
 
   const isAnalyzing = useCallback(

@@ -18,9 +18,6 @@ import {
   type MusicProjectMatchCandidate,
 } from '../../shared/musicVideoProject'
 
-/** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 20
-
 type SchemaStepResult = {
   historyCreated: number
   musicCreated: number
@@ -170,6 +167,9 @@ const SCHEMA_STEPS: SchemaStep[] = [
     up: applyLipSyncRefsLyrics,
   },
 ]
+
+/** Versão lógica do schema: sempre o último passo de SCHEMA_STEPS. */
+export const CURRENT_SCHEMA_VERSION = SCHEMA_STEPS[SCHEMA_STEPS.length - 1].version
 
 /**
  * Migrações incrementais do schema. Sempre aditivas: nenhuma tabela,

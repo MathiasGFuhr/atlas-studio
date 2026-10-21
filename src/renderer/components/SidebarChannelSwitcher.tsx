@@ -20,11 +20,11 @@ function ChannelAvatar({
   channel: Channel | null
   sizeClass: string
 }) {
-  const color = channel?.color || '#35e58b'
+  const color = channel?.color || '#35bf9b'
   return (
     <div
       className={cn('shrink-0 overflow-hidden rounded-full', sizeClass)}
-      style={{ background: `linear-gradient(145deg, ${color}40, #0f1418)` }}
+      style={{ background: `linear-gradient(145deg, ${color}40, var(--color-elevated))` }}
     >
       {channel?.avatarDataUrl ? (
         <img src={channel.avatarDataUrl} alt="" className="h-full w-full object-cover" />
@@ -175,7 +175,7 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
       <div
         className={cn(
           'flex w-full items-center rounded-lg transition-colors',
-          open ? 'bg-white/[0.04]' : 'hover:bg-white/[0.03]',
+          open ? 'bg-elevated' : 'hover:bg-hover/60',
           compact ? 'justify-center' : '',
         )}
       >
@@ -217,7 +217,7 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
             onKeyDown={onTriggerKeyDown}
-            className="mr-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-2 transition-colors hover:bg-white/[0.05] hover:text-text"
+            className="mr-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-2 transition-colors hover:bg-hover hover:text-text"
           >
             <ChevronDown
               className={cn('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')}
@@ -231,7 +231,7 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
           role="menu"
           aria-label="Canais"
           className={cn(
-            'z-50 overflow-hidden rounded-xl border border-border/80 bg-[#10161a] shadow-[0_16px_40px_rgba(0,0,0,0.55)]',
+            'z-50 overflow-hidden rounded-xl border border-border/80 bg-elevated shadow-popover',
             compact
               ? 'absolute left-[calc(100%+10px)] top-0 w-[248px]'
               : 'absolute left-3 right-3 top-[calc(100%+8px)]',
@@ -263,10 +263,10 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
                     className={cn(
                       'flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors',
                       current
-                        ? 'bg-white/[0.06]'
+                        ? 'bg-hover'
                         : active
-                          ? 'bg-white/[0.04]'
-                          : 'hover:bg-white/[0.03]',
+                          ? 'bg-elevated'
+                          : 'hover:bg-hover/60',
                     )}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => rememberAndOpen(channel)}
@@ -295,7 +295,7 @@ export function SidebarChannelSwitcher({ compact = false }: { compact?: boolean 
             <button
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[12px] font-medium text-muted-2 transition-colors hover:bg-white/[0.03] hover:text-text"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[12px] font-medium text-muted-2 transition-colors hover:bg-hover/60 hover:text-text"
               onClick={openManage}
             >
               <Plus className="h-3.5 w-3.5" />

@@ -38,7 +38,7 @@ export function HomeTeamChatCard({
         <button
           type="button"
           onClick={onOpenAll}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-white/[0.04] hover:text-text"
+          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-hover hover:text-text"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />
           {online.length} online
@@ -67,10 +67,10 @@ export function HomeTeamChatCard({
                 <button
                   type="button"
                   onClick={() => onOpenRoom(room.id)}
-                  className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+                  className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-hover/60"
                 >
                   <div className="relative shrink-0">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-gradient-to-br from-white/[0.1] to-white/[0.03] text-[11px] font-semibold text-text">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full border border-border-soft bg-elevated text-[11px] font-semibold text-text">
                       {room.kind === 'group' ? (
                         <MessagesSquare className="h-3.5 w-3.5 text-muted" />
                       ) : (
@@ -78,7 +78,7 @@ export function HomeTeamChatCard({
                       )}
                     </div>
                     {peerOnline ? (
-                      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#11181d] bg-accent" />
+                      <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card bg-accent" />
                     ) : null}
                   </div>
                   <div className="min-w-0 flex-1">

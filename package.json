@@ -1,7 +1,7 @@
 {
   "name": "atlas-studio",
   "productName": "Atlas Studio",
-  "version": "1.44.0",
+  "version": "1.45.0",
   "description": "Atlas Studio — Produção musical com IA",
   "private": true,
   "main": "dist-electron/main.js",

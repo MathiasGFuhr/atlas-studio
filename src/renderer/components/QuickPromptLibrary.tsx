@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Check,
@@ -142,14 +142,14 @@ export function QuickPromptLibrary({
   }, [api, projectId])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load().catch((error) => pushError(error, 'Não foi possível carregar os prompts.'))
+  }, [load, pushError])
 
   useEffect(() => {
     return onPromptsChanged(() => {
-      void load()
+      void load().catch((error) => pushError(error, 'Não foi possível atualizar os prompts.'))
     })
-  }, [load])
+  }, [load, pushError])
 
   useEffect(() => {
     const fromUrl = parseTabParam(searchParams.get('tab'))
@@ -243,7 +243,14 @@ export function QuickPromptLibrary({
   }
 
   async function toggleFavorite(id: string) {
-    setFavorites(await api.quickPrompts.setFavorite(id, !favoriteSet.has(id)))
+    const next = !favoriteSet.has(id)
+    setFavorites((current) => (next ? [...current, id] : current.filter((item) => item !== id)))
+    try {
+      setFavorites(await api.quickPrompts.setFavorite(id, next))
+    } catch (error) {
+      setFavorites((current) => (next ? current.filter((item) => item !== id) : [...current, id]))
+      pushError(error, 'Não foi possível atualizar o favorito.')
+    }
   }
 
   function toggleOpen(id: string) {
@@ -463,6 +470,20 @@ export function QuickPromptLibrary({
   const showGroups =
     !viewingShared && !viewingFavorites && favoriteItems.length > 0 && otherItems.length > 0
 
+  const latestActions = useRef({ toggleFavorite, toggleOpen, selectTab, copy, openEdit, setRemoving })
+  latestActions.current = { toggleFavorite, toggleOpen, selectTab, copy, openEdit, setRemoving }
+  const cardActions = useMemo<PromptCardActions>(
+    () => ({
+      toggleFavorite: (id) => void latestActions.current.toggleFavorite(id),
+      toggleExpanded: (id) => latestActions.current.toggleOpen(id),
+      openTab: (tabId) => latestActions.current.selectTab(tabId ?? UNTABBED_PROMPT_TABS_ID),
+      copy: (item) => void latestActions.current.copy(item.text, item.id),
+      edit: (item) => latestActions.current.openEdit(item),
+      remove: (item) => latestActions.current.setRemoving(item),
+    }),
+    [],
+  )
+
   function renderPrompt(item: CustomPrompt) {
     const tabName = item.tabId ? tabById.get(item.tabId)?.name : null
     return (
@@ -473,22 +494,13 @@ export function QuickPromptLibrary({
         favorite={favoriteSet.has(item.id)}
         copied={copied === item.id}
         expanded={openIds.has(item.id)}
-        onToggleFavorite={() => void toggleFavorite(item.id)}
-        onToggleExpanded={() => toggleOpen(item.id)}
-        onOpenTab={
-          item.tabId
-            ? () => selectTab(item.tabId as string)
-            : () => selectTab(UNTABBED_PROMPT_TABS_ID)
-        }
-        onCopy={() => void copy(item.text, item.id)}
-        onEdit={() => openEdit(item)}
-        onRemove={() => setRemoving(item)}
+        actions={cardActions}
       />
     )
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-[0_8px_24px_rgba(0,0,0,0.25)] lg:flex-row">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-card lg:flex-row">
       <aside className="flex shrink-0 flex-col border-b border-border-soft bg-sidebar lg:min-h-0 lg:w-[248px] lg:overflow-y-auto lg:border-b-0 lg:border-r">
         <div className="hidden px-4 pb-1 pt-4 lg:block">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-2">Biblioteca</p>
@@ -619,7 +631,7 @@ export function QuickPromptLibrary({
                 type="button"
                 aria-label="Limpar busca"
                 onClick={() => setQuery('')}
-                className="absolute right-2 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-2 hover:bg-white/5 hover:text-text"
+                className="absolute right-2 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-2 hover:bg-hover hover:text-text"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -630,13 +642,13 @@ export function QuickPromptLibrary({
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
           {!ready ? (
             <div className="space-y-2" aria-hidden>
-              <div className="h-28 animate-pulse rounded-2xl border border-border-soft bg-card-2" />
-              <div className="h-28 animate-pulse rounded-2xl border border-border-soft bg-card-2" />
-              <div className="h-28 animate-pulse rounded-2xl border border-border-soft bg-card-2" />
+              <div className="h-28 animate-pulse rounded-2xl border border-border-soft bg-elevated" />
+              <div className="h-28 animate-pulse rounded-2xl border border-border-soft bg-elevated" />
+              <div className="h-28 animate-pulse rounded-2xl border border-border-soft bg-elevated" />
             </div>
           ) : listEmpty ? (
             <div className="flex h-full min-h-[240px] flex-col items-center justify-center px-6 text-center">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-dark text-accent">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-subtle text-accent">
                 <MessageSquareText className="h-5 w-5" />
               </div>
               <p className="text-sm font-semibold text-text">{emptyMessage}</p>
@@ -810,7 +822,7 @@ function NavButton({
       onClick={onClick}
       className={cn(
         'inline-flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition-colors lg:w-full',
-        active ? 'bg-accent-dark text-accent' : 'text-muted hover:bg-white/[0.04] hover:text-text',
+        active ? 'bg-accent-subtle text-accent' : 'text-muted hover:bg-hover hover:text-text',
       )}
     >
       <span className={cn('shrink-0', active ? 'text-accent' : 'text-muted-2')}>{icon}</span>
@@ -846,7 +858,7 @@ function MetaChip({
 }) {
   const className = cn(
     'inline-flex max-w-full items-center truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
-    tone === 'accent' ? 'bg-accent-dark text-accent' : 'bg-white/5 text-muted',
+    tone === 'accent' ? 'bg-accent-subtle text-accent' : 'bg-elevated text-muted',
   )
   if (!onClick) return <span className={className}>{children}</span>
   return (
@@ -874,7 +886,7 @@ function IconAction({
       title={label}
       onClick={onClick}
       className={cn(
-        'inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-white/5 hover:text-text',
+        'inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-text',
         danger && 'hover:bg-danger/10 hover:text-danger',
       )}
     >
@@ -919,33 +931,39 @@ function PromptBody({
   )
 }
 
-function PromptCard({
+type PromptCardActions = {
+  toggleFavorite: (id: string) => void
+  toggleExpanded: (id: string) => void
+  openTab: (tabId: string | null) => void
+  copy: (item: CustomPrompt) => void
+  edit: (item: CustomPrompt) => void
+  remove: (item: CustomPrompt) => void
+}
+
+/** Memoizado: favoritar/copiar/expandir um prompt não re-renderiza a biblioteca inteira. */
+const PromptCard = memo(function PromptCard({
   item,
   tabName,
   favorite,
   copied,
   expanded,
-  onToggleFavorite,
-  onToggleExpanded,
-  onOpenTab,
-  onCopy,
-  onEdit,
-  onRemove,
+  actions,
 }: {
   item: CustomPrompt
   tabName: string | null
   favorite: boolean
   copied: boolean
   expanded: boolean
-  onToggleFavorite: () => void
-  onToggleExpanded: () => void
-  onOpenTab?: () => void
-  onCopy: () => void
-  onEdit: () => void
-  onRemove: () => void
+  actions: PromptCardActions
 }) {
+  const onToggleFavorite = () => actions.toggleFavorite(item.id)
+  const onToggleExpanded = () => actions.toggleExpanded(item.id)
+  const onOpenTab = () => actions.openTab(item.tabId)
+  const onCopy = () => actions.copy(item)
+  const onEdit = () => actions.edit(item)
+  const onRemove = () => actions.remove(item)
   return (
-    <article className="rounded-2xl border border-border-soft bg-card-2 px-3.5 py-3.5 transition-colors hover:border-border">
+    <article className="rounded-2xl border border-border-soft bg-elevated px-3.5 py-3.5 transition-colors hover:border-border">
       <div className="flex items-start gap-2">
         <button
           type="button"
@@ -954,7 +972,7 @@ function PromptCard({
           onClick={onToggleFavorite}
           className={cn(
             'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
-            favorite ? 'text-accent' : 'text-muted-2 hover:bg-white/5 hover:text-text',
+            favorite ? 'text-accent' : 'text-muted-2 hover:bg-hover hover:text-text',
           )}
         >
           <Star className={cn('h-4 w-4', favorite && 'fill-current')} />
@@ -995,7 +1013,7 @@ function PromptCard({
       </div>
     </article>
   )
-}
+})
 
 function SharedPromptCard({
   item,
@@ -1015,7 +1033,7 @@ function SharedPromptCard({
   onAdd: () => void
 }) {
   return (
-    <article className="rounded-2xl border border-border-soft bg-card-2 px-3.5 py-3.5 transition-colors hover:border-border">
+    <article className="rounded-2xl border border-border-soft bg-elevated px-3.5 py-3.5 transition-colors hover:border-border">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold tracking-tight text-text">{item.name}</h3>

@@ -10,7 +10,7 @@ import type {
   LipSyncSubject,
 } from '../../shared/lipSyncRefs'
 import { isLipSyncRefStatus, isLipSyncSubject } from '../../shared/lipSyncRefs'
-import { readImageDataUrl } from '../services/storage/profilePhoto'
+import { localImageUrl } from '../services/media/localImageUrl'
 import {
   archiveLipSyncRefToProjectFolder,
   importLipSyncImage,
@@ -70,7 +70,7 @@ function mapRow(row: Row): LipSyncRef {
     prompt: row.prompt ?? '',
     lyrics: row.lyrics ?? '',
     imagePath: row.image_path,
-    imageDataUrl: readImageDataUrl(row.image_path),
+    imageDataUrl: localImageUrl(row.image_path),
     projectId: row.project_id?.trim() || null,
     projectName: row.project_name?.trim() || null,
     subject: mapSubject(row.subject),

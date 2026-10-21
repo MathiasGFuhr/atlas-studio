@@ -60,13 +60,13 @@ export function SidebarUpdateCard({ compact = false }: { compact?: boolean }) {
         disabled={busy && state !== 'downloading'}
         onClick={handlePrimary}
         className={cn(
-          'relative flex h-11 w-full items-center justify-center rounded-xl border border-border-soft bg-card-2 text-accent transition-colors',
-          'hover:border-[#334049]',
+          'relative flex h-11 w-full items-center justify-center rounded-xl border border-border-soft bg-elevated text-accent transition-colors',
+          'hover:border-border-strong',
           state === 'ready' && 'border-accent/35',
         )}
       >
         {state === 'ready' ? <Check className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
-        <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(53,229,139,0.8)]" />
+        <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-accent" />
       </button>
     )
   }
@@ -77,9 +77,9 @@ export function SidebarUpdateCard({ compact = false }: { compact?: boolean }) {
         type="button"
         title={title}
         onClick={expandSidebarCard}
-        className="flex w-full items-center gap-2 rounded-xl border border-border-soft bg-card-2 px-3 py-3 text-left transition-colors hover:border-[#334049]"
+        className="flex w-full items-center gap-2 rounded-xl border border-border-soft bg-elevated px-3 py-3 text-left transition-colors hover:border-border-strong"
       >
-        <span className="h-2 w-2 shrink-0 rounded-full bg-accent shadow-[0_0_8px_rgba(53,229,139,0.8)]" />
+        <span className="h-2 w-2 shrink-0 rounded-full bg-accent" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-accent">{title}</span>
       </button>
     )
@@ -88,7 +88,7 @@ export function SidebarUpdateCard({ compact = false }: { compact?: boolean }) {
   return (
     <div
       className={cn(
-        'rounded-xl border border-border-soft bg-card-2 px-3 py-3',
+        'rounded-xl border border-border-soft bg-elevated px-3 py-3',
         state === 'ready' && 'border-accent/30',
       )}
     >
@@ -96,7 +96,7 @@ export function SidebarUpdateCard({ compact = false }: { compact?: boolean }) {
         <span
           className={cn(
             'h-2 w-2 shrink-0 rounded-full',
-            state === 'error' ? 'bg-danger' : 'bg-accent shadow-[0_0_8px_rgba(53,229,139,0.8)]',
+            state === 'error' ? 'bg-danger' : 'bg-accent',
             state === 'downloading' && 'animate-pulse',
           )}
         />
@@ -149,7 +149,7 @@ export function SidebarUpdateCard({ compact = false }: { compact?: boolean }) {
       {state === 'downloading' ? (
         <>
           <p className="mt-2 pl-4 text-xs text-muted">{sidebarDownloadProgressLabel(percent)}</p>
-          <div className="mt-1.5 ml-4 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className="mt-1.5 ml-4 h-1.5 overflow-hidden rounded-full bg-hover">
             <div
               className={cn(
                 'h-full rounded-full bg-accent transition-[width] duration-200',
@@ -166,7 +166,7 @@ export function SidebarUpdateCard({ compact = false }: { compact?: boolean }) {
           type="button"
           disabled={busy}
           onClick={() => void download()}
-          className="mt-2.5 w-full rounded-lg bg-accent px-2.5 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-2.5 w-full rounded-lg bg-accent px-2.5 py-1.5 text-xs font-semibold text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           Baixar
         </button>
@@ -178,7 +178,7 @@ export function SidebarUpdateCard({ compact = false }: { compact?: boolean }) {
             type="button"
             disabled={busy}
             onClick={() => void install()}
-            className="w-full rounded-lg bg-accent px-2.5 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-accent px-2.5 py-1.5 text-xs font-semibold text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             Reiniciar e atualizar
           </button>
@@ -186,7 +186,7 @@ export function SidebarUpdateCard({ compact = false }: { compact?: boolean }) {
             type="button"
             disabled={busy}
             onClick={minimizeSidebarCard}
-            className="w-full rounded-lg px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:bg-white/5 hover:text-text disabled:opacity-50"
+            className="w-full rounded-lg px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:bg-hover hover:text-text disabled:opacity-50"
           >
             Depois
           </button>
@@ -198,7 +198,7 @@ export function SidebarUpdateCard({ compact = false }: { compact?: boolean }) {
           type="button"
           disabled={busy}
           onClick={() => void download()}
-          className="mt-2.5 w-full rounded-lg bg-accent px-2.5 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-2.5 w-full rounded-lg bg-accent px-2.5 py-1.5 text-xs font-semibold text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           Tentar novamente
         </button>

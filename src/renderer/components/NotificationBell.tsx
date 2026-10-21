@@ -27,16 +27,22 @@ export function NotificationBell() {
   const writeGen = useRef(0)
 
   const loadTasks = useCallback(async () => {
-    const list = await api.tasks.list()
-    setTasks(list)
+    try {
+      setTasks(await api.tasks.list())
+    } catch (error) {
+      console.error('[atlas] falha ao carregar tarefas das notificações', error)
+    }
   }, [api])
 
   useEffect(() => {
     void loadTasks()
-    void api.settings.get().then((settings) => {
-      if (writeGen.current !== 0) return
-      setReadKeys(normalizeNotificationReadKeys(settings.notificationReadKeys))
-    })
+    void api.settings
+      .get()
+      .then((settings) => {
+        if (writeGen.current !== 0) return
+        setReadKeys(normalizeNotificationReadKeys(settings.notificationReadKeys))
+      })
+      .catch((error) => console.error('[atlas] falha ao ler notificações lidas', error))
     const offTasks = onTasksChanged(() => {
       void loadTasks()
     })
@@ -64,7 +70,11 @@ export function NotificationBell() {
       writeGen.current += 1
       const normalized = normalizeNotificationReadKeys(next)
       setReadKeys(normalized)
-      await api.settings.update({ notificationReadKeys: normalized })
+      try {
+        await api.settings.update({ notificationReadKeys: normalized })
+      } catch (error) {
+        console.error('[atlas] falha ao salvar notificações lidas', error)
+      }
     },
     [api],
   )
@@ -136,7 +146,7 @@ export function NotificationBell() {
         aria-label="Notificações"
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="relative flex h-10 w-10 items-center justify-center rounded-xl text-muted transition-colors hover:bg-white/5 hover:text-text"
+        className="relative flex h-10 w-10 items-center justify-center rounded-xl text-muted transition-colors hover:bg-hover hover:text-text"
         onClick={() => setOpen((value) => !value)}
         onKeyDown={onButtonKeyDown}
       >
@@ -152,7 +162,7 @@ export function NotificationBell() {
         <div
           role="dialog"
           aria-label="Notificações"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_16px_48px_rgba(0,0,0,0.45)]"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-popover"
         >
           <div className="flex items-center justify-between gap-3 border-b border-border-soft px-3.5 py-2.5">
             <p className="text-sm font-semibold text-text">Notificações</p>
@@ -179,7 +189,7 @@ export function NotificationBell() {
                     key={item.id}
                     className={cn(
                       'mx-1.5 flex items-start gap-2 rounded-xl px-2 py-2 transition-colors',
-                      active ? 'bg-accent-dark/55' : 'hover:bg-white/[0.04]',
+                      active ? 'bg-accent-subtle/55' : 'hover:bg-hover',
                     )}
                     onMouseEnter={() => setActiveIndex(index)}
                   >
@@ -217,7 +227,7 @@ export function NotificationBell() {
                     {isUnread ? (
                       <button
                         type="button"
-                        className="shrink-0 rounded-lg px-1.5 py-1 text-[10px] font-medium text-muted hover:bg-white/5 hover:text-text"
+                        className="shrink-0 rounded-lg px-1.5 py-1 text-[10px] font-medium text-muted hover:bg-hover hover:text-text"
                         onClick={() => void markOneRead(item)}
                       >
                         Lida

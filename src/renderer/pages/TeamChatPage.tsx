@@ -67,6 +67,14 @@ function formatMessageClock(iso: string) {
 }
 
 const TYPING_TTL_MS = 4500
+/** Mesmo teto do carregamento inicial da sala no processo principal. */
+const MAX_ROOM_MESSAGES = 200
+
+function appendTeamMessage(current: TeamChatMessage[], message: TeamChatMessage): TeamChatMessage[] {
+  if (current.some((item) => item.id === message.id)) return current
+  const next = [...current, message]
+  return next.length > MAX_ROOM_MESSAGES ? next.slice(-MAX_ROOM_MESSAGES) : next
+}
 
 type TypingPeer = {
   userId: string
@@ -101,7 +109,7 @@ function withoutTypingPeer(
 function TypingStatus({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2" aria-live="polite">
-      <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-white/[0.06] bg-white/[0.04] px-3 py-2">
+      <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-border-soft bg-elevated px-3 py-2">
         <span className="flex items-center gap-1" aria-hidden>
           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:0ms]" />
           <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:150ms]" />
@@ -130,17 +138,17 @@ function ChatAvatar({
     <div className={cn('relative shrink-0', sizeClass)}>
       <div
         className={cn(
-          'flex h-full w-full items-center justify-center rounded-full border font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]',
+          'flex h-full w-full items-center justify-center rounded-full border font-semibold',
           tone === 'accent' && 'border-accent/25 bg-accent/15 text-accent',
-          tone === 'group' && 'border-white/[0.08] bg-gradient-to-br from-[#2a3a44] to-[#141b20] text-muted',
+          tone === 'group' && 'border-border-soft bg-hover text-muted',
           tone === 'neutral' &&
-            'border-white/[0.08] bg-gradient-to-br from-white/[0.12] to-white/[0.03] text-text',
+            'border-border-soft bg-elevated text-text',
         )}
       >
         {tone === 'group' ? <Users className="h-4 w-4" /> : peerInitials(name)}
       </div>
       {online ? (
-        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#0f1519] bg-accent shadow-[0_0_0_1px_rgba(53,229,139,0.35)]" />
+        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card bg-accent" />
       ) : null}
     </div>
   )
@@ -247,10 +255,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
         return next
       })
       if (activeRoomIdRef.current === message.roomId) {
-        setMessages((current) => {
-          if (current.some((item) => item.id === message.id)) return current
-          return [...current, message]
-        })
+        setMessages((current) => appendTeamMessage(current, message))
       }
       setTypingByRoom((current) => withoutTypingPeer(current, message.roomId, message.authorId))
     })
@@ -302,7 +307,9 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
     }
   }, [activeRoomId, api, composing])
 
+  const hasTypingPeers = Object.keys(typingByRoom).length > 0
   useEffect(() => {
+    if (!hasTypingPeers) return
     const timer = window.setInterval(() => {
       const now = Date.now()
       setTypingByRoom((current) => {
@@ -317,7 +324,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [hasTypingPeers])
 
   useEffect(() => {
     if (!emojiOpen) return
@@ -524,10 +531,10 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
       })
       setDraft('')
       clearAttachment()
-      setMessages((current) => {
-        if (current.some((item) => item.id === message.id)) return current
-        return [...current, message]
-      })
+      // A sala pode ter mudado durante o envio; só anexa na lista da sala certa.
+      if (activeRoomIdRef.current === message.roomId) {
+        setMessages((current) => appendTeamMessage(current, message))
+      }
       setRooms((current) => {
         const index = current.findIndex((room) => room.id === message.roomId)
         if (index < 0) return current
@@ -563,7 +570,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
     activeRoom?.kind === 'dm' && activeRoom.peer ? onlineIds.has(activeRoom.peer.id) : false
 
   const panelClass =
-    'overflow-hidden rounded-2xl border border-border-soft/90 bg-card/70 shadow-[0_8px_32px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl'
+    'overflow-hidden rounded-2xl border border-border-soft/90 bg-card shadow-card'
 
   return (
     <PageShell scroll={false} className="flex min-w-0 flex-col !px-3 !py-3 sm:!px-5 sm:!py-4 lg:!px-6">
@@ -576,8 +583,8 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
           <p className="mt-0.5 text-sm text-muted">Conversas privadas e grupos em tempo real.</p>
         </div>
         <div className="hidden items-center gap-2 sm:flex">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-[11px] text-muted">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_0_3px_rgba(53,229,139,0.15)]" />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border-soft bg-elevated px-2.5 py-1 text-[11px] text-muted">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
             {onlineOthers.length} online
           </span>
         </div>
@@ -587,7 +594,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
         <div className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 @[720px]:grid-cols-[minmax(0,280px)_minmax(0,1fr)] @[1100px]:grid-cols-[minmax(0,300px)_minmax(0,1fr)_minmax(0,240px)]">
           {/* Lista de conversas */}
           <aside className={cn(panelClass, 'flex max-h-[38%] min-h-0 flex-col @[720px]:max-h-none')}>
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.05] px-3 py-3">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-soft px-3 py-3">
               <div className="min-w-0">
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
                   Conversas
@@ -601,7 +608,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-muted transition-colors hover:border-accent/30 hover:bg-accent/10 hover:text-accent"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border-soft bg-elevated text-muted transition-colors hover:border-accent/30 hover:bg-accent/10 hover:text-accent"
                   title="Nova conversa"
                   aria-label="Nova conversa"
                   onClick={() => {
@@ -614,7 +621,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                 </button>
                 <button
                   type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-muted transition-colors hover:border-accent/30 hover:bg-accent/10 hover:text-accent"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border-soft bg-elevated text-muted transition-colors hover:border-accent/30 hover:bg-accent/10 hover:text-accent"
                   title="Novo grupo"
                   aria-label="Novo grupo"
                   onClick={() => {
@@ -631,7 +638,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
             <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2">
               {rooms.length === 0 ? (
                 <div className="flex h-full min-h-[140px] flex-col items-center justify-center px-4 text-center">
-                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] text-muted-2">
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-border-soft bg-elevated text-muted-2">
                     <MessagesSquare className="h-5 w-5" />
                   </div>
                   <p className="text-sm font-medium text-text">Comece uma conversa</p>
@@ -653,7 +660,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                             'flex min-w-0 items-stretch rounded-xl transition-colors',
                             active
                               ? 'bg-accent/12 ring-1 ring-accent/20'
-                              : 'hover:bg-white/[0.035]',
+                              : 'hover:bg-hover/60',
                           )}
                         >
                           <button
@@ -687,7 +694,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                                     room.lastMessagePreview ||
                                     (room.kind === 'dm' ? 'Conversa privada' : 'Grupo')}
                                 </p>
-                                <span className="shrink-0 rounded-md border border-white/[0.05] bg-white/[0.03] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-2">
+                                <span className="shrink-0 rounded-md border border-border-soft bg-elevated px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-2">
                                   {room.kind === 'dm' ? 'DM' : 'Grupo'}
                                 </span>
                               </div>
@@ -714,7 +721,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
               )}
             </div>
 
-            <div className="shrink-0 border-t border-white/[0.05] p-3 @[1100px]:hidden">
+            <div className="shrink-0 border-t border-border-soft p-3 @[1100px]:hidden">
               <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
                 Online · {onlineOthers.length}
               </p>
@@ -726,7 +733,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                     <li key={peer.id} className="min-w-0">
                       <button
                         type="button"
-                        className="flex w-full min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+                        className="flex w-full min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1.5 text-left transition-colors hover:bg-hover"
                         onClick={() => void openDmWith(peer.id)}
                         title="Abrir conversa privada"
                       >
@@ -744,7 +751,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
           <section className={cn(panelClass, 'flex min-h-0 min-w-0 flex-col')}>
             {activeRoom ? (
               <>
-                <div className="flex min-w-0 items-center justify-between gap-3 border-b border-white/[0.05] px-4 py-3.5">
+                <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border-soft px-4 py-3.5">
                   <div className="flex min-w-0 items-center gap-3">
                     <ChatAvatar
                       name={activeRoom.title}
@@ -775,7 +782,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                     {activeRoom.kind === 'group' && activeRoom.myRole === 'admin' ? (
                       <button
                         type="button"
-                        className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/10 @[1100px]:hidden"
+                        className="rounded-xl border border-border-soft bg-elevated px-2.5 py-1.5 text-[11px] font-medium text-accent transition-colors hover:bg-accent/10 @[1100px]:hidden"
                         onClick={() => {
                           setComposer('add')
                           setSelectedIds([])
@@ -788,7 +795,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                     <div ref={roomMenuRef} className="relative">
                       <button
                         type="button"
-                        className="rounded-xl p-2 text-muted transition-colors hover:bg-white/[0.05] hover:text-text"
+                        className="rounded-xl p-2 text-muted transition-colors hover:bg-hover hover:text-text"
                         aria-label="Mais opções da conversa"
                         aria-expanded={roomMenuOpen}
                         disabled={busyAction}
@@ -797,7 +804,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                         <MoreVertical className="h-4 w-4" />
                       </button>
                       {roomMenuOpen ? (
-                        <div className="absolute right-0 top-full z-30 mt-1.5 min-w-[13rem] overflow-hidden rounded-xl border border-border-soft/90 bg-card-2/95 py-1 shadow-xl backdrop-blur-xl">
+                        <div className="absolute right-0 top-full z-30 mt-1.5 min-w-[13rem] overflow-hidden rounded-xl border border-border-soft/90 bg-elevated py-1 shadow-popover">
                           <button
                             type="button"
                             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-danger hover:bg-danger/10"
@@ -814,11 +821,11 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
 
                 <div
                   ref={scroller}
-                  className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(ellipse_at_top,rgba(53,229,139,0.035),transparent_55%)] px-4 py-5"
+                  className="min-h-0 flex-1 overflow-y-auto px-4 py-5"
                 >
                   {messages.length === 0 ? (
                     <div className="flex h-full min-h-[180px] flex-col items-center justify-center text-center">
-                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] text-muted-2">
+                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-border-soft bg-elevated text-muted-2">
                         <MessagesSquare className="h-5 w-5" />
                       </div>
                       <p className="text-sm font-medium text-text">Nenhuma mensagem ainda</p>
@@ -857,10 +864,10 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                           ) : null}
                           <div
                             className={cn(
-                              'max-w-[min(78%,34rem)] rounded-2xl px-3.5 py-2.5 text-sm shadow-[0_4px_16px_rgba(0,0,0,0.18)]',
+                              'max-w-[min(78%,34rem)] rounded-2xl px-3.5 py-2.5 text-sm shadow-card',
                               mine
                                 ? 'rounded-br-md border border-accent/20 bg-accent/14 text-text'
-                                : 'rounded-bl-md border border-white/[0.06] bg-white/[0.04] text-text',
+                                : 'rounded-bl-md border border-border-soft bg-elevated text-text',
                             )}
                           >
                             {!mine && !stacked ? (
@@ -871,7 +878,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                             {attachment?.kind === 'image' ? (
                               <button
                                 type="button"
-                                className="mb-1.5 block overflow-hidden rounded-xl border border-white/10 bg-black/25 text-left"
+                                className="mb-1.5 block overflow-hidden rounded-xl border border-border bg-bg/25 text-left"
                                 onClick={() => setLightbox(attachment)}
                                 title="Ampliar imagem"
                               >
@@ -887,7 +894,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                                 href={attachment.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="mb-1.5 inline-flex max-w-full items-center gap-2 rounded-xl border border-white/[0.08] bg-black/20 px-2.5 py-2 text-[12px] text-text transition-colors hover:border-accent/40"
+                                className="mb-1.5 inline-flex max-w-full items-center gap-2 rounded-xl border border-border-soft bg-bg/20 px-2.5 py-2 text-[12px] text-text transition-colors hover:border-accent/40"
                               >
                                 <FileIcon className="h-3.5 w-3.5 shrink-0 text-muted" />
                                 <span className="truncate">{attachment.name}</span>
@@ -914,20 +921,20 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                 </div>
 
                 {activeTypingLabel ? (
-                  <div className="border-t border-white/[0.04] bg-black/10 px-4 py-2.5">
+                  <div className="border-t border-border-soft bg-bg/10 px-4 py-2.5">
                     <TypingStatus label={activeTypingLabel} />
                   </div>
                 ) : null}
 
                 <form
-                  className="min-w-0 border-t border-white/[0.05] bg-black/15 px-3 py-3 sm:px-4"
+                  className="min-w-0 border-t border-border-soft bg-bg/15 px-3 py-3 sm:px-4"
                   onSubmit={(event) => {
                     event.preventDefault()
                     void send()
                   }}
                 >
                   {attachmentPath ? (
-                    <div className="mb-2.5 flex items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2.5 py-2">
+                    <div className="mb-2.5 flex items-center gap-2.5 rounded-xl border border-border-soft bg-elevated px-2.5 py-2">
                       {attachmentPreview ? (
                         <img
                           src={attachmentPreview}
@@ -935,7 +942,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                           className="h-11 w-11 rounded-lg object-cover"
                         />
                       ) : (
-                        <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-white/[0.06] bg-card-2">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-border-soft bg-elevated">
                           <FileIcon className="h-4 w-4 text-muted" />
                         </div>
                       )}
@@ -944,7 +951,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                       </span>
                       <button
                         type="button"
-                        className="rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-text"
+                        className="rounded-lg p-1.5 text-muted hover:bg-hover hover:text-text"
                         aria-label="Remover anexo"
                         onClick={clearAttachment}
                       >
@@ -953,10 +960,10 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                     </div>
                   ) : null}
                   <div className="flex items-end gap-2">
-                    <div className="relative flex min-w-0 flex-1 items-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus-within:border-accent/45">
+                    <div className="relative flex min-w-0 flex-1 items-center gap-0.5 rounded-2xl border border-border-soft bg-elevated px-1.5 focus-within:border-accent/45">
                       <button
                         type="button"
-                        className="shrink-0 rounded-xl p-2.5 text-muted transition-colors hover:bg-white/[0.05] hover:text-text"
+                        className="shrink-0 rounded-xl p-2.5 text-muted transition-colors hover:bg-hover hover:text-text"
                         title="Anexar imagem ou arquivo"
                         onClick={() => void pickAttachment()}
                         disabled={sending}
@@ -966,7 +973,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                       <div className="relative shrink-0" ref={emojiRef}>
                         <button
                           type="button"
-                          className="rounded-xl p-2.5 text-muted transition-colors hover:bg-white/[0.05] hover:text-text"
+                          className="rounded-xl p-2.5 text-muted transition-colors hover:bg-hover hover:text-text"
                           title="Emoji"
                           onClick={() => setEmojiOpen((open) => !open)}
                           disabled={sending}
@@ -974,12 +981,12 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                           <Smile className="h-4 w-4" />
                         </button>
                         {emojiOpen ? (
-                          <div className="absolute bottom-[calc(100%+10px)] left-0 z-20 grid w-[232px] grid-cols-6 gap-1 rounded-2xl border border-border-soft/90 bg-card/95 p-2 shadow-2xl backdrop-blur-xl">
+                          <div className="absolute bottom-[calc(100%+10px)] left-0 z-20 grid w-[232px] grid-cols-6 gap-1 rounded-2xl border border-border-soft/90 bg-card p-2 shadow-modal">
                             {EMOJIS.map((emoji) => (
                               <button
                                 key={emoji}
                                 type="button"
-                                className="rounded-lg p-1.5 text-lg leading-none transition-colors hover:bg-white/[0.06]"
+                                className="rounded-lg p-1.5 text-lg leading-none transition-colors hover:bg-hover"
                                 onClick={() => insertEmoji(emoji)}
                               >
                                 {emoji}
@@ -1013,7 +1020,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
               </>
             ) : (
               <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] text-muted-2">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border-soft bg-elevated text-muted-2">
                   <MessagesSquare className="h-6 w-6" />
                 </div>
                 <p className="text-base font-semibold text-text">Selecione uma conversa</p>
@@ -1059,7 +1066,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
                   Online
                 </p>
-                <span className="rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[11px] tabular-nums text-muted">
+                <span className="rounded-md border border-border-soft bg-elevated px-1.5 py-0.5 text-[11px] tabular-nums text-muted">
                   {onlineOthers.length}
                 </span>
               </div>
@@ -1076,7 +1083,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                     <li key={peer.id} className="min-w-0">
                       <button
                         type="button"
-                        className="flex w-full min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-2 text-left transition-colors hover:bg-white/[0.04]"
+                        className="flex w-full min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-2 text-left transition-colors hover:bg-hover"
                         onClick={() => void openDmWith(peer.id)}
                         title="Abrir conversa privada"
                       >
@@ -1142,13 +1149,13 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
 
       {composer ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/70 p-4 backdrop-blur-sm"
           onClick={closeComposer}
           role="dialog"
           aria-modal="true"
         >
           <div
-            className="w-full max-w-md overflow-hidden rounded-2xl border border-border-soft/90 bg-card/95 p-5 shadow-2xl backdrop-blur-xl"
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-border-soft/90 bg-card p-5 shadow-modal"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3">
@@ -1166,7 +1173,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
               </div>
               <button
                 type="button"
-                className="rounded-xl p-1.5 text-muted hover:bg-white/5 hover:text-text"
+                className="rounded-xl p-1.5 text-muted hover:bg-hover hover:text-text"
                 onClick={closeComposer}
                 aria-label="Fechar"
               >
@@ -1178,7 +1185,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                 value={groupName}
                 onChange={(event) => setGroupName(event.target.value)}
                 placeholder="Nome do grupo"
-                className="mt-4 h-11 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
+                className="mt-4 h-11 w-full rounded-xl border border-border-soft bg-elevated px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
               />
             ) : null}
             <p className="mt-3 text-xs leading-relaxed text-muted">
@@ -1198,7 +1205,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                         type="button"
                         className={cn(
                           'flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors',
-                          checked ? 'bg-accent/12 ring-1 ring-accent/20' : 'hover:bg-white/[0.04]',
+                          checked ? 'bg-accent/12 ring-1 ring-accent/20' : 'hover:bg-hover',
                         )}
                         onClick={() => {
                           if (composer === 'dm') setSelectedIds([peer.id])
@@ -1216,8 +1223,8 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                           className={cn(
                             'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px]',
                             checked
-                              ? 'border-accent bg-accent text-black'
-                              : 'border-white/15 text-transparent',
+                              ? 'border-accent bg-accent text-on-accent'
+                              : 'border-border text-transparent',
                           )}
                         >
                           ✓
@@ -1246,7 +1253,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
 
       {lightbox ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/85 p-4 backdrop-blur-sm"
           onClick={() => setLightbox(null)}
           role="dialog"
           aria-modal="true"
@@ -1254,7 +1261,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
         >
           <button
             type="button"
-            className="absolute right-4 top-4 rounded-xl border border-white/10 bg-black/50 p-2 text-white hover:bg-black/70"
+            className="absolute right-4 top-4 rounded-xl border border-border bg-overlay/50 p-2 text-text hover:bg-overlay/70"
             aria-label="Fechar"
             onClick={() => setLightbox(null)}
           >
@@ -1263,7 +1270,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
           <img
             src={lightbox.url}
             alt={lightbox.name}
-            className="max-h-[90vh] max-w-[min(96vw,1100px)] rounded-xl object-contain shadow-2xl"
+            className="max-h-[90vh] max-w-[min(96vw,1100px)] rounded-xl object-contain shadow-modal"
             onClick={(event) => event.stopPropagation()}
           />
         </div>

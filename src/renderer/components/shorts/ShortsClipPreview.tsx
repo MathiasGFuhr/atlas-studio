@@ -172,6 +172,10 @@ export function ShortsClipPreview({
     splitVideo?.pause()
   }, [active, start, end, split])
 
+  // O pai passa um callback novo a cada render; via ref o listener de timeupdate não é recriado.
+  const onPlayingChangeRef = useRef(onPlayingChange)
+  onPlayingChangeRef.current = onPlayingChange
+
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
@@ -188,12 +192,12 @@ export function ShortsClipPreview({
         node.pause()
         node.currentTime = window.end
         slave?.pause()
-        if (active) onPlayingChange(false)
+        if (active) onPlayingChangeRef.current(false)
       }
     }
     video.addEventListener('timeupdate', onTime)
     return () => video.removeEventListener('timeupdate', onTime)
-  }, [active, onPlayingChange])
+  }, [active])
 
   const progress = Math.max(0, Math.min(1, (current - start) / duration))
   const mediaStyle = mediaStyleFrom(frame)
@@ -250,18 +254,18 @@ export function ShortsClipPreview({
         preload={active ? 'auto' : 'metadata'}
         muted={ref !== videoRef}
         playsInline
-        className={cn('absolute max-h-none max-w-none bg-black', extraClass)}
+        className={cn('absolute max-h-none max-w-none bg-overlay', extraClass)}
         style={style}
       />
     ) : (
-      <div className="absolute inset-0 bg-card-2" />
+      <div className="absolute inset-0 bg-elevated" />
     )
 
   return (
     <div className={cn('space-y-2', className)}>
       <div
         className={cn(
-          'relative overflow-hidden rounded-xl bg-black',
+          'relative overflow-hidden rounded-xl bg-overlay',
           (picking || placingLogo) && 'ring-2 ring-accent',
         )}
         style={{ aspectRatio: String(frame.aspectRatio) }}
@@ -274,16 +278,16 @@ export function ShortsClipPreview({
             >
               {videoNode(videoRef, mediaStyleFrom(frame.top))}
               {posterUrl && !frameReady ? (
-                <img src={posterUrl} alt="" className="absolute z-[1] max-h-none max-w-none bg-black" style={mediaStyleFrom(frame.top)} />
+                <img src={posterUrl} alt="" className="absolute z-[1] max-h-none max-w-none bg-overlay" style={mediaStyleFrom(frame.top)} />
               ) : null}
             </div>
             <div
-              className="relative h-1/2 overflow-hidden border-t border-black/40"
+              className="relative h-1/2 overflow-hidden border-t border-overlay/40"
               onClick={(event) => onPaneClick(event, key?.bottom ?? fallbackCrop)}
             >
               {videoNode(splitRef, mediaStyleFrom(frame.bottom))}
               {posterUrl && !frameReady ? (
-                <img src={posterUrl} alt="" className="absolute z-[1] max-h-none max-w-none bg-black" style={mediaStyleFrom(frame.bottom)} />
+                <img src={posterUrl} alt="" className="absolute z-[1] max-h-none max-w-none bg-overlay" style={mediaStyleFrom(frame.bottom)} />
               ) : null}
             </div>
           </div>
@@ -291,7 +295,7 @@ export function ShortsClipPreview({
           <div className="absolute inset-0 overflow-hidden" onClick={(event) => onPaneClick(event, key ?? fallbackCrop)}>
             {videoNode(videoRef, mediaStyle)}
             {posterUrl && !frameReady ? (
-              <img src={posterUrl} alt="" className="absolute z-[1] max-h-none max-w-none bg-black" style={mediaStyle} />
+              <img src={posterUrl} alt="" className="absolute z-[1] max-h-none max-w-none bg-overlay" style={mediaStyle} />
             ) : null}
           </div>
         )}
@@ -314,7 +318,7 @@ export function ShortsClipPreview({
         <button
           type="button"
           className={cn(
-            'absolute z-10 flex items-center justify-center rounded-full bg-black/55 p-2.5 text-white',
+            'absolute z-10 flex items-center justify-center rounded-full bg-overlay/55 p-2.5 text-text',
             active ? 'bottom-2 left-2' : 'left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2',
             (picking || placingLogo) && 'pointer-events-none opacity-0',
           )}
@@ -324,12 +328,12 @@ export function ShortsClipPreview({
           {active ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
         </button>
         {picking ? (
-          <p className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-white">
+          <p className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-overlay/70 px-3 py-1 text-[11px] text-text">
             Clique na pessoa para definir o foco
           </p>
         ) : null}
         {placingLogo ? (
-          <p className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-[11px] text-white">
+          <p className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-overlay/70 px-3 py-1 text-[11px] text-text">
             Clique para posicionar a logo
           </p>
         ) : null}

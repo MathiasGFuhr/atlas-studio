@@ -27,7 +27,7 @@ export function HomeActivityCard({
           <p className="text-sm text-muted-2">Sem movimento recente.</p>
         </div>
       ) : (
-        <ul className="min-h-0 flex-1 divide-y divide-white/[0.04] overflow-y-auto">
+        <ul className="min-h-0 flex-1 divide-y divide-border-soft overflow-y-auto">
           {items.map((item) => (
             <HomeActivityRow key={item.id} item={item} onOpen={onOpen} />
           ))}

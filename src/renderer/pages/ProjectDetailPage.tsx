@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Clapperboard, MessageSquare, Music2, Pencil, Plus, Scissors, Trash2 } from 'lucide-react'
 import type { Channel, Project, ProjectType } from '@shared/types'
@@ -46,11 +46,17 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
   const [pendingThumb, setPendingThumb] = useState<string | null>(null)
   const [pendingThumbPreview, setPendingThumbPreview] = useState<string | null>(null)
 
+  const currentIdRef = useRef(id)
+  currentIdRef.current = id
+
   const load = useCallback(async () => {
     if (!id) return
+    // Ao abrir outro projeto no meio do carregamento, a resposta antiga é descartada.
+    const stale = () => currentIdRef.current !== id
     setLoading(true)
     try {
       const found = await api.projects.get(id)
+      if (stale()) return
       if (!found) {
         push('Projeto não encontrado.', 'error')
         navigate(env.basePath, { replace: true })
@@ -61,12 +67,15 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
         api.channels.list({ channelType: 'music' }),
         api.music.list({ projectId: found.id }),
       ])
+      if (stale()) return
       setChannels(channelList)
       setTracks(trackList)
+    } catch (error) {
+      if (!stale()) pushError(error, 'Não foi possível carregar o projeto.')
     } finally {
-      setLoading(false)
+      if (!stale()) setLoading(false)
     }
-  }, [api, env.basePath, id, navigate, push])
+  }, [api, env.basePath, id, navigate, push, pushError])
 
   useEffect(() => {
     void load()
@@ -242,7 +251,6 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
             <h2 className="text-base font-semibold text-text">Faixas do projeto</h2>
             <Button
               icon={<Plus className="h-4 w-4" />}
-              style={{ backgroundColor: env.color }}
               disabled={importing}
               onClick={() => void importTrack()}
             >
@@ -262,7 +270,7 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
                 <Card
                   key={track.id}
                   padding="sm"
-                  className="flex cursor-pointer items-center gap-3 transition-colors hover:border-[#334049]"
+                  className="flex cursor-pointer items-center gap-3 transition-colors hover:border-border-strong"
                   onClick={() => navigate(`/musica/faixas/${track.id}`)}
                 >
                   <div

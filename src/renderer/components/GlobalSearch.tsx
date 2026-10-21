@@ -179,7 +179,7 @@ export function GlobalSearch() {
           placeholder="Buscar projetos e canais"
           aria-controls={listId}
           aria-expanded={open}
-          className="h-10 w-full rounded-xl border border-border bg-card-2 pl-10 pr-16 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+          className="h-10 w-full rounded-xl border border-border bg-elevated pl-10 pr-16 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
         />
         <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md border border-border-soft px-1.5 py-0.5 text-[10px] text-muted-2">
           {shortcut}
@@ -189,7 +189,7 @@ export function GlobalSearch() {
       {open ? (
         <div
           id={listId}
-          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-border bg-card shadow-xl"
+          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-border bg-card shadow-popover"
         >
           {query.trim().length < MIN_CHARS ? (
             <p className="px-4 py-3 text-xs text-muted">Digite pelo menos {MIN_CHARS} letras.</p>
@@ -216,7 +216,7 @@ export function GlobalSearch() {
                           type="button"
                           className={cn(
                             'flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors',
-                            index === activeIndex ? 'bg-card-2 text-text' : 'text-muted hover:bg-card-2 hover:text-text',
+                            index === activeIndex ? 'bg-elevated text-text' : 'text-muted hover:bg-elevated hover:text-text',
                           )}
                           onMouseEnter={() => setActiveIndex(index)}
                           onClick={() => {

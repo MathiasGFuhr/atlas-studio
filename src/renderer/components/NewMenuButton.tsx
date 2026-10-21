@@ -94,7 +94,7 @@ export function NewMenuButton() {
         <div
           role="menu"
           aria-label="Criar"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 min-w-[240px] rounded-xl border border-border bg-card-2 p-1.5 shadow-[0_12px_28px_rgba(0,0,0,0.4)]"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 min-w-[240px] rounded-xl border border-border bg-elevated p-1.5 shadow-popover"
         >
           {items.map((id, index) => {
             const meta = LABELS[id]
@@ -107,7 +107,7 @@ export function NewMenuButton() {
                 role="menuitem"
                 className={cn(
                   'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm text-text transition-colors',
-                  active ? 'bg-accent-dark/55' : 'hover:bg-white/[0.04]',
+                  active ? 'bg-accent-subtle/55' : 'hover:bg-hover',
                 )}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => select(id)}

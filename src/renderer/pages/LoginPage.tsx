@@ -37,7 +37,7 @@ export function LoginPage({
 
   return (
     <div className="atlas-shell flex h-full w-full items-center justify-center px-4 text-text">
-      <div className="w-full max-w-md rounded-2xl border border-border-soft/90 bg-card/78 p-6 shadow-[0_8px_32px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
+      <div className="w-full max-w-md rounded-2xl border border-border-soft/90 bg-card p-6 shadow-card">
         <div className="mb-6">
           <AtlasLogo
             variant="horizontal"

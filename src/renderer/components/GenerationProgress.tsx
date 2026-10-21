@@ -57,9 +57,9 @@ export function GenerationProgress({
               <span
                 className={cn(
                   'relative z-10 mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border',
-                  step.state === 'done' && 'border-accent bg-accent text-black',
-                  step.state === 'running' && 'border-accent/50 bg-accent-dark text-accent',
-                  step.state === 'pending' && 'border-border bg-card-2 text-muted-2',
+                  step.state === 'done' && 'border-accent bg-accent text-on-accent',
+                  step.state === 'running' && 'border-accent/50 bg-accent-subtle text-accent',
+                  step.state === 'pending' && 'border-border bg-elevated text-muted-2',
                   step.state === 'error' && 'border-danger bg-danger/20 text-danger',
                   step.state === 'cancelled' && 'border-warning bg-warning/10 text-warning',
                 )}

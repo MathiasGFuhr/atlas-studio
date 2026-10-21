@@ -70,11 +70,11 @@ function ChannelPicker({
             className={cn(
               'flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
               channelId
-                ? 'border-border bg-card-2 hover:border-[#334049]'
+                ? 'border-border bg-elevated hover:border-border-strong'
                 : 'border-accent/50 bg-accent/10',
             )}
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/5 text-muted-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-elevated text-muted-2">
               <Tv className="h-4 w-4" />
             </div>
             <div className="min-w-0">
@@ -93,12 +93,12 @@ function ChannelPicker({
                   'flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
                   selected
                     ? 'border-accent/50 bg-accent/10'
-                    : 'border-border bg-card-2 hover:border-[#334049]',
+                    : 'border-border bg-elevated hover:border-border-strong',
                 )}
               >
                 <div
                   className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-border-soft"
-                  style={{ background: `linear-gradient(145deg, ${channel.color}33, #10161a)` }}
+                  style={{ background: `linear-gradient(145deg, ${channel.color}33, var(--color-elevated))` }}
                 >
                   {channel.avatarDataUrl ? (
                     <img src={channel.avatarDataUrl} alt="" className="h-full w-full object-cover" />
@@ -171,7 +171,7 @@ function ScheduleFields({
         <div>
           <p className="mb-2 text-sm font-medium text-muted">Thumbnail</p>
           <div className="flex items-start gap-3">
-            <div className="h-[90px] w-[160px] overflow-hidden rounded-xl border border-border bg-card-2">
+            <div className="h-[90px] w-[160px] overflow-hidden rounded-xl border border-border bg-elevated">
               {thumbPreviewSrc ? (
                 <img
                   src={thumbPreviewSrc}
@@ -252,7 +252,7 @@ export function ProjectEditorModal({
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button disabled={saving} style={{ backgroundColor: env.color }} onClick={onSubmit}>
+          <Button disabled={saving} onClick={onSubmit}>
             {saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Criar projeto'}
           </Button>
         </>

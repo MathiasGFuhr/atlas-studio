@@ -136,7 +136,7 @@ export function HomeWorldClocks({
                   ) : null}
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#11181d]/92 via-[#11181d]/70 to-[#11181d]/25"
+                    className="pointer-events-none absolute inset-0 bg-gradient-to-r from-card/92 via-card/70 to-card/25"
                   />
                   <div className="relative z-[1]">
                     <div className="flex items-start justify-between gap-2">
@@ -144,7 +144,7 @@ export function HomeWorldClocks({
                         <div
                           className={cn(
                             'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                            daytime ? 'bg-accent/10 text-accent' : 'bg-white/[0.04] text-muted',
+                            daytime ? 'bg-accent/10 text-accent' : 'bg-elevated text-muted',
                           )}
                         >
                           {daytime ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -162,7 +162,7 @@ export function HomeWorldClocks({
                         type="button"
                         onClick={() => void handleRemove(clock.id)}
                         disabled={saving}
-                        className="rounded-lg p-1.5 text-muted opacity-0 transition-opacity hover:bg-white/5 hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-40"
+                        className="rounded-lg p-1.5 text-muted opacity-0 transition-opacity hover:bg-hover hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-40"
                         aria-label={`Remover ${clock.label}`}
                         title="Remover fuso"
                       >
@@ -184,7 +184,7 @@ export function HomeWorldClocks({
               type="button"
               onClick={openAdd}
               disabled={saving}
-              className="flex min-h-[104px] items-center justify-center gap-2 rounded-2xl border border-dashed border-border-soft bg-card/40 px-4 py-3.5 text-sm font-medium text-muted transition-colors hover:border-border hover:bg-card/70 hover:text-text disabled:opacity-50"
+              className="flex min-h-[104px] items-center justify-center gap-2 rounded-2xl border border-dashed border-border-soft bg-card/40 px-4 py-3.5 text-sm font-medium text-muted transition-colors hover:border-border hover:bg-card hover:text-text disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
               Adicionar fuso
@@ -221,7 +221,7 @@ export function HomeWorldClocks({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Ex.: Japão, Los Angeles, UTC..."
-              className="w-full rounded-xl border border-border bg-card-2 px-3 py-2.5 text-sm text-text outline-none placeholder:text-muted-2 focus:border-accent/40"
+              className="w-full rounded-xl border border-border bg-elevated px-3 py-2.5 text-sm text-text outline-none placeholder:text-muted-2 focus:border-accent/40"
             />
           </label>
 
@@ -233,7 +233,7 @@ export function HomeWorldClocks({
               value={customLabel}
               onChange={(event) => setCustomLabel(event.target.value)}
               placeholder={selectedCatalog?.label ?? 'Ex.: Canal EUA'}
-              className="w-full rounded-xl border border-border bg-card-2 px-3 py-2.5 text-sm text-text outline-none placeholder:text-muted-2 focus:border-accent/40"
+              className="w-full rounded-xl border border-border bg-elevated px-3 py-2.5 text-sm text-text outline-none placeholder:text-muted-2 focus:border-accent/40"
             />
           </label>
 
@@ -250,7 +250,7 @@ export function HomeWorldClocks({
                     onClick={() => setSelectedZone(item.timeZone)}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
-                      selected ? 'bg-accent/10 text-text' : 'text-muted hover:bg-white/[0.03] hover:text-text',
+                      selected ? 'bg-accent/10 text-text' : 'text-muted hover:bg-hover/60 hover:text-text',
                     )}
                   >
                     <Clock3 className={cn('h-4 w-4 shrink-0', selected ? 'text-accent' : 'text-muted-2')} />

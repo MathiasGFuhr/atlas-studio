@@ -61,7 +61,7 @@ export function MusicPublicationCard({
     <div className={cn('flex gap-4', compact ? 'flex-col' : 'flex-col lg:flex-row')}>
       <div
         className={cn(
-          'overflow-hidden rounded-xl border border-border-soft bg-card-2',
+          'overflow-hidden rounded-xl border border-border-soft bg-elevated',
           compact ? 'aspect-video w-full' : 'aspect-video w-full shrink-0 lg:w-[280px]',
         )}
       >

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import type { AtlasSession } from '@shared/account'
 import type { AppSettings } from '@shared/types'
@@ -12,22 +12,7 @@ import { INTRO_TOUR_STEPS, ProductTour } from './components/ProductTour'
 import { PageTourHost } from './components/PageTourHost'
 import { PRODUCT_TOUR_REPLAY_EVENT } from './lib/productTourEvents'
 import { HomePage } from './pages/HomePage'
-import { ProjectsPage } from './pages/ProjectsPage'
-import { ProjectDetailPage } from './pages/ProjectDetailPage'
-import { ChannelsPage } from './pages/ChannelsPage'
-import { ChannelCalendarPage } from './pages/ChannelCalendarPage'
-import { ChannelAgendaPage } from './pages/ChannelAgendaPage'
-import { ChannelPublishedVideosPage } from './pages/ChannelPublishedVideosPage'
-import { PromptsPage } from './pages/PromptsPage'
-import { LipSyncRefsPage } from './pages/LipSyncRefsPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { MusicPage } from './pages/MusicPage'
-import { MusicEditorPage } from './pages/MusicEditorPage'
-import { ShortsStudioPage } from './pages/ShortsStudioPage'
-import { ShortsProjectsPage } from './pages/ShortsProjectsPage'
-import { TasksPage } from './pages/TasksPage'
 import { LoginPage } from './pages/LoginPage'
-import { TeamChatPage } from './pages/TeamChatPage'
 import { ChatDock } from './components/chat/ChatDock'
 import { TeamChatIncoming } from './components/team/TeamChatIncoming'
 import { getAtlasApi } from './lib/api'
@@ -39,6 +24,70 @@ import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
 import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { version as appVersion } from '../../package.json'
 import { AtlasLogo } from './components/AtlasLogo'
+
+/*
+ * Páginas fora da Home viram chunks separados: o bundle inicial fica menor e
+ * os chunks são pré-carregados quando a janela fica ociosa (ver preloadPages).
+ */
+const pageLoaders = {
+  projects: () => import('./pages/ProjectsPage'),
+  projectDetail: () => import('./pages/ProjectDetailPage'),
+  channels: () => import('./pages/ChannelsPage'),
+  channelCalendar: () => import('./pages/ChannelCalendarPage'),
+  channelAgenda: () => import('./pages/ChannelAgendaPage'),
+  channelPublished: () => import('./pages/ChannelPublishedVideosPage'),
+  prompts: () => import('./pages/PromptsPage'),
+  lipSync: () => import('./pages/LipSyncRefsPage'),
+  settings: () => import('./pages/SettingsPage'),
+  music: () => import('./pages/MusicPage'),
+  musicEditor: () => import('./pages/MusicEditorPage'),
+  shortsStudio: () => import('./pages/ShortsStudioPage'),
+  shortsProjects: () => import('./pages/ShortsProjectsPage'),
+  tasks: () => import('./pages/TasksPage'),
+  teamChat: () => import('./pages/TeamChatPage'),
+}
+
+const ProjectsPage = lazy(() => pageLoaders.projects().then((m) => ({ default: m.ProjectsPage })))
+const ProjectDetailPage = lazy(() =>
+  pageLoaders.projectDetail().then((m) => ({ default: m.ProjectDetailPage })),
+)
+const ChannelsPage = lazy(() => pageLoaders.channels().then((m) => ({ default: m.ChannelsPage })))
+const ChannelCalendarPage = lazy(() =>
+  pageLoaders.channelCalendar().then((m) => ({ default: m.ChannelCalendarPage })),
+)
+const ChannelAgendaPage = lazy(() =>
+  pageLoaders.channelAgenda().then((m) => ({ default: m.ChannelAgendaPage })),
+)
+const ChannelPublishedVideosPage = lazy(() =>
+  pageLoaders.channelPublished().then((m) => ({ default: m.ChannelPublishedVideosPage })),
+)
+const PromptsPage = lazy(() => pageLoaders.prompts().then((m) => ({ default: m.PromptsPage })))
+const LipSyncRefsPage = lazy(() => pageLoaders.lipSync().then((m) => ({ default: m.LipSyncRefsPage })))
+const SettingsPage = lazy(() => pageLoaders.settings().then((m) => ({ default: m.SettingsPage })))
+const MusicPage = lazy(() => pageLoaders.music().then((m) => ({ default: m.MusicPage })))
+const MusicEditorPage = lazy(() =>
+  pageLoaders.musicEditor().then((m) => ({ default: m.MusicEditorPage })),
+)
+const ShortsStudioPage = lazy(() =>
+  pageLoaders.shortsStudio().then((m) => ({ default: m.ShortsStudioPage })),
+)
+const ShortsProjectsPage = lazy(() =>
+  pageLoaders.shortsProjects().then((m) => ({ default: m.ShortsProjectsPage })),
+)
+const TasksPage = lazy(() => pageLoaders.tasks().then((m) => ({ default: m.TasksPage })))
+const TeamChatPage = lazy(() => pageLoaders.teamChat().then((m) => ({ default: m.TeamChatPage })))
+
+function preloadPages() {
+  for (const load of Object.values(pageLoaders)) {
+    void load().catch(() => {
+      /* o lazy() da rota tenta de novo e mostra o erro se falhar */
+    })
+  }
+}
+
+function RouteFallback() {
+  return <div className="h-full w-full" aria-busy="true" />
+}
 
 /** Mantém links antigos funcionando sem duplicar telas. */
 function LegacyRedirect({ to }: { to: (id: string) => string }) {
@@ -67,14 +116,31 @@ export default function App() {
   settingsRef.current = settings
 
   useEffect(() => {
-    void api.settings.get().then((next) => {
-      setSettings(next)
-      if (!next.productTourCompleted) setTourOpen(true)
-      setTourChecked(true)
-    })
-    void api.account.getSession().then(setSession)
+    void api.settings
+      .get()
+      .then((next) => {
+        setSettings(next)
+        if (!next.productTourCompleted) setTourOpen(true)
+      })
+      .catch((error) => console.error('[atlas] falha ao carregar configurações', error))
+      .finally(() => setTourChecked(true))
+    void api.account
+      .getSession()
+      .then(setSession)
+      .catch((error) => {
+        // Sem sessão legível, mostra o login em vez de travar em "Abrindo o Atlas...".
+        console.error('[atlas] falha ao ler a sessão', error)
+        setSession({ user: null })
+      })
     return api.account.onChanged(setSession)
   }, [api])
+
+  const signedIn = session !== 'loading' && Boolean(session.user)
+  useEffect(() => {
+    if (!signedIn) return
+    const handle = window.requestIdleCallback(preloadPages, { timeout: 4000 })
+    return () => window.cancelIdleCallback(handle)
+  }, [signedIn])
 
   useEffect(() => {
     function replay() {
@@ -123,7 +189,7 @@ export default function App() {
   if (session === 'loading') {
     return (
       <div className="atlas-shell flex h-full w-full flex-col items-center justify-center gap-4 text-sm text-muted">
-        <AtlasLogo variant="mark" className="h-14 w-14 rounded-2xl shadow-[0_0_28px_rgba(53,229,139,0.22)]" />
+        <AtlasLogo variant="mark" className="h-14 w-14 rounded-2xl" />
         Abrindo o Atlas...
       </div>
     )
@@ -149,6 +215,7 @@ export default function App() {
           <div className="flex min-w-0 flex-1 flex-col bg-transparent">
             <TopBar settings={settings} />
             <main className="min-h-0 flex-1 overflow-hidden bg-transparent">
+              <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/" element={<HomePage />} />
 
@@ -203,6 +270,7 @@ export default function App() {
                 <Route path="/settings" element={<Navigate to="/configuracoes" replace />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              </Suspense>
             </main>
           </div>
         </div>

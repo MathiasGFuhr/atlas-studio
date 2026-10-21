@@ -57,11 +57,11 @@ export function ProjectFolderPanel({
 
       {linked ? (
         <>
-          <p className="break-all rounded-xl border border-border-soft bg-card-2 px-3 py-2.5 font-mono text-xs text-muted">
+          <p className="break-all rounded-xl border border-border-soft bg-elevated px-3 py-2.5 font-mono text-xs text-muted">
             {project.projectFolderPath}
           </p>
           {project.folderExists === false ? (
-            <p className="flex items-center gap-1.5 text-xs text-yellow-500/80">
+            <p className="flex items-center gap-1.5 text-xs text-warning">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
               A pasta vinculada não foi encontrada no disco.
             </p>

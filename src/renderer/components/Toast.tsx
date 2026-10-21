@@ -128,18 +128,18 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
     <div
       role={item.tone === 'error' ? 'alert' : 'status'}
       className={cn(
-        'pointer-events-auto atlas-toast-enter flex items-start gap-3 rounded-2xl border px-3.5 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-md',
-        item.tone === 'success' && 'border-accent/35 bg-[#10261c]/92 text-text',
-        item.tone === 'error' && 'border-danger/40 bg-[#2a1416]/95 text-text',
-        item.tone === 'default' && 'border-border bg-card/95 text-text',
+        'pointer-events-auto atlas-toast-enter flex items-start gap-3 rounded-2xl border px-3.5 py-3 shadow-popover',
+        item.tone === 'success' && 'border-accent/25 bg-elevated text-text',
+        item.tone === 'error' && 'border-danger/30 bg-elevated text-text',
+        item.tone === 'default' && 'border-border-soft bg-elevated text-text',
       )}
     >
       <span
         className={cn(
           'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl',
-          item.tone === 'success' && 'bg-accent/15 text-accent',
-          item.tone === 'error' && 'bg-danger/20 text-[#ff8b8b]',
-          item.tone === 'default' && 'bg-white/5 text-muted',
+          item.tone === 'success' && 'bg-accent-subtle text-accent',
+          item.tone === 'error' && 'bg-danger-subtle text-danger',
+          item.tone === 'default' && 'bg-hover text-muted',
         )}
       >
         <Icon className="h-4 w-4" aria-hidden />
@@ -150,7 +150,7 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
           className={cn(
             'text-[11px] font-semibold uppercase tracking-wide',
             item.tone === 'success' && 'text-accent',
-            item.tone === 'error' && 'text-[#ff9a9a]',
+            item.tone === 'error' && 'text-danger',
             item.tone === 'default' && 'text-muted-2',
           )}
         >
@@ -162,7 +162,7 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
       <button
         type="button"
         aria-label="Fechar notificação"
-        className="mt-0.5 rounded-lg p-1 text-muted transition-colors hover:bg-white/5 hover:text-text"
+        className="mt-0.5 rounded-lg p-1 text-muted transition-colors hover:bg-hover hover:text-text"
         onClick={onDismiss}
       >
         <X className="h-3.5 w-3.5" />

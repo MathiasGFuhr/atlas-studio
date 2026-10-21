@@ -6,8 +6,9 @@ import { pathToFileURL } from 'node:url'
 import { parseByteRange } from '../../../shared/mediaRange'
 import { shortsRepository } from '../../repositories/shortsRepository'
 import { getUserDataPath } from '../../paths'
+import { ATLAS_MEDIA_SCHEME, isAllowedImagePath } from './localImageUrl'
 
-export const ATLAS_MEDIA_SCHEME = 'atlas-media'
+export { ATLAS_MEDIA_SCHEME, toAtlasMediaUrl } from './localImageUrl'
 
 const MEDIA_TYPES: Record<string, string> = {
   '.mp4': 'video/mp4',
@@ -60,15 +61,20 @@ function isInsideRoot(filePath: string, root: string): boolean {
   return path.resolve(filePath).toLowerCase().startsWith(resolvedRoot)
 }
 
-function isAllowedMediaPath(filePath: string): boolean {
-  const resolved = path.resolve(filePath)
-  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return false
+function isAllowedMediaPath(resolved: string): boolean {
   if (isInsideRoot(resolved, shortsRoot()) || isInsideRoot(resolved, musicRoot())) return true
-  return shortsRepository.list().some((job) => path.resolve(job.sourcePath).toLowerCase() === resolved.toLowerCase())
+  if (isAllowedImagePath(resolved)) return true
+  const target = resolved.toLowerCase()
+  return shortsRepository.listSourcePaths().some((source) => path.resolve(source).toLowerCase() === target)
 }
 
-export function toAtlasMediaUrl(filePath: string): string {
-  return `${ATLAS_MEDIA_SCHEME}://local/?p=${encodeURIComponent(path.resolve(filePath))}`
+function statFile(filePath: string): fs.Stats | null {
+  try {
+    const stats = fs.statSync(filePath)
+    return stats.isFile() ? stats : null
+  } catch {
+    return null
+  }
 }
 
 export function filePathFromAtlasMediaUrl(url: string): string | null {
@@ -90,8 +96,7 @@ function streamBody(nodeStream: Readable): NonNullable<ConstructorParameters<typ
   return Readable.toWeb(nodeStream) as unknown as NonNullable<ConstructorParameters<typeof Response>[0]>
 }
 
-function serveLocalFile(filePath: string, request: Request): Response {
-  const size = fs.statSync(filePath).size
+function serveLocalFile(filePath: string, size: number, request: Request): Response {
   const type = mediaContentType(filePath)
   const range = parseByteRange(request.headers.get('range'), size)
   if (!range) {
@@ -118,11 +123,12 @@ function serveLocalFile(filePath: string, request: Request): Response {
 export function registerAtlasMediaProtocol() {
   protocol.handle(ATLAS_MEDIA_SCHEME, async (request) => {
     const filePath = filePathFromAtlasMediaUrl(request.url)
-    if (!filePath || !isAllowedMediaPath(filePath)) {
+    const stats = filePath ? statFile(filePath) : null
+    if (!filePath || !stats || !isAllowedMediaPath(filePath)) {
       return new Response('Not found', { status: 404 })
     }
     try {
-      return serveLocalFile(filePath, request)
+      return serveLocalFile(filePath, stats.size, request)
     } catch {
       return net.fetch(pathToFileURL(filePath).href)
     }

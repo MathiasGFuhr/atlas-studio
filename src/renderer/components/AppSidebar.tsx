@@ -127,7 +127,10 @@ export function AppSidebar({
 
   useEffect(() => {
     function refresh() {
-      void api.tasks.pendingCount().then(setPendingCount)
+      void api.tasks
+        .pendingCount()
+        .then(setPendingCount)
+        .catch((error) => console.error('[atlas] falha ao contar tarefas pendentes', error))
     }
     refresh()
     return onTasksChanged(refresh)
@@ -229,7 +232,7 @@ export function AppSidebar({
           return cn(
             'group relative flex items-center rounded-xl text-[13px] font-medium tracking-[-0.01em] transition-colors',
             collapsed ? 'h-12 justify-center px-0' : 'h-12 gap-3 px-1.5',
-            active ? 'text-text' : 'text-[#d7dde3] hover:text-text',
+            active ? 'text-text' : 'text-muted hover:text-text',
           )
         }}
       >
@@ -241,8 +244,8 @@ export function AppSidebar({
                 className={cn(
                   'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border transition-colors',
                   active
-                    ? 'border-accent/35 bg-accent/10 text-accent shadow-[0_0_16px_rgba(53,229,139,0.16),inset_0_1px_0_rgba(255,255,255,0.08)]'
-                    : 'border-white/[0.08] bg-[#12181d] text-[#e8edf2] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_0_1px_rgba(0,0,0,0.25)] group-hover:border-white/[0.14] group-hover:bg-[#161d23]',
+                    ? 'border-transparent bg-accent-subtle text-accent'
+                    : 'border-transparent bg-elevated/70 text-muted group-hover:bg-hover group-hover:text-text',
                 )}
               >
                 <item.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
@@ -250,7 +253,7 @@ export function AppSidebar({
                   <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
                 ) : null}
                 {collapsed && item.to === '/equipe' && onlineCount > 0 ? (
-                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-dark px-1 text-[10px] font-semibold leading-none text-accent">
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-subtle px-1 text-[10px] font-semibold leading-none text-accent">
                     {onlineCount > 9 ? '9+' : onlineCount}
                   </span>
                 ) : null}
@@ -263,7 +266,7 @@ export function AppSidebar({
                 <>
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   {item.to === '/tarefas' && pendingCount > 0 ? (
-                    <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+                    <span className="rounded-md bg-hover px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
                       {pendingCount}
                     </span>
                   ) : null}
@@ -290,7 +293,7 @@ export function AppSidebar({
     <aside
       data-tour="sidebar"
       className={cn(
-        'relative z-10 flex h-full shrink-0 flex-col border-r border-border-soft/80 bg-sidebar transition-[width] duration-200 ease-out',
+        'relative z-10 flex h-full shrink-0 flex-col border-r border-border-soft bg-sidebar transition-[width] duration-200 ease-out',
         collapsed ? 'w-[72px]' : 'w-[252px]',
       )}
     >
@@ -300,7 +303,7 @@ export function AppSidebar({
         aria-label={collapseLabel}
         aria-expanded={!collapsed}
         onClick={toggleCollapsed}
-        className="absolute right-0 top-[1.55rem] z-20 flex h-6 w-6 translate-x-1/2 items-center justify-center rounded-full border border-border-soft bg-sidebar text-muted-2 shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition-colors hover:bg-card-2 hover:text-text"
+        className="absolute right-0 top-[1.55rem] z-20 flex h-6 w-6 translate-x-1/2 items-center justify-center rounded-full border border-border-soft bg-sidebar text-muted-2 shadow-card transition-colors hover:bg-elevated hover:text-text"
       >
         {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
       </button>
@@ -311,22 +314,16 @@ export function AppSidebar({
           collapsed ? 'justify-center px-2' : 'px-3',
         )}
       >
-        {!collapsed ? (
-          <div
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_20%_30%,rgba(53,229,139,0.12),transparent_55%)]"
-            aria-hidden
-          />
-        ) : null}
         {collapsed ? (
           <AtlasLogo
             variant="mark"
-            className="relative h-10 w-10 rounded-[11px] shadow-[0_0_18px_rgba(53,229,139,0.22)]"
+            className="relative h-10 w-10 rounded-[11px]"
           />
         ) : (
           <div className="relative min-w-0 flex-1">
             <AtlasLogo
               variant="horizontal"
-              className="h-12 w-auto max-w-full drop-shadow-[0_0_18px_rgba(53,229,139,0.28)]"
+              className="h-12 w-auto max-w-full"
               alt="Atlas Studio — Produção musical com IA"
             />
           </div>
@@ -347,7 +344,7 @@ export function AppSidebar({
                 <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-2">
                   {section.label}
                 </p>
-                <span className="h-px flex-1 bg-white/[0.08]" aria-hidden />
+                <span className="h-px flex-1 bg-border-soft" aria-hidden />
               </div>
             )}
             {section.items.map((item) => renderNavLink(item))}
@@ -355,11 +352,7 @@ export function AppSidebar({
         ))}
       </nav>
 
-      <div className="relative mt-auto flex flex-col gap-2.5 border-t border-white/[0.06] px-3 pb-3 pt-3">
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-accent/[0.04] to-transparent"
-          aria-hidden
-        />
+      <div className="relative mt-auto flex flex-col gap-2.5 border-t border-border-soft px-3 pb-3 pt-3">
         <div className="relative flex flex-col gap-1.5">{renderNavLink(settingsItem)}</div>
         <div className="relative">
           <SidebarUpdateCard compact={collapsed} />

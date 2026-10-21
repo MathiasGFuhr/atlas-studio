@@ -26,8 +26,8 @@ export function Textarea({ className, label, id, autoGrow, value, onChange, ...p
         value={value}
         onChange={onChange}
         className={cn(
-          'min-h-[120px] w-full min-w-0 resize-y rounded-xl border border-border bg-card-2 px-3.5 py-3 text-sm leading-relaxed break-words text-text placeholder:text-muted-2',
-          'transition-colors hover:border-[#334049] focus:border-accent/60 focus:outline-none',
+          'min-h-[120px] w-full min-w-0 resize-y rounded-xl border border-border bg-input px-3.5 py-3 text-sm leading-relaxed break-words text-text placeholder:text-muted-2',
+          'transition-colors hover:border-border-strong focus:border-accent/70 focus:outline-none disabled:cursor-not-allowed disabled:text-disabled disabled:hover:border-border',
           autoGrow && 'resize-none overflow-hidden',
           className,
         )}

@@ -61,7 +61,7 @@ export function HomeShortsCard({
         <button
           type="button"
           onClick={onOpenAll}
-          className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-white/[0.04] hover:text-text"
+          className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-hover hover:text-text"
         >
           Ver todos
         </button>
@@ -82,9 +82,9 @@ export function HomeShortsCard({
                 key={job.id}
                 type="button"
                 onClick={() => onOpen(job.id)}
-                className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-white/[0.06] bg-black/20 text-left transition-colors hover:border-accent/30"
+                className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-border-soft bg-bg/20 text-left transition-colors hover:border-accent/30"
               >
-                <div className="relative aspect-[9/14] overflow-hidden bg-card-2">
+                <div className="relative aspect-[9/14] overflow-hidden bg-elevated">
                   {poster ? (
                     <img
                       src={poster}
@@ -97,7 +97,7 @@ export function HomeShortsCard({
                     </div>
                   )}
                   {duration ? (
-                    <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white backdrop-blur">
+                    <span className="absolute bottom-1.5 right-1.5 rounded-md bg-overlay/65 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-text backdrop-blur">
                       {duration}
                     </span>
                   ) : null}

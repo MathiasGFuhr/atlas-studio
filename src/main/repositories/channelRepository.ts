@@ -10,7 +10,7 @@ import type {
 } from '../../shared/types'
 import { isProjectType } from '../../shared/types'
 import { hydrateStoredTitleAnalysis } from '../../shared/antigravity/titleAnalysis'
-import { readImageDataUrl } from '../services/storage/profilePhoto'
+import { localImageUrl } from '../services/media/localImageUrl'
 import { removeChannelMedia, removeVideoThumbnailFile } from '../services/storage/channelMedia'
 import { folderExists } from '../services/storage/projectFolders'
 
@@ -106,7 +106,7 @@ function mapChannel(row: ChannelRow): Channel {
     name: row.name,
     description: row.description ?? '',
     avatarPath: row.avatar_path ?? '',
-    avatarDataUrl: readImageDataUrl(row.avatar_path ?? ''),
+    avatarDataUrl: localImageUrl(row.avatar_path),
     nicheId: row.niche_id ?? null,
     nicheName: row.niche_name ?? null,
     youtubeUrl: row.youtube_url ?? '',
@@ -129,7 +129,7 @@ function mapVideo(row: VideoRow): ChannelVideo {
     title: row.title,
     description: row.description ?? '',
     thumbnailPath: row.thumbnail_path ?? '',
-    thumbnailDataUrl: readImageDataUrl(row.thumbnail_path ?? ''),
+    thumbnailDataUrl: localImageUrl(row.thumbnail_path),
     scheduledDate: row.scheduled_date,
     status,
     scriptId: row.script_id ?? null,

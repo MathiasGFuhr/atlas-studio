@@ -53,8 +53,8 @@ export function SettingsPage({
       ])
       setSettings(s)
       setAntigravity(agy)
-    })()
-  }, [api])
+    })().catch((error) => pushError(error, 'Não foi possível carregar as configurações.'))
+  }, [api, pushError])
 
   useEffect(() => {
     return api.antigravity.onAuthStateChanged((next) => {
@@ -150,14 +150,18 @@ export function SettingsPage({
     if (!settings) return
     const { notificationReadKeys, ...patch } = settings
     void notificationReadKeys
-    if (settings.accountName.trim()) {
-      await api.account.updateProfile(settings.accountName)
+    try {
+      if (settings.accountName.trim()) {
+        await api.account.updateProfile(settings.accountName)
+      }
+      const next = await api.settings.update(patch)
+      setSettings(next)
+      onSettingsSaved?.(next)
+      notifySettingsChanged()
+      push('Alterações salvas.', 'success')
+    } catch (error) {
+      pushError(error, 'Não foi possível salvar as configurações.')
     }
-    const next = await api.settings.update(patch)
-    setSettings(next)
-    onSettingsSaved?.(next)
-    notifySettingsChanged()
-    push('Alterações salvas.', 'success')
   }
 
   async function handleAtlasLogout() {
@@ -242,11 +246,14 @@ export function SettingsPage({
             <Button
               variant="ghost"
               onClick={() => {
-                void api.settings.update({ seenProductTours: [] }).then((next) => {
-                  setSettings(next)
-                  onSettingsSaved?.(next)
-                  push('Tutoriais das telas reativados.', 'success')
-                })
+                void api.settings
+                  .update({ seenProductTours: [] })
+                  .then((next) => {
+                    setSettings(next)
+                    onSettingsSaved?.(next)
+                    push('Tutoriais das telas reativados.', 'success')
+                  })
+                  .catch((error) => pushError(error, 'Não foi possível reativar os tutoriais.'))
               }}
             >
               Repetir tutoriais das telas
@@ -261,7 +268,7 @@ export function SettingsPage({
             label="Foto"
             control={
               <div className="flex items-center gap-3">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-gradient-to-br from-[#2b3a44] to-[#10161a]">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-hover">
                   {settings.accountPhotoDataUrl ? (
                     <img
                       src={settings.accountPhotoDataUrl}
@@ -686,7 +693,7 @@ function StatusMini({
 }) {
   return (
     <Card className="flex flex-col items-center gap-2 py-6 text-center">
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-dark text-accent">
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-subtle text-accent">
         <Icon className="h-5 w-5" />
       </div>
       <div className="text-sm font-medium text-text">{title}</div>

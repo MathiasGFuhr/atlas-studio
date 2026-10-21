@@ -27,7 +27,7 @@ export function TitleScoreBadge({ score }: { score: number | null | undefined })
 
 function MetricChip({ label, value }: { label: string; value: number | null | undefined }) {
   return (
-    <div className="rounded-lg bg-black/20 px-2 py-1.5">
+    <div className="rounded-lg bg-bg/20 px-2 py-1.5">
       <p className="text-[10px] uppercase tracking-wide text-muted-2">{label}</p>
       <p className="text-xs font-medium text-text">{value == null ? '—' : value}</p>
     </div>
@@ -73,7 +73,7 @@ export function TitleScorePanel({
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-border-soft bg-card-2 p-3">
+    <div className="space-y-3 rounded-xl border border-border-soft bg-elevated p-3">
       <div>
         <p className="text-[10px] uppercase tracking-wide text-muted-2">Força do título</p>
         <div className="mt-0.5 flex items-baseline gap-2">
@@ -89,7 +89,7 @@ export function TitleScorePanel({
         ))}
       </div>
 
-      <div className="space-y-1 rounded-lg bg-black/15 px-2 py-1.5 text-[11px] text-muted">
+      <div className="space-y-1 rounded-lg bg-bg/15 px-2 py-1.5 text-[11px] text-muted">
         <p>
           <span className="text-muted-2">Primeiros 45: </span>
           {facts.first45 || '—'}

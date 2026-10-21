@@ -3,7 +3,7 @@ import { getDb } from '../db/database'
 import type { ChannelVideoStatus, Project, ProjectType } from '../../shared/types'
 import { isProjectType, MUSIC_PROJECT_HAS_PUBLICATION_ERROR } from '../../shared/types'
 import { folderExists } from '../services/storage/projectFolders'
-import { readImageDataUrl } from '../services/storage/profilePhoto'
+import { localImageUrl } from '../services/media/localImageUrl'
 import { channelRepository } from './channelRepository'
 
 type ProjectRow = {
@@ -48,7 +48,7 @@ function mapProject(row: ProjectRow): Project {
     scheduledVideoStatus: (row.scheduled_video_status as ChannelVideoStatus | null) ?? null,
     scheduledVideoTitle: row.scheduled_video_title ?? null,
     scheduledVideoDescription: row.scheduled_video_description ?? null,
-    scheduledVideoThumbnailDataUrl: readImageDataUrl(row.scheduled_video_thumbnail_path ?? ''),
+    scheduledVideoThumbnailDataUrl: localImageUrl(row.scheduled_video_thumbnail_path),
     scheduledVideoChannelName: row.scheduled_video_channel_name ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

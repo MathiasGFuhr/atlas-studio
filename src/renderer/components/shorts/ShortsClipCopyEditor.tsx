@@ -122,7 +122,7 @@ export function ShortsClipCopyEditor({
             Regenerar
           </Button>
           {menuOpen ? (
-            <div className="absolute right-0 z-20 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-border bg-card-2 shadow-xl">
+            <div className="absolute right-0 z-20 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-border bg-elevated shadow-popover">
               {(
                 [
                   ['title', 'Título'],
@@ -134,7 +134,7 @@ export function ShortsClipCopyEditor({
                   key={fields}
                   type="button"
                   className={cn(
-                    'block w-full px-3 py-2 text-left text-xs text-text hover:bg-white/5',
+                    'block w-full px-3 py-2 text-left text-xs text-text hover:bg-hover',
                   )}
                   onClick={() => {
                     setMenuOpen(false)

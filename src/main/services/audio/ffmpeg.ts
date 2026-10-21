@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
@@ -20,6 +20,20 @@ export function resolveFfmpegPath(): string {
   return process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
 }
 
+const activeChildren = new Set<ChildProcess>()
+
+/** Encerra exportações/análises em andamento para não deixar ffmpeg.exe órfão ao sair. */
+export function killActiveFfmpegProcesses() {
+  for (const child of activeChildren) {
+    try {
+      child.kill()
+    } catch {
+      /* processo já encerrado */
+    }
+  }
+  activeChildren.clear()
+}
+
 export type FfmpegRunOptions = {
   timeoutMs?: number
   timeoutMessage?: string
@@ -36,6 +50,8 @@ export function runFfmpegResult(
   const timeoutMs = options.timeoutMs ?? 120_000
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { windowsHide: true })
+    activeChildren.add(child)
+    child.once('exit', () => activeChildren.delete(child))
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => {

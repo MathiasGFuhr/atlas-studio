@@ -187,7 +187,7 @@ export function validateAndFill(input: FinalizeShortsSelectionInput): FinalizeSh
   const merged = [...generated]
   appendWindows(merged, sliding)
 
-  let refined = refineAll(merged, input, 'standard', discarded)
+  const refined = refineAll(merged, input, 'standard', discarded)
   let durationAdapted = false
 
   let diversity = selectDiverseClips({

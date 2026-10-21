@@ -24,14 +24,14 @@ export function HomePipeline({
         <button
           type="button"
           onClick={onSeeAll}
-          className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-white/[0.04] hover:text-text"
+          className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-hover hover:text-text"
         >
           Ver agenda
         </button>
       </div>
 
       {videos.length === 0 ? (
-        <div className="flex h-[180px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.08] text-center">
+        <div className="flex h-[180px] flex-col items-center justify-center rounded-2xl border border-dashed border-border-soft text-center">
           <p className="text-sm font-medium text-text">Nada no pipeline</p>
           <p className="mt-1 text-xs text-muted-2">Os próximos vídeos da agenda aparecem aqui.</p>
         </div>
@@ -42,13 +42,13 @@ export function HomePipeline({
               key={video.id}
               type="button"
               onClick={() => onOpen(video)}
-              className="group w-[220px] shrink-0 overflow-hidden rounded-2xl border border-white/[0.06] bg-black/20 text-left transition-all hover:-translate-y-0.5 hover:border-[#334049]"
+              className="group w-[220px] shrink-0 overflow-hidden rounded-2xl border border-border-soft bg-bg/20 text-left transition-all hover:-translate-y-0.5 hover:border-border-strong"
             >
               <div
-                className="relative aspect-video overflow-hidden bg-card-2"
+                className="relative aspect-video overflow-hidden bg-elevated"
                 style={
                   !video.thumbnailDataUrl && video.channelColor
-                    ? { background: `linear-gradient(145deg, ${video.channelColor}28, #151c21)` }
+                    ? { background: `linear-gradient(145deg, ${video.channelColor}28, var(--color-elevated))` }
                     : undefined
                 }
               >
@@ -64,7 +64,7 @@ export function HomePipeline({
                   </div>
                 )}
                 <div className="absolute left-2 top-2">
-                  <StatusBadge status={video.status} className="bg-black/55 px-2 py-0.5 text-[10px] backdrop-blur" />
+                  <StatusBadge status={video.status} className="bg-overlay/55 px-2 py-0.5 text-[10px] backdrop-blur" />
                 </div>
               </div>
               <div className="px-3 py-2.5">

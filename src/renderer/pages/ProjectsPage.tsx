@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, Clapperboard, FolderKanban, FolderOpen, Files, Music2, Pencil, Plus, Scissors, Search, Tag, Trash2 } from 'lucide-react'
+import { CheckCircle2, Clapperboard, FolderKanban, FolderOpen, Music2, Pencil, Plus, Scissors, Search, Trash2 } from 'lucide-react'
 import type { Channel, Project, ProjectType } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
@@ -18,6 +18,7 @@ import { getAtlasApi } from '../lib/api'
 import { notifyProjectsChanged, onProjectsChanged } from '../lib/projectEvents'
 import { notifyVideosChanged, onVideosChanged } from '../lib/videoEvents'
 import { useToast } from '../components/Toast'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { ENVIRONMENTS, environmentBreadcrumb, projectPath } from '../lib/environments'
 import { cn, formatRelativeDate } from '../lib/utils'
 
@@ -48,22 +49,27 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
   const [pendingThumb, setPendingThumb] = useState<string | null>(null)
   const [pendingThumbPreview, setPendingThumbPreview] = useState<string | null>(null)
 
+  const searchQuery = useDebouncedValue(query, 200)
+  const loadSeq = useRef(0)
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
     const [projectList, channelList] = await Promise.all([
-      api.projects.list({ projectType, query: query || undefined }),
+      api.projects.list({ projectType, query: searchQuery || undefined }),
       api.channels.list({ channelType: projectType }),
     ])
+    if (seq !== loadSeq.current) return
     setProjects(projectList)
     setChannels(channelList)
-  }, [api, projectType, query])
+  }, [api, projectType, searchQuery])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load().catch((error) => pushError(error, 'Não foi possível carregar os projetos.'))
+  }, [load, pushError])
 
   useEffect(() => {
     const refresh = () => {
-      void load()
+      void load().catch((error) => pushError(error, 'Não foi possível atualizar os projetos.'))
     }
     const stopProjects = onProjectsChanged(refresh)
     const stopVideos = onVideosChanged(refresh)
@@ -71,7 +77,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
       stopProjects()
       stopVideos()
     }
-  }, [load])
+  }, [load, pushError])
 
   const publishedProjects = useMemo(
     () => projects.filter((project) => project.scheduledVideoStatus === 'publicado'),
@@ -231,7 +237,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={`Buscar projeto de ${env.label}...`}
-            className="h-11 w-full rounded-xl border border-border bg-card-2 pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
+            className="h-11 w-full rounded-xl border border-border bg-elevated pl-10 pr-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/50 focus:outline-none"
           />
         </div>
         <Button
@@ -243,7 +249,6 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
         </Button>
         <Button
           icon={<Plus className="h-4 w-4" />}
-          style={{ backgroundColor: env.color }}
           onClick={openCreate}
         >
           Novo projeto
@@ -253,7 +258,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
       <div
         role="tablist"
         aria-label={projectType === 'music' ? 'Vídeos e música' : 'Lista de projetos'}
-        className="mb-5 inline-flex rounded-xl border border-border bg-card-2 p-1"
+        className="mb-5 inline-flex rounded-xl border border-border bg-elevated p-1"
       >
         {projectType === 'music' ? (
           <>
@@ -263,7 +268,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
               aria-selected={tab === 'videos'}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-                tab === 'videos' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+                tab === 'videos' ? 'bg-accent-subtle text-accent' : 'text-muted hover:text-text',
               )}
               style={tab === 'videos' ? { backgroundColor: `${env.color}1f`, color: env.color } : undefined}
               onClick={() => setTab('videos')}
@@ -271,7 +276,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
               <Clapperboard className="h-3.5 w-3.5" />
               Vídeos
               {videoProjects.length > 0 ? (
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                <span className="rounded-full bg-hover px-1.5 py-0.5 text-[10px] tabular-nums">
                   {videoProjects.length}
                 </span>
               ) : null}
@@ -282,14 +287,14 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
               aria-selected={tab === 'music'}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-                tab === 'music' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+                tab === 'music' ? 'bg-accent-subtle text-accent' : 'text-muted hover:text-text',
               )}
               onClick={() => setTab('music')}
             >
               <Music2 className="h-3.5 w-3.5" />
               Música
               {musicProjects.length > 0 ? (
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                <span className="rounded-full bg-hover px-1.5 py-0.5 text-[10px] tabular-nums">
                   {musicProjects.length}
                 </span>
               ) : null}
@@ -303,7 +308,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
               aria-selected={tab === 'active'}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-                tab === 'active' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+                tab === 'active' ? 'bg-accent-subtle text-accent' : 'text-muted hover:text-text',
               )}
               style={tab === 'active' ? { backgroundColor: `${env.color}1f`, color: env.color } : undefined}
               onClick={() => setTab('active')}
@@ -311,7 +316,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
               <FolderKanban className="h-3.5 w-3.5" />
               Projetos
               {activeProjects.length > 0 ? (
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                <span className="rounded-full bg-hover px-1.5 py-0.5 text-[10px] tabular-nums">
                   {activeProjects.length}
                 </span>
               ) : null}
@@ -322,14 +327,14 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
               aria-selected={tab === 'published'}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-                tab === 'published' ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+                tab === 'published' ? 'bg-accent-subtle text-accent' : 'text-muted hover:text-text',
               )}
               onClick={() => setTab('published')}
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
               Publicados
               {publishedProjects.length > 0 ? (
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+                <span className="rounded-full bg-hover px-1.5 py-0.5 text-[10px] tabular-nums">
                   {publishedProjects.length}
                 </span>
               ) : null}
@@ -367,7 +372,6 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
             <Button
               className="mt-5"
               icon={<Plus className="h-4 w-4" />}
-              style={{ backgroundColor: env.color }}
               onClick={openCreate}
             >
               Criar primeiro projeto
@@ -379,7 +383,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
           {visibleProjects.map((project) => (
             <Card
               key={project.id}
-              className="flex cursor-pointer flex-col gap-3 transition-colors hover:border-[#334049]"
+              className="flex cursor-pointer flex-col gap-3 transition-colors hover:border-border-strong"
               onClick={() => navigate(projectPath(projectType, project.id))}
             >
               {tab === 'videos' ? (

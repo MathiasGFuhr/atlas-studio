@@ -137,6 +137,13 @@ export const shortsRepository = {
     return row ? mapJob(row) : null
   },
 
+  /** Caminhos de vídeo de origem (só a coluna), para checagens de acesso baratas. */
+  listSourcePaths(): string[] {
+    return (getDb().prepare('SELECT source_path FROM shorts_jobs').all() as { source_path: string }[])
+      .map((row) => row.source_path)
+      .filter(Boolean)
+  },
+
   /** Persistência bruta. Novos projetos só via ShortsProjectService.createFromSourceVideo(). */
   create(input: {
     sourcePath: string

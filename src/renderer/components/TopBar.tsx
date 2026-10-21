@@ -11,7 +11,7 @@ export function TopBar({ settings }: { settings: AppSettings | null }) {
   return (
     <header
       data-tour="topbar"
-      className="flex h-14 shrink-0 items-center gap-2 border-b border-border-soft bg-bg px-3 sm:h-[68px] sm:gap-4 sm:px-6"
+      className="flex h-14 shrink-0 items-center gap-2 border-b border-border-soft bg-topbar px-3 sm:h-[68px] sm:gap-4 sm:px-6"
     >
       <div className="min-w-0 flex-1">
         <GlobalSearch />
@@ -24,10 +24,10 @@ export function TopBar({ settings }: { settings: AppSettings | null }) {
         <button
           type="button"
           aria-label="Abrir configurações"
-          className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/5"
+          className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-hover"
           onClick={() => navigate('/configuracoes')}
         >
-          <div className="h-9 w-9 overflow-hidden rounded-full border border-border bg-gradient-to-br from-[#2b3a44] to-[#10161a]">
+          <div className="h-9 w-9 overflow-hidden rounded-full border border-border bg-hover">
             {settings?.accountPhotoDataUrl ? (
               <img
                 src={settings.accountPhotoDataUrl}

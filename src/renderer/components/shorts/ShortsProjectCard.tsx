@@ -85,7 +85,7 @@ export function ShortsProjectCard({
       padding="sm"
       role="button"
       tabIndex={0}
-      className="flex min-w-0 cursor-pointer flex-col transition-colors hover:border-[#334049]"
+      className="flex min-w-0 cursor-pointer flex-col transition-colors hover:border-border-strong"
       onClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -94,7 +94,7 @@ export function ShortsProjectCard({
         }
       }}
     >
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-card-2">
+      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-elevated">
         {thumbnailUrl ? (
           <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
         ) : (
@@ -103,7 +103,7 @@ export function ShortsProjectCard({
           </div>
         )}
         {!project.sourceExists ? (
-          <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1 text-[11px] text-danger">
+          <div className="absolute inset-x-2 bottom-2 rounded-lg bg-overlay/70 px-2 py-1 text-[11px] text-danger">
             Arquivo original não encontrado.
           </div>
         ) : null}
@@ -118,7 +118,7 @@ export function ShortsProjectCard({
           <div className="relative shrink-0" ref={menuRef}>
             <button
               type="button"
-              className="rounded-md p-1 text-muted hover:bg-white/5 hover:text-text"
+              className="rounded-md p-1 text-muted hover:bg-hover hover:text-text"
               aria-label="Mais opções"
               onClick={(event) => {
                 event.stopPropagation()
@@ -130,7 +130,7 @@ export function ShortsProjectCard({
             {menuOpen ? (
               <div
                 role="menu"
-                className="absolute right-0 z-20 mt-1 min-w-[200px] rounded-xl border border-border-soft bg-card-2 py-1 shadow-lg"
+                className="absolute right-0 z-20 mt-1 min-w-[200px] rounded-xl border border-border-soft bg-elevated py-1 shadow-popover"
                 onClick={(event) => event.stopPropagation()}
               >
                 <MenuItem
@@ -236,7 +236,7 @@ function MenuItem({
       type="button"
       role="menuitem"
       className={cn(
-        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-white/5',
+        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-hover',
         danger ? 'text-danger' : 'text-text',
       )}
       onClick={onClick}

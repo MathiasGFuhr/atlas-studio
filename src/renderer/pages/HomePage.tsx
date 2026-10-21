@@ -262,15 +262,15 @@ export function HomePage() {
   return (
     <div className="relative h-full overflow-y-auto">
       <div className="relative mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(15rem,1fr)]">
           {/* Coluna principal */}
-          <div className="flex min-w-0 flex-col gap-4 xl:col-span-3">
+          <div className="flex min-w-0 flex-col gap-4">
             <HomeHero hello={homeHello()} name={accountName} dateLabel={homeDateLabel()} />
 
             <Card padding="sm" className="overflow-hidden !p-0">
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
                 <HomeStatCard
-                  className="border-b border-white/[0.05] sm:border-r xl:border-b-0 xl:border-r"
+                  className="border-b border-border-soft sm:border-r xl:border-b-0 xl:border-r"
                   icon={<CalendarDays className="h-4 w-4 text-accent" />}
                   label="Agendamentos"
                   value={upcomingVideos.length}
@@ -278,7 +278,7 @@ export function HomePage() {
                   onClick={() => navigate(channelAgendaPath())}
                 />
                 <HomeStatCard
-                  className="border-b border-white/[0.05] sm:border-r-0 xl:border-b-0 xl:border-r"
+                  className="border-b border-border-soft sm:border-r-0 xl:border-b-0 xl:border-r"
                   icon={<Newspaper className="h-4 w-4 text-accent" />}
                   label="Publicações"
                   value={publishedCount}
@@ -286,7 +286,7 @@ export function HomePage() {
                   onClick={() => navigate(channelPublishedPath())}
                 />
                 <HomeStatCard
-                  className="border-b border-white/[0.05] sm:border-r xl:border-b-0 xl:border-r"
+                  className="border-b border-border-soft sm:border-r xl:border-b-0 xl:border-r"
                   icon={<ListTodo className="h-4 w-4 text-accent" />}
                   label="Tarefas pendentes"
                   value={pending.length}
@@ -361,7 +361,7 @@ export function HomePage() {
           </div>
 
           {/* Coluna direita */}
-          <div className="flex min-w-0 flex-col gap-4 xl:col-span-1">
+          <div className="flex min-w-0 flex-col gap-4">
             <div id="team-chat-incoming-slot" className="contents" />
             <HomeMarketsCard
               clocks={worldClocks}

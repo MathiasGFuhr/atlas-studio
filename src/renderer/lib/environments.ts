@@ -19,7 +19,7 @@ export const ENVIRONMENTS: Record<ProjectType, EnvironmentMeta> = {
     tagline: 'Projetos musicais e produção de áudio',
     description: 'Organize suas faixas e os cortes de cada projeto musical.',
     icon: Music2,
-    color: '#a78bfa',
+    color: '#35bf9b',
     basePath: '/musica',
     projectsPath: '/musica/projetos',
   },

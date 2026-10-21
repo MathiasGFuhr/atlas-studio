@@ -35,10 +35,10 @@ export function ChatActionCards({
           key={`${result.name}-${index}`}
           className={cn(
             'rounded-xl border px-3 py-2.5 text-sm',
-            result.status === 'success' && 'border-accent/30 bg-accent-dark/40',
+            result.status === 'success' && 'border-accent/30 bg-accent-subtle/40',
             result.status === 'error' && 'border-danger/30 bg-danger/10',
-            result.status === 'pending' && 'border-border bg-card-2',
-            result.status === 'running' && 'border-border bg-card-2',
+            result.status === 'pending' && 'border-border bg-elevated',
+            result.status === 'running' && 'border-border bg-elevated',
           )}
         >
           <div className="flex items-start gap-2">

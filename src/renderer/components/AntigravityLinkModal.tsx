@@ -101,7 +101,7 @@ export function AntigravityLinkModal({
             O Atlas não encontrou o Antigravity CLI (`agy.exe`) neste computador. Instale o CLI e
             volte aqui, ou informe o caminho em Executável.
           </p>
-          <p className="rounded-xl border border-border-soft bg-card-2 px-3 py-2 text-left font-mono text-[11px] leading-relaxed text-text">
+          <p className="rounded-xl border border-border-soft bg-elevated px-3 py-2 text-left font-mono text-[11px] leading-relaxed text-text">
             irm https://antigravity.google/cli/install.ps1 | iex
           </p>
           <Button
@@ -115,7 +115,7 @@ export function AntigravityLinkModal({
         </div>
       ) : linking ? (
         <div className="space-y-4 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-dark">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-subtle">
             <Loader2 className="h-7 w-7 animate-spin text-accent" />
           </div>
           <div>
@@ -149,7 +149,7 @@ export function AntigravityLinkModal({
         </div>
       ) : (
         <div className="space-y-4 text-center">
-          <div className="mx-auto mb-1 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-dark">
+          <div className="mx-auto mb-1 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-subtle">
             <LogIn className="h-7 w-7 text-accent" />
           </div>
           <p className="text-sm leading-relaxed text-muted">

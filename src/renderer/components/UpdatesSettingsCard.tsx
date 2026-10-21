@@ -63,7 +63,7 @@ export function UpdatesSettingsCard({
 
         {availableVersion &&
         (state === 'available' || state === 'error' || state === 'downloading' || state === 'ready') ? (
-          <div className="rounded-xl border border-border-soft bg-card-2 px-3.5 py-3">
+          <div className="rounded-xl border border-border-soft bg-elevated px-3.5 py-3">
             <p className="text-sm font-semibold text-text">Nova versão disponível</p>
             <p className="mt-0.5 text-sm text-accent">Atlas Studio {availableVersion}</p>
             {notes.title ? (
@@ -96,7 +96,7 @@ export function UpdatesSettingsCard({
                 {percent == null ? 'calculando tamanho…' : `${percent}%`}
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="h-2 overflow-hidden rounded-full bg-hover">
               <div
                 className={`h-full rounded-full bg-accent transition-[width] duration-200 ${
                   percent == null ? 'w-full animate-pulse opacity-50' : ''
@@ -125,7 +125,7 @@ export function UpdatesSettingsCard({
         <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
           <input
             type="checkbox"
-            className="h-4 w-4 accent-[#35e58b]"
+            className="h-4 w-4 accent-accent"
             checked={settings.autoCheckUpdates !== false}
             onChange={(event) => void persistAutoCheck(event.target.checked)}
           />

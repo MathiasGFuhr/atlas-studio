@@ -24,7 +24,7 @@ export function HomeLipsyncCard({
         <button
           type="button"
           onClick={onOpen}
-          className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-white/[0.04] hover:text-text"
+          className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-hover hover:text-text"
         >
           Abrir
         </button>
@@ -44,9 +44,9 @@ export function HomeLipsyncCard({
                 <button
                   type="button"
                   onClick={onOpen}
-                  className="flex w-full items-center gap-3 rounded-xl border border-white/[0.05] bg-black/15 px-2.5 py-2 text-left transition-colors hover:border-white/[0.1]"
+                  className="flex w-full items-center gap-3 rounded-xl border border-border-soft bg-bg/15 px-2.5 py-2 text-left transition-colors hover:border-border-strong"
                 >
-                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-card-2">
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-elevated">
                     {ref.imageDataUrl ? (
                       <img src={ref.imageDataUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
@@ -72,7 +72,7 @@ export function HomeLipsyncCard({
                           <span>Processando</span>
                           <span>sem prompt</span>
                         </div>
-                        <div className="h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                        <div className="h-1 overflow-hidden rounded-full bg-hover">
                           <div className={cn('h-full w-1/3 rounded-full bg-accent/70')} />
                         </div>
                       </div>

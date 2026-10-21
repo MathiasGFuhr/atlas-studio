@@ -44,7 +44,7 @@ function ChannelVideoSummaryCard({
 }) {
   return (
     <Card className="flex gap-3" padding="sm">
-      <div className="h-20 w-[142px] shrink-0 overflow-hidden rounded-lg border border-border-soft bg-card-2">
+      <div className="h-20 w-[142px] shrink-0 overflow-hidden rounded-lg border border-border-soft bg-elevated">
         {video.thumbnailDataUrl ? (
           <img src={video.thumbnailDataUrl} alt="" className="h-full w-full object-cover" />
         ) : (
@@ -123,13 +123,18 @@ export function ChannelCalendarPage() {
   const from = toDateKey(year, month, 1)
   const to = toDateKey(year, month, new Date(year, month + 1, 0).getDate())
 
+  const loadSeq = useRef(0)
+
   async function load() {
     if (!id) return
+    const seq = ++loadSeq.current
     const [found, list, published] = await Promise.all([
       api.channels.get(id),
       api.videos.list({ channelId: id, from, to, excludeStatus: 'publicado' }),
       api.videos.list({ channelId: id, status: 'publicado' }),
     ])
+    // Navegação rápida entre meses/canais: só a resposta mais recente vale.
+    if (seq !== loadSeq.current) return
     setChannel(found)
     setVideos(list)
     setPublishedVideos(sortPublishedChannelVideos(published))
@@ -144,7 +149,7 @@ export function ChannelCalendarPage() {
   }
 
   useEffect(() => {
-    void load()
+    void load().catch((error) => pushError(error, 'Não foi possível carregar o calendário do canal.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, year, month])
 
@@ -565,7 +570,7 @@ export function ChannelCalendarPage() {
         <div
           role="tablist"
           aria-label="Visão do canal"
-          className="inline-flex rounded-xl border border-border bg-card-2 p-1"
+          className="inline-flex rounded-xl border border-border bg-elevated p-1"
         >
           <button
             type="button"
@@ -573,7 +578,7 @@ export function ChannelCalendarPage() {
             aria-selected={!publishedTab}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-              !publishedTab ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+              !publishedTab ? 'bg-accent-subtle text-accent' : 'text-muted hover:text-text',
             )}
             onClick={() => setPublishedTab(false)}
           >
@@ -586,14 +591,14 @@ export function ChannelCalendarPage() {
             aria-selected={publishedTab}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-              publishedTab ? 'bg-accent-dark text-accent' : 'text-muted hover:text-text',
+              publishedTab ? 'bg-accent-subtle text-accent' : 'text-muted hover:text-text',
             )}
             onClick={() => setPublishedTab(true)}
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
             Vídeos publicados
             {publishedVideos.length > 0 ? (
-              <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums">
+              <span className="rounded-full bg-hover px-1.5 py-0.5 text-[10px] tabular-nums">
                 {publishedVideos.length}
               </span>
             ) : null}
@@ -674,8 +679,8 @@ export function ChannelCalendarPage() {
               <div
                 key={cell.key}
                 className={cn(
-                  'min-h-[118px] border-b border-r border-border-soft p-2 text-left align-top transition-colors hover:bg-white/[0.03]',
-                  !cell.inMonth && 'bg-black/20',
+                  'min-h-[118px] border-b border-r border-border-soft p-2 text-left align-top transition-colors hover:bg-hover/60',
+                  !cell.inMonth && 'bg-bg/20',
                 )}
                 onClick={() => {
                   if (dayVideos.length === 0) openCreate(cell.key)
@@ -690,7 +695,7 @@ export function ChannelCalendarPage() {
                     }}
                     className={cn(
                       'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs',
-                      isToday ? 'bg-accent text-black font-semibold' : cell.inMonth ? 'text-text' : 'text-muted-2',
+                      isToday ? 'bg-accent text-on-accent font-semibold' : cell.inMonth ? 'text-text' : 'text-muted-2',
                     )}
                     aria-label={`Adicionar vídeo em ${cell.key}`}
                   >
@@ -704,7 +709,7 @@ export function ChannelCalendarPage() {
                   <button
                     key={video.id}
                     type="button"
-                    className="mb-1 w-full overflow-hidden rounded-lg border border-border-soft bg-card-2 text-left"
+                    className="mb-1 w-full overflow-hidden rounded-lg border border-border-soft bg-elevated text-left"
                     onClick={(event) => {
                       event.stopPropagation()
                       openExistingVideo(video)
@@ -905,11 +910,11 @@ export function ChannelCalendarPage() {
             <p className="mb-2 text-sm font-medium text-muted">Pasta do projeto</p>
             {form.projectFolderPath ? (
               <>
-                <p className="mb-2 break-all rounded-xl border border-border-soft bg-card-2 px-3 py-2.5 font-mono text-xs text-muted">
+                <p className="mb-2 break-all rounded-xl border border-border-soft bg-elevated px-3 py-2.5 font-mono text-xs text-muted">
                   {form.projectFolderPath}
                 </p>
                 {editing?.projectFolderPath === form.projectFolderPath && editing.folderExists === false ? (
-                  <p className="mb-2 text-xs text-yellow-500/80">A pasta vinculada não foi encontrada no disco.</p>
+                  <p className="mb-2 text-xs text-warning">A pasta vinculada não foi encontrada no disco.</p>
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -955,7 +960,7 @@ export function ChannelCalendarPage() {
           <div>
             <p className="mb-2 text-sm font-medium text-muted">Thumbnail</p>
             <div className="flex items-start gap-3">
-              <div className="h-[90px] w-[160px] overflow-hidden rounded-xl border border-border bg-card-2">
+              <div className="h-[90px] w-[160px] overflow-hidden rounded-xl border border-border bg-elevated">
                 {thumbPreviewSrc ? (
                   <img
                     src={thumbPreviewSrc}

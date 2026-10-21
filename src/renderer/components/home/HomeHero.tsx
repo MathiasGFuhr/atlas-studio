@@ -14,15 +14,15 @@ export function HomeHero({
   const firstName = name.trim().split(/\s+/)[0] || ''
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-border-soft/90 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
+    <section className="relative overflow-hidden rounded-3xl border border-border-soft/90 shadow-popover">
       <div className="absolute inset-0">
         <img
           src={heroImage}
           alt=""
           className="h-full w-full object-cover object-center"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#070b0e]/92 via-[#070b0e]/72 to-[#070b0e]/28" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#070b0e]/80 via-transparent to-[#070b0e]/35" />
+        <div className="absolute inset-0 bg-gradient-to-r from-bg/92 via-bg/72 to-bg/28" />
+        <div className="absolute inset-0 bg-gradient-to-t from-bg/80 via-transparent to-bg/35" />
       </div>
 
       <div className="relative grid min-h-[220px] grid-cols-1 items-end gap-6 px-5 py-6 sm:min-h-[260px] sm:px-8 sm:py-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
@@ -47,7 +47,7 @@ export function HomeHero({
           </p>
         </div>
 
-        <blockquote className="max-w-sm justify-self-start rounded-2xl border border-white/[0.08] bg-black/35 px-4 py-3.5 backdrop-blur-md lg:justify-self-end">
+        <blockquote className="max-w-sm justify-self-start rounded-2xl border border-border-soft bg-bg/35 px-4 py-3.5 backdrop-blur-md lg:justify-self-end">
           <p className="home-greeting text-[1.15rem] leading-snug text-text/95 sm:text-[1.35rem]">
             “{quoteForDate()}”
           </p>

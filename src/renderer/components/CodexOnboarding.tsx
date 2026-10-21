@@ -16,7 +16,7 @@ export function CodexOnboarding({
       <div className="space-y-5 text-center">
         <AtlasLogo
           variant="mark"
-          className="mx-auto h-16 w-16 rounded-2xl shadow-[0_0_24px_rgba(53,229,139,0.2)]"
+          className="mx-auto h-16 w-16 rounded-2xl"
         />
 
         <div>

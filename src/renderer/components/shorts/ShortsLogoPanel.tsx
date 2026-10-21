@@ -37,7 +37,7 @@ export function ShortsLogoPanel({
           <img
             src={logoUrl}
             alt=""
-            className="h-12 w-12 rounded-lg border border-border-soft bg-card-2 object-contain p-1"
+            className="h-12 w-12 rounded-lg border border-border-soft bg-elevated object-contain p-1"
           />
         ) : null}
       </div>
@@ -83,7 +83,7 @@ export function ShortsLogoPanel({
           <label className="space-y-1.5 text-sm">
             <span className="text-muted">Posição</span>
             <select
-              className="h-10 w-full rounded-xl border border-border-soft bg-card-2 px-3 text-sm text-text"
+              className="h-10 w-full rounded-xl border border-border-soft bg-elevated px-3 text-sm text-text"
               value={settings.position}
               disabled={disabled}
               onChange={(event) => onChange({ position: event.target.value as ShortsLogoPosition })}

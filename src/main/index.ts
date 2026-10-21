@@ -11,6 +11,7 @@ import {
   setMainWindow,
 } from './boot'
 import { flushDatabasePersist } from './db/database'
+import { killActiveFfmpegProcesses } from './services/audio/ffmpeg'
 import {
   registerAtlasMediaScheme,
 } from './services/media/atlasMediaProtocol'
@@ -151,8 +152,14 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  flushDatabasePersist()
+  try {
+    flushDatabasePersist()
+  } catch (error) {
+    console.error('[atlas] falha ao gravar o banco ao sair', error)
+  }
   splashController?.dispose()
   splashController = null
+  killActiveFfmpegProcesses()
+  void getCodexService()?.disconnect()
   void getRuntimeManager()?.shutdown()
 })

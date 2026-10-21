@@ -255,11 +255,11 @@ export function ProductTour({
             height: spot.height + SPOTLIGHT_PAD * 2,
             borderRadius: 18,
             boxShadow:
-              '0 0 0 1.5px rgba(53,229,139,0.95), 0 0 28px rgba(53,229,139,0.28), 0 0 0 9999px rgba(5,8,11,0.78)',
+              '0 0 0 1.5px var(--color-accent), 0 0 0 9999px color-mix(in srgb, var(--color-overlay) 80%, transparent)',
           }}
         />
       ) : (
-        <div className="absolute inset-0 bg-[rgba(5,8,11,0.78)] backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-overlay/80 backdrop-blur-[2px]" />
       )}
 
       <div
@@ -267,12 +267,12 @@ export function ProductTour({
         role="dialog"
         aria-modal="true"
         aria-labelledby="atlas-product-tour-title"
-        className="atlas-tour-card absolute w-[min(420px,calc(100vw-32px))] rounded-2xl border border-border bg-card shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        className="atlas-tour-card absolute w-[min(420px,calc(100vw-32px))] rounded-2xl border border-border bg-card shadow-modal"
         style={{ top: cardPos.top, left: cardPos.left }}
       >
         <div className="p-5 sm:p-6">
           <div className="flex items-start justify-between gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-dark text-accent">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-subtle text-accent">
               <Icon className="h-5 w-5" />
             </div>
             <p className="pt-1 text-[11px] font-medium tabular-nums tracking-[0.16em] text-muted-2">
@@ -286,7 +286,7 @@ export function ProductTour({
           </h2>
           <p className="mt-2.5 text-sm leading-relaxed text-muted">{step.body}</p>
           {step.note ? (
-            <p className="mt-3 rounded-xl bg-white/[0.03] px-3 py-2.5 text-xs leading-relaxed text-muted-2 ring-1 ring-border-soft">
+            <p className="mt-3 rounded-xl bg-elevated px-3 py-2.5 text-xs leading-relaxed text-muted-2 ring-1 ring-border-soft">
               {step.note}
             </p>
           ) : null}
@@ -297,7 +297,7 @@ export function ProductTour({
                 key={item.id}
                 className={cn(
                   'h-1 flex-1 rounded-full transition-colors',
-                  index <= stepIndex ? 'bg-accent' : 'bg-white/10',
+                  index <= stepIndex ? 'bg-accent' : 'bg-hover',
                 )}
               />
             ))}

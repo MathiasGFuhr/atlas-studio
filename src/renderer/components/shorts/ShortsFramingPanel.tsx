@@ -43,7 +43,7 @@ export function ShortsFramingPanel({
             key={item.id}
             className={cn(
               'flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5',
-              mode === item.id ? 'border-accent/60 bg-accent-dark' : 'border-border bg-card-2',
+              mode === item.id ? 'border-accent/60 bg-accent-subtle' : 'border-border bg-elevated',
             )}
           >
             <input

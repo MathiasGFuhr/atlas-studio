@@ -250,6 +250,7 @@ export function moveMarker(
 
 export function sanitizeExportName(label: string, fallback: string): string {
   const cleaned = label
+    // eslint-disable-next-line no-control-regex -- remove caracteres de controle inválidos em nomes de arquivo
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')
     .replace(/\s+/g, ' ')
     .trim()

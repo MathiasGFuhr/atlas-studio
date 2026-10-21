@@ -276,7 +276,7 @@ export function MusicEditorPage() {
       }
       setPreviewUrl(null)
     }
-  }, [api, id, navigate, push])
+  }, [api, id, navigate, push, pushError])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -339,7 +339,7 @@ export function MusicEditorPage() {
   function queuePersist(patch: Partial<MusicTrack>) {
     if (persistTimer.current) clearTimeout(persistTimer.current)
     persistTimer.current = setTimeout(() => {
-      void persist(patch)
+      void persist(patch).catch((error) => pushError(error, 'Não foi possível salvar os cortes'))
     }, 180)
   }
 
@@ -614,53 +614,59 @@ export function MusicEditorPage() {
     if (folder) setExportFolder(folder)
   }
 
+  // O handler lê o estado mais recente via ref; o listener é registrado uma vez só
+  // (antes era recriado a cada render, inclusive a cada frame do playhead).
+  const keyHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {})
+  keyHandlerRef.current = onKey
   useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (isTypingTarget(event.target)) return
-      if (event.code === 'Space') {
-        event.preventDefault()
-        togglePlayPause()
-        return
-      }
-      if (event.key === 's' || event.key === 'S') {
-        event.preventDefault()
-        cutAtPlayhead()
-        return
-      }
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (!selectedId || !track) return
-        event.preventDefault()
-        applyLocal(
-          {
-            cuts: removeCutFromList(track.cuts, selectedId),
-            cutMode: 'manual',
-            selectedId: track.cuts.find((cut) => cut.id !== selectedId)?.id ?? null,
-            appliedPreset: track.appliedPreset ?? null,
-          },
-          true,
-        )
-        return
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-        event.preventDefault()
-        if (event.shiftKey) redo()
-        else undo()
-        return
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
-        event.preventDefault()
-        redo()
-        return
-      }
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        event.preventDefault()
-        const next = seekStep(playhead, event.key === 'ArrowLeft' ? -1 : 1, event.shiftKey, track?.duration ?? 0)
-        seekTo(next)
-      }
+    const listener = (event: KeyboardEvent) => keyHandlerRef.current(event)
+    window.addEventListener('keydown', listener, true)
+    return () => window.removeEventListener('keydown', listener, true)
+  }, [])
+
+  function onKey(event: KeyboardEvent) {
+    if (isTypingTarget(event.target)) return
+    if (event.code === 'Space') {
+      event.preventDefault()
+      togglePlayPause()
+      return
     }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  })
+    if (event.key === 's' || event.key === 'S') {
+      event.preventDefault()
+      cutAtPlayhead()
+      return
+    }
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (!selectedId || !track) return
+      event.preventDefault()
+      applyLocal(
+        {
+          cuts: removeCutFromList(track.cuts, selectedId),
+          cutMode: 'manual',
+          selectedId: track.cuts.find((cut) => cut.id !== selectedId)?.id ?? null,
+          appliedPreset: track.appliedPreset ?? null,
+        },
+        true,
+      )
+      return
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault()
+      if (event.shiftKey) redo()
+      else undo()
+      return
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+      event.preventDefault()
+      redo()
+      return
+    }
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      const next = seekStep(playhead, event.key === 'ArrowLeft' ? -1 : 1, event.shiftKey, track?.duration ?? 0)
+      seekTo(next)
+    }
+  }
 
   if (loading || !track) {
     return (
@@ -816,7 +822,7 @@ export function MusicEditorPage() {
             <span>Fim {formatTimecode(selected.end)}</span>
             <span>Duração {formatTimecode(selected.end - selected.start)}</span>
             {selected.reason ? (
-              <span className="rounded-full bg-white/5 px-2 py-1">
+              <span className="rounded-full bg-elevated px-2 py-1">
                 Corte sugerido pela IA{selected.confidence != null ? ` · ${Math.round(selected.confidence * 100)}%` : ''}
               </span>
             ) : null}

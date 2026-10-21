@@ -1,20 +1,56 @@
 @import "tailwindcss";
 
+/*
+ * Atlas Studio — Design System de cores.
+ * Componentes devem consumir apenas estes tokens (bg-card, text-muted, border-border...).
+ * card-2 e accent-dark são aliases legados de elevated e accent-subtle.
+ */
 @theme {
-  --color-bg: #070b0e;
-  --color-sidebar: #0a1014;
-  --color-card: #11181d;
-  --color-card-2: #151d23;
-  --color-border: #2a353d;
-  --color-border-soft: #1a2329;
-  --color-text: #f5f7f8;
-  --color-muted: #a5adb5;
-  --color-muted-2: #7a848d;
-  --color-accent: #35e58b;
-  --color-accent-hover: #49f29c;
-  --color-accent-dark: #123d2a;
-  --color-danger: #ef6464;
-  --color-warning: #e5b94f;
+  /* Superfícies */
+  --color-bg: #0d1218;
+  --color-sidebar: #10171e;
+  --color-topbar: #111920;
+  --color-card: #172029;
+  --color-elevated: #1c2731;
+  --color-card-2: #1c2731;
+  --color-input: #141d26;
+  --color-hover: #25313c;
+  --color-overlay: #070b0f;
+
+  /* Marca */
+  --color-accent: #35bf9b;
+  --color-accent-hover: #46caa9;
+  --color-accent-pressed: #259b7d;
+  --color-accent-subtle: #18382f;
+  --color-accent-dark: #18382f;
+  --color-on-accent: #071713;
+
+  /* Estados e auxiliares */
+  --color-info: #78aee8;
+  --color-info-subtle: #1a3045;
+  --color-warning: #e5b65c;
+  --color-warning-subtle: #3a3020;
+  --color-danger: #e17e83;
+  --color-danger-subtle: #3b2228;
+  --color-success: #41c69c;
+
+  /* Texto */
+  --color-text: #edf2f5;
+  --color-muted: #a7b3be;
+  --color-muted-2: #7d8c99;
+  --color-disabled: #596977;
+
+  /* Bordas */
+  --color-border: #283540;
+  --color-border-soft: #202c36;
+  --color-border-strong: #34434f;
+  --color-border-accent: #35bf9b;
+
+  /* Elevação — sombras neutras, sem brilho */
+  --shadow-card: 0 1px 2px rgb(3 6 9 / 0.18);
+  --shadow-popover: 0 12px 32px -6px rgb(3 6 9 / 0.5), 0 2px 6px rgb(3 6 9 / 0.24);
+  --shadow-modal: 0 24px 64px -12px rgb(3 6 9 / 0.6);
+
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
   --font-display: "Instrument Serif", "Times New Roman", Times, serif;
 }
@@ -40,36 +76,28 @@ body {
   overflow: hidden;
 }
 
-/* Atmosfera premium — somente último plano (atrás de tudo) */
+/* Fundo do app — superfície sólida com um leve tom petróleo no topo */
 .atlas-shell {
   position: relative;
   isolation: isolate;
-  background: var(--color-bg);
-}
-
-.atlas-shell::before,
-.atlas-shell::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-}
-
-.atlas-shell::before {
   background:
-    radial-gradient(ellipse 70% 55% at 12% -8%, rgba(53, 229, 139, 0.14), transparent 58%),
-    radial-gradient(ellipse 55% 45% at 92% 8%, rgba(56, 140, 160, 0.11), transparent 55%),
-    radial-gradient(ellipse 60% 50% at 78% 92%, rgba(53, 229, 139, 0.07), transparent 60%),
-    radial-gradient(ellipse 45% 40% at 8% 88%, rgba(90, 120, 140, 0.08), transparent 55%),
-    linear-gradient(165deg, #0c1216 0%, #070b0e 42%, #06090c 100%);
+    linear-gradient(180deg, rgb(20 34 42 / 0.35) 0%, transparent 320px),
+    var(--color-bg);
 }
 
-.atlas-shell::after {
-  opacity: 0.28;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 180px 180px;
-  mix-blend-mode: overlay;
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 32%, transparent);
+  color: var(--color-text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-muted-2);
+}
+
+select option {
+  background: var(--color-elevated);
+  color: var(--color-text);
 }
 
 ::-webkit-scrollbar {
@@ -82,17 +110,31 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2a353c;
+  background: var(--color-border);
+  border: 2px solid transparent;
+  background-clip: padding-box;
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a474f;
+  background: var(--color-border-strong);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 :focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, white);
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 75%, transparent);
   outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 
 @keyframes pulse-dot {
@@ -182,7 +224,7 @@ body {
 .sidebar-nav,
 .sidebar-channel-menu {
   scrollbar-width: thin;
-  scrollbar-color: #2a353c transparent;
+  scrollbar-color: var(--color-border) transparent;
 }
 
 .sidebar-nav::-webkit-scrollbar {
@@ -194,7 +236,7 @@ body {
 }
 
 .sidebar-nav::-webkit-scrollbar-thumb {
-  background: #2a353c;
+  background: var(--color-border);
   border-radius: 999px;
 }
 
@@ -207,10 +249,10 @@ body {
 }
 
 .sidebar-channel-menu::-webkit-scrollbar-thumb {
-  background: #2a353c;
+  background: var(--color-border);
   border-radius: 999px;
 }
 
 .sidebar-channel-menu::-webkit-scrollbar-thumb:hover {
-  background: #3a474f;
+  background: var(--color-border-strong);
 }

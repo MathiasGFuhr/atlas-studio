@@ -68,8 +68,30 @@ export function Waveform({
     }
   }, [playhead, zoom, duration])
 
+  const stopDragRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => stopDragRef.current?.(), [])
+
   function resolveTime(clientX: number) {
     return timeFromClientX(clientX, canvasWrap.current?.getBoundingClientRect() ?? null, duration)
+  }
+
+  /** Listeners globais do arraste; removidos no pointerup/cancel ou se o componente desmontar. */
+  function trackDrag(onMove: (event: PointerEvent) => void, onEnd: () => void) {
+    stopDragRef.current?.()
+    const stop = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+      if (stopDragRef.current === stop) stopDragRef.current = null
+    }
+    const finish = () => {
+      stop()
+      onEnd()
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
+    stopDragRef.current = stop
   }
 
   function beginHandleDrag(cut: MusicSegment, edge: 'start' | 'end' | 'move', event: ReactPointerEvent) {
@@ -100,15 +122,10 @@ export function Waveform({
       onChangeCut(cut.id, start, start + length)
     }
 
-    function onUp() {
+    trackDrag(onMove, () => {
       setDragTip(null)
       onCommitCut()
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-    }
-
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
+    })
   }
 
   function beginMarkerDrag(marker: CutMarker, event: ReactPointerEvent) {
@@ -124,15 +141,10 @@ export function Waveform({
       onMoveMarker(marker, time)
     }
 
-    function onUp() {
+    trackDrag(onMove, () => {
       setDragTip(null)
       onCommitMarker()
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-    }
-
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
+    })
   }
 
   function onWheel(event: WheelEvent<HTMLDivElement>) {
@@ -145,7 +157,7 @@ export function Waveform({
   return (
     <div
       ref={viewportRef}
-      className="relative h-[148px] w-full overflow-x-auto overflow-y-hidden rounded-2xl border border-border bg-[#0b1318]"
+      className="relative h-[148px] w-full overflow-x-auto overflow-y-hidden rounded-2xl border border-border bg-input"
       onWheel={onWheel}
     >
       <div
@@ -184,12 +196,12 @@ export function Waveform({
               key={cut.id}
               className={cn(
                 'absolute top-2 bottom-2 rounded-lg border',
-                selected ? 'border-accent bg-accent/20' : 'border-white/15 bg-white/5',
+                selected ? 'border-accent bg-accent/20' : 'border-border bg-elevated',
               )}
               style={{ left: `${left}%`, width: `${Math.max(0.6, width)}%` }}
               onPointerDown={(event) => beginHandleDrag(cut, 'move', event)}
             >
-              <span className="pointer-events-none absolute left-3 top-1 truncate text-[10px] font-medium uppercase tracking-wide text-white/70">
+              <span className="pointer-events-none absolute left-3 top-1 truncate text-[10px] font-medium uppercase tracking-wide text-text/70">
                 {cut.label || `Trecho ${index + 1}`}
               </span>
               <button
@@ -216,21 +228,21 @@ export function Waveform({
             type="button"
             title={`Marcador ${formatTimecode(marker.time)}`}
             aria-label={`Ponto de corte ${formatTimecode(marker.time)}`}
-            className="absolute top-0 bottom-0 z-10 w-2 -translate-x-1/2 cursor-ew-resize bg-white/80 hover:bg-white"
+            className="absolute top-0 bottom-0 z-10 w-2 -translate-x-1/2 cursor-ew-resize bg-text/80 hover:bg-text"
             style={{ left: `${duration > 0 ? (marker.time / duration) * 100 : 0}%` }}
             onPointerDown={(event) => beginMarkerDrag(marker, event)}
           />
         ))}
 
         <div
-          className="pointer-events-none absolute top-0 bottom-0 z-20 w-px bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)]"
+          className="pointer-events-none absolute top-0 bottom-0 z-20 w-px bg-text"
           style={{ left: `${duration > 0 ? (playhead / duration) * 100 : 0}%` }}
         />
       </div>
 
       {dragTip ? (
         <div
-          className="pointer-events-none absolute top-2 z-30 rounded-md bg-black/80 px-2 py-1 text-[11px] font-medium text-white"
+          className="pointer-events-none absolute top-2 z-30 rounded-md bg-overlay/80 px-2 py-1 text-[11px] font-medium text-text"
           style={{
             left: Math.min(
               Math.max(8, dragTip.x - (viewportRef.current?.getBoundingClientRect().left ?? 0) - 36),

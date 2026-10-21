@@ -69,7 +69,6 @@ export function MusicPage() {
         </Button>
         <Button
           icon={<Plus className="h-4 w-4" />}
-          style={{ backgroundColor: ENVIRONMENTS.music.color }}
           onClick={() => void importTrack()}
           disabled={importing}
         >
@@ -90,7 +89,7 @@ export function MusicPage() {
           {tracks.map((track) => (
             <Card key={track.id} className="flex flex-col gap-4">
               <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-dark text-accent">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-subtle text-accent">
                   <Scissors className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">

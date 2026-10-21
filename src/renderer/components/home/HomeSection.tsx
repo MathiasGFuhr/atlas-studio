@@ -25,7 +25,7 @@ export function HomeSection({
           <div className="flex items-baseline gap-2.5">
             <h2 className="text-[18px] font-semibold tracking-tight text-text">{title}</h2>
             {count != null ? (
-              <span className="inline-flex min-w-[1.5rem] items-center justify-center rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted">
+              <span className="inline-flex min-w-[1.5rem] items-center justify-center rounded-md border border-border-soft bg-elevated px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted">
                 {count}
               </span>
             ) : null}

@@ -290,10 +290,10 @@ export function TeamChatIncoming({ accountId }: { accountId: string }) {
         <section
           role="dialog"
           aria-label={`Responder ${panelTitle}`}
-          className="atlas-toast-enter pointer-events-auto flex max-h-[min(26rem,calc(100vh-7.5rem))] w-full flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#11181d] shadow-[0_16px_40px_rgba(0,0,0,0.55)]"
+          className="atlas-toast-enter pointer-events-auto flex max-h-[min(26rem,calc(100vh-7.5rem))] w-full flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-popover"
         >
-          <header className="flex items-center gap-2.5 border-b border-white/[0.06] px-3 py-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[10px] font-semibold text-text">
+          <header className="flex items-center gap-2.5 border-b border-border-soft px-3 py-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-soft bg-hover text-[10px] font-semibold text-text">
               {initials(panelTitle)}
             </span>
             <div className="min-w-0 flex-1">
@@ -302,7 +302,7 @@ export function TeamChatIncoming({ accountId }: { accountId: string }) {
             </div>
             <button
               type="button"
-              className="rounded-lg p-1.5 text-muted transition-colors hover:bg-white/[0.06] hover:text-text"
+              className="rounded-lg p-1.5 text-muted transition-colors hover:bg-hover hover:text-text"
               aria-label="Fechar resposta"
               onClick={closePanel}
             >
@@ -312,7 +312,7 @@ export function TeamChatIncoming({ accountId }: { accountId: string }) {
 
           <div
             ref={scrollerRef}
-            className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-[radial-gradient(ellipse_at_top,rgba(53,229,139,0.04),transparent_55%)] px-3 py-3"
+            className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3"
           >
             {loading && messages.length === 0 ? (
               <p className="py-6 text-center text-xs text-muted">Carregando conversa...</p>
@@ -332,7 +332,7 @@ export function TeamChatIncoming({ accountId }: { accountId: string }) {
                       'max-w-[85%] rounded-2xl px-3 py-2 text-[13px] leading-relaxed',
                       mine
                         ? 'rounded-br-md border border-accent/20 bg-accent/14 text-text'
-                        : 'rounded-bl-md border border-white/[0.06] bg-white/[0.04] text-text',
+                        : 'rounded-bl-md border border-border-soft bg-elevated text-text',
                     )}
                   >
                     {!mine && openRoom?.kind === 'group' ? (
@@ -359,7 +359,7 @@ export function TeamChatIncoming({ accountId }: { accountId: string }) {
           </div>
 
           <form
-            className="flex items-center gap-2 border-t border-white/[0.06] bg-black/20 px-2.5 py-2.5"
+            className="flex items-center gap-2 border-t border-border-soft bg-bg/20 px-2.5 py-2.5"
             onSubmit={(event) => {
               event.preventDefault()
               void send()
@@ -370,7 +370,7 @@ export function TeamChatIncoming({ accountId }: { accountId: string }) {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder={`Mensagem para ${panelTitle}...`}
-              className="h-10 min-w-0 flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/45 focus:outline-none"
+              className="h-10 min-w-0 flex-1 rounded-xl border border-border-soft bg-elevated px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/45 focus:outline-none"
             />
             <Button
               type="submit"
@@ -387,7 +387,7 @@ export function TeamChatIncoming({ accountId }: { accountId: string }) {
       {notices.map((notice) => (
         <article
           key={notice.roomId}
-          className="atlas-toast-enter pointer-events-auto overflow-hidden rounded-2xl border border-border-soft/90 bg-card shadow-[0_8px_32px_rgba(0,0,0,0.28)]"
+          className="atlas-toast-enter pointer-events-auto overflow-hidden rounded-2xl border border-border-soft/90 bg-card shadow-card"
         >
           <div className="flex items-center justify-between gap-2 px-4 pt-3">
             <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">Mensagem</p>
@@ -395,7 +395,7 @@ export function TeamChatIncoming({ accountId }: { accountId: string }) {
               <span className="text-[10px] tabular-nums text-muted-2">{clock(notice.createdAt)}</span>
               <button
                 type="button"
-                className="rounded-lg p-1 text-muted transition-colors hover:bg-white/[0.06] hover:text-text"
+                className="rounded-lg p-1 text-muted transition-colors hover:bg-hover hover:text-text"
                 aria-label="Dispensar aviso"
                 onClick={() => setNotices((current) => current.filter((item) => item.roomId !== notice.roomId))}
               >

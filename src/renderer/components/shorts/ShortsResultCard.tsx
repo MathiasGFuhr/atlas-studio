@@ -105,7 +105,7 @@ export function ShortsResultCard({
               <span className="ml-2 font-normal text-muted">· {formatClipLength(clipDuration(clip))}</span>
             </p>
           </div>
-          <div className="shrink-0 rounded-xl bg-accent-dark px-3 py-2 text-center">
+          <div className="shrink-0 rounded-xl bg-accent-subtle px-3 py-2 text-center">
             <p className="text-[10px] uppercase text-muted-2">Score</p>
             <p className="text-lg font-semibold text-accent">{clip.score}/100</p>
           </div>
@@ -121,7 +121,7 @@ export function ShortsResultCard({
         {exporting ? (
           <div className="space-y-1.5" role="status" aria-live="polite">
             <p className="text-xs text-muted">{shortsExportProgressLabel(exportPercent)}</p>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="h-1.5 overflow-hidden rounded-full bg-hover">
               <div
                 className={cn(
                   'h-full rounded-full bg-accent transition-[width] duration-200',

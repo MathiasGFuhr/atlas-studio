@@ -31,14 +31,14 @@ export function HomeTasksCard({
           <button
             type="button"
             onClick={onOpenAll}
-            className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-white/[0.04] hover:text-text"
+            className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-hover hover:text-text"
           >
             Ver todas
           </button>
           <button
             type="button"
             onClick={onCreate}
-            className="inline-flex h-8 items-center gap-1 rounded-xl bg-accent px-2.5 text-xs font-semibold text-black transition-colors hover:bg-accent-hover"
+            className="inline-flex h-8 items-center gap-1 rounded-xl bg-accent px-2.5 text-xs font-semibold text-on-accent transition-colors hover:bg-accent-hover"
           >
             <Plus className="h-3.5 w-3.5" />
             Nova
@@ -56,7 +56,7 @@ export function HomeTasksCard({
           <p className="text-sm text-muted-2">Nenhuma tarefa pendente.</p>
         </div>
       ) : (
-        <ul className="min-h-0 flex-1 divide-y divide-white/[0.04] overflow-y-auto">
+        <ul className="min-h-0 flex-1 divide-y divide-border-soft overflow-y-auto">
           {tasks.map((task) => (
             <HomeTaskRow
               key={task.id}

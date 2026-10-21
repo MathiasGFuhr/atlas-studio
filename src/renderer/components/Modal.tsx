@@ -19,19 +19,19 @@ export function Modal({
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/72 p-3 backdrop-blur-[2px] sm:p-6">
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className={
           size === '2xl'
-            ? 'flex max-h-[min(92vh,960px)] w-full min-w-0 max-w-6xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl'
+            ? 'flex max-h-[min(92vh,960px)] w-full min-w-0 max-w-6xl flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal'
             : size === 'xl'
-            ? 'flex max-h-[min(92vh,900px)] w-full min-w-0 max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl'
+            ? 'flex max-h-[min(92vh,900px)] w-full min-w-0 max-w-4xl flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal'
             : size === 'lg'
-            ? 'flex max-h-[min(92vh,820px)] w-full min-w-0 max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl'
-            : 'flex max-h-[min(92vh,720px)] w-full min-w-0 max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl'
+            ? 'flex max-h-[min(92vh,820px)] w-full min-w-0 max-w-2xl flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal'
+            : 'flex max-h-[min(92vh,720px)] w-full min-w-0 max-w-lg flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal'
         }
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-soft px-4 py-3 sm:px-5 sm:py-4">
@@ -39,7 +39,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-text"
+            className="rounded-lg p-1.5 text-muted hover:bg-hover hover:text-text"
             aria-label="Fechar"
           >
             <X className="h-4 w-4" />

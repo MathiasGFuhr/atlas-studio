@@ -146,7 +146,7 @@ export function ChannelEditorModal({
                 className="h-8 w-8 rounded-full border-2"
                 style={{
                   background: color,
-                  borderColor: form.color === color ? '#fff' : 'transparent',
+                  borderColor: form.color === color ? 'var(--color-text)' : 'transparent',
                 }}
               />
             ))}
@@ -156,11 +156,11 @@ export function ChannelEditorModal({
           <p className="mb-2 text-sm font-medium text-muted">{folderTitle}</p>
           {form.folderPath ? (
             <>
-              <p className="mb-2 break-all rounded-xl border border-border-soft bg-card-2 px-3 py-2.5 font-mono text-xs text-muted">
+              <p className="mb-2 break-all rounded-xl border border-border-soft bg-elevated px-3 py-2.5 font-mono text-xs text-muted">
                 {form.folderPath}
               </p>
               {editing?.folderPath === form.folderPath && editing.folderExists === false ? (
-                <p className="mb-2 text-xs text-yellow-500/80">A pasta vinculada não foi encontrada no disco.</p>
+                <p className="mb-2 text-xs text-warning">A pasta vinculada não foi encontrada no disco.</p>
               ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -206,7 +206,7 @@ export function ChannelEditorModal({
         <div>
           <p className="mb-2 text-sm font-medium text-muted">Foto do canal</p>
           <div className="flex items-center gap-3">
-            <div className="h-14 w-14 overflow-hidden rounded-xl border border-border bg-card-2">
+            <div className="h-14 w-14 overflow-hidden rounded-xl border border-border bg-elevated">
               {editing?.avatarDataUrl ? (
                 <img src={editing.avatarDataUrl} alt="" className="h-full w-full object-cover" />
               ) : (

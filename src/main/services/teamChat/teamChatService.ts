@@ -483,7 +483,8 @@ export const teamChatService = {
       .from('team_messages')
       .select('*')
       .eq('room_id', id)
-      .order('created_at', { ascending: true })
+      // As 200 mais recentes (não as 200 mais antigas); a lista é revertida abaixo.
+      .order('created_at', { ascending: false })
       .limit(200)
     if (clearedBefore) {
       query = query.gt('created_at', clearedBefore)
@@ -491,6 +492,7 @@ export const teamChatService = {
     const { data, error } = await query
     if (error) throw new Error(error.message)
     return ((data ?? []) as TeamMessageRow[])
+      .reverse()
       .map(mapMessage)
       .filter((message): message is TeamChatMessage => Boolean(message))
   },

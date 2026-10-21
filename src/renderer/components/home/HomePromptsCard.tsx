@@ -52,7 +52,7 @@ export function HomePromptsCard({
         <button
           type="button"
           onClick={onOpenLibrary}
-          className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-white/[0.04] hover:text-text"
+          className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-hover hover:text-text"
         >
           Abrir
         </button>
@@ -68,7 +68,7 @@ export function HomePromptsCard({
               'shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors',
               tab === item.id
                 ? 'bg-accent/15 text-accent'
-                : 'text-muted hover:bg-white/[0.04] hover:text-text',
+                : 'text-muted hover:bg-hover hover:text-text',
             )}
           >
             {item.label}
@@ -85,8 +85,8 @@ export function HomePromptsCard({
         <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {visible.map((prompt) => (
             <li key={prompt.id}>
-              <div className="group flex items-start gap-2.5 rounded-xl px-2 py-2.5 transition-colors hover:bg-white/[0.03]">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-accent">
+              <div className="group flex items-start gap-2.5 rounded-xl px-2 py-2.5 transition-colors hover:bg-hover/60">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border-soft bg-elevated text-accent">
                   <MessageSquareText className="h-3.5 w-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -95,7 +95,7 @@ export function HomePromptsCard({
                 </div>
                 <button
                   type="button"
-                  className="rounded-lg p-1.5 text-muted opacity-0 transition-all hover:bg-white/5 hover:text-text group-hover:opacity-100"
+                  className="rounded-lg p-1.5 text-muted opacity-0 transition-all hover:bg-hover hover:text-text group-hover:opacity-100"
                   aria-label={`Copiar ${prompt.name}`}
                   onClick={() => onCopy(prompt.text, prompt.name)}
                 >

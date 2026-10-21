@@ -97,10 +97,16 @@ export function ChatPage({
     return list
   }, [api])
 
+  /** Conversa que o usuário pediu por último; respostas de outras são descartadas. */
+  const viewingRef = useRef<string | null>(null)
+  /** Conversa de origem do envio em andamento (undefined = nenhum envio). */
+  const sendingFromRef = useRef<string | null | undefined>(undefined)
+
   const loadConversation = useCallback(
     async (id: string) => {
+      viewingRef.current = id
       const detail = await api.chat.getConversation(id)
-      if (!detail) return
+      if (!detail || viewingRef.current !== id) return
       setActiveId(id)
       setMessages(detail.messages)
       setActionLogs(detail.actionLogs.map((item) => ({ createdAt: item.createdAt, summary: item.summary })))
@@ -110,6 +116,7 @@ export function ChatPage({
       setEffortOverride(detail.conversation.effortOverride)
       if (detail.conversation.projectId) {
         const project = await api.projects.get(detail.conversation.projectId)
+        if (viewingRef.current !== id) return
         setContextProject(project)
       } else {
         setContextProject(null)
@@ -129,8 +136,8 @@ export function ChatPage({
 
       const list = await loadList()
       if (list[0]) await loadConversation(list[0].id)
-    })()
-  }, [api, loadConversation, loadList])
+    })().catch((error) => pushError(error, 'Não foi possível carregar as conversas.'))
+  }, [api, loadConversation, loadList, pushError])
 
   useEffect(() => {
     if (!sizeMenuOpen) return
@@ -165,18 +172,23 @@ export function ChatPage({
       await loadList()
       await loadConversation(created.id)
       onLaunchConsumed?.()
-    })()
-  }, [api, launchProjectId, loadConversation, loadList, onLaunchConsumed])
+    })().catch((error) => pushError(error, 'Não foi possível abrir a conversa do projeto.'))
+  }, [api, launchProjectId, loadConversation, loadList, onLaunchConsumed, pushError])
 
   useEffect(() => {
     return api.chat.onProgress((event) => {
+      const origin = sendingFromRef.current
+      if (origin === undefined || viewingRef.current !== origin) return
       setProgress(event.phase === 'done' ? null : event)
     })
   }, [api])
 
   useEffect(() => {
     const refresh = () => {
-      void api.chat.agentStatus().then(setAgentStatus)
+      void api.chat
+        .agentStatus()
+        .then(setAgentStatus)
+        .catch((error) => console.error('[atlas] falha ao atualizar status dos agentes', error))
     }
     const offCodex = api.codex.onAuthStateChanged(refresh)
     const offAgy = api.antigravity.onAuthStateChanged(refresh)
@@ -247,6 +259,8 @@ export function ChatPage({
     setSending(true)
     setDraft('')
     const pendingAttachments = attachments
+    const origin = activeId
+    sendingFromRef.current = origin
     setAttachments([])
     try {
       const result = await api.chat.sendMessage({
@@ -264,14 +278,18 @@ export function ChatPage({
           viewPath: variant === 'dock' ? 'chat-dock' : '/chat',
         },
       })
-      setActiveId(result.conversation.id)
-      await loadList()
-      await loadConversation(result.conversation.id)
       notifyFromActions(result.assistantMessage)
+      await loadList()
+      // Se o usuário abriu outra conversa durante o envio, não o arrasta de volta.
+      if (viewingRef.current === origin) {
+        setActiveId(result.conversation.id)
+        await loadConversation(result.conversation.id)
+      }
     } catch (error) {
       pushError(error, 'Não foi possível enviar a mensagem.')
-      setAttachments(pendingAttachments)
+      if (viewingRef.current === origin) setAttachments(pendingAttachments)
     } finally {
+      sendingFromRef.current = undefined
       setSending(false)
       setProgress(null)
       textareaRef.current?.focus()
@@ -319,6 +337,7 @@ export function ChatPage({
     if (activeId === id) {
       if (list[0]) await loadConversation(list[0].id)
       else {
+        viewingRef.current = null
         setActiveId(null)
         setMessages([])
       }
@@ -383,7 +402,7 @@ export function ChatPage({
                 key={item.id}
                 className={cn(
                   'group mb-1 flex items-center gap-1 rounded-xl px-2 py-2 text-sm',
-                  item.id === activeId ? 'bg-accent-dark/55 text-accent' : 'text-muted hover:bg-white/[0.03] hover:text-text',
+                  item.id === activeId ? 'bg-accent-subtle/55 text-accent' : 'text-muted hover:bg-hover/60 hover:text-text',
                 )}
               >
                 {renamingId === item.id ? (
@@ -395,7 +414,7 @@ export function ChatPage({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') void saveRename(item.id)
                     }}
-                    className="min-w-0 flex-1 rounded-md bg-black/20 px-1 py-0.5 text-xs text-text outline-none"
+                    className="min-w-0 flex-1 rounded-md bg-bg/20 px-1 py-0.5 text-xs text-text outline-none"
                   />
                 ) : (
                   <button
@@ -469,7 +488,7 @@ export function ChatPage({
               <div ref={sizeMenuRef} className="relative">
                 <button
                   type="button"
-                  className="rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-text"
+                  className="rounded-lg p-1.5 text-muted hover:bg-hover hover:text-text"
                   aria-label="Mais opções do chat"
                   aria-expanded={sizeMenuOpen}
                   onClick={() => setSizeMenuOpen((open) => !open)}
@@ -477,10 +496,10 @@ export function ChatPage({
                   <MoreVertical className="h-4 w-4" />
                 </button>
                 {sizeMenuOpen ? (
-                  <div className="absolute right-0 top-full z-30 mt-1 min-w-[10.5rem] rounded-xl border border-border bg-card-2 py-1 shadow-lg">
+                  <div className="absolute right-0 top-full z-30 mt-1 min-w-[10.5rem] rounded-xl border border-border bg-elevated py-1 shadow-popover">
                     <button
                       type="button"
-                      className="block w-full px-3 py-2 text-left text-xs text-text hover:bg-white/5"
+                      className="block w-full px-3 py-2 text-left text-xs text-text hover:bg-hover"
                       onClick={() => {
                         setSizeMenuOpen(false)
                         onResetSize()
@@ -495,7 +514,7 @@ export function ChatPage({
             {onClose ? (
               <button
                 type="button"
-                className="rounded-lg p-1.5 text-muted hover:bg-white/5 hover:text-text"
+                className="rounded-lg p-1.5 text-muted hover:bg-hover hover:text-text"
                 aria-label="Fechar chat"
                 onClick={onClose}
               >
@@ -550,7 +569,7 @@ export function ChatPage({
                         className={cn(
                           'whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed',
                           message.role === 'user'
-                            ? 'bg-accent-dark/70 text-text'
+                            ? 'bg-accent-subtle/70 text-text'
                             : 'border border-border-soft bg-card text-text',
                         )}
                       >
@@ -563,7 +582,7 @@ export function ChatPage({
                             return (
                               <span
                                 key={file.path}
-                                className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-card-2 px-2 py-1 text-[11px] text-muted"
+                                className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-elevated px-2 py-1 text-[11px] text-muted"
                               >
                                 <Icon className="h-3 w-3 shrink-0" />
                                 <span className="truncate">{file.name}</span>
@@ -614,7 +633,7 @@ export function ChatPage({
                 return (
                   <span
                     key={file.path}
-                    className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-card-2 px-2 py-1 text-[11px] text-text"
+                    className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-elevated px-2 py-1 text-[11px] text-text"
                   >
                     <Icon className="h-3 w-3 shrink-0" />
                     <span className="truncate">{file.name}</span>
@@ -634,7 +653,7 @@ export function ChatPage({
           <div className="flex items-end gap-2">
             <button
               type="button"
-              className="mb-1 rounded-xl p-2 text-muted hover:bg-white/5 hover:text-text"
+              className="mb-1 rounded-xl p-2 text-muted hover:bg-hover hover:text-text"
               title="Anexar arquivo"
               onClick={() => void attachFiles()}
               disabled={sending}
@@ -653,7 +672,7 @@ export function ChatPage({
               }}
               rows={compact ? 2 : 3}
               placeholder="Peça qualquer coisa ao Atlas..."
-              className="min-h-[64px] flex-1 resize-none rounded-2xl border border-border bg-card-2 px-4 py-3 text-sm text-text outline-none placeholder:text-muted-2 focus:border-accent/40"
+              className="min-h-[64px] flex-1 resize-none rounded-2xl border border-border bg-elevated px-4 py-3 text-sm text-text outline-none placeholder:text-muted-2 focus:border-accent/40"
               disabled={sending}
             />
             <Button

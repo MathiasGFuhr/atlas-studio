@@ -175,7 +175,7 @@ export function ShortsAdjustModal({
               {exporting ? (
                 <div className="space-y-1.5" role="status" aria-live="polite">
                   <p className="text-xs text-muted">{shortsExportProgressLabel(exportPercent)}</p>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-hover">
                     <div
                       className={cn(
                         'h-full rounded-full bg-accent transition-[width] duration-200',

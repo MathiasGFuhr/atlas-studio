@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getMainDir } from './paths'
 
-export const APP_BACKGROUND = '#0B0F12'
+export const APP_BACKGROUND = '#0D1218'
 export const MAIN_WINDOW_WIDTH = 1440
 export const MAIN_WINDOW_HEIGHT = 900
 

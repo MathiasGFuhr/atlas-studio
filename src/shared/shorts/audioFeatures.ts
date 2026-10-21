@@ -191,8 +191,8 @@ export function enrichAudioAnalysis(
     if (avg <= low) kind = 'quiet'
     else if (last - first > (high - low) * 0.25 && avg >= mid) kind = 'build'
     else if (first - last > (high - low) * 0.3 && i >= energy.length - chunk * 2) kind = 'outro'
-    else if (avg >= high) kind = 'peak'
     else if (first < mid && avg >= high) kind = 'drop'
+    else if (avg >= high) kind = 'peak'
     const prev = structure[structure.length - 1]
     if (prev && prev.kind === kind) prev.end = end
     else structure.push({ start, end, kind })

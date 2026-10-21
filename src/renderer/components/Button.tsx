@@ -5,11 +5,13 @@ type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-accent text-black hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_0_1px_rgba(53,229,139,0.15)]',
+    'bg-accent text-on-accent hover:bg-accent-hover active:bg-accent-pressed disabled:cursor-not-allowed disabled:bg-hover disabled:text-disabled',
   secondary:
-    'bg-card-2 text-text border border-border hover:border-[#334049] hover:bg-[#182028] disabled:opacity-50',
-  ghost: 'bg-transparent text-muted hover:text-text hover:bg-white/5',
-  danger: 'bg-danger/15 text-danger border border-danger/30 hover:bg-danger/25',
+    'bg-elevated text-text border border-border-soft hover:border-border hover:bg-hover active:bg-elevated disabled:cursor-not-allowed disabled:text-disabled disabled:hover:bg-elevated',
+  ghost:
+    'bg-transparent text-muted hover:text-text hover:bg-hover active:bg-elevated disabled:cursor-not-allowed disabled:text-disabled disabled:hover:bg-transparent',
+  danger:
+    'bg-danger/12 text-danger border border-danger/20 hover:border-danger/35 hover:bg-danger/18 disabled:cursor-not-allowed disabled:opacity-50',
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

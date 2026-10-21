@@ -155,7 +155,7 @@ export function QuickPromptAntigravityPanel({
       {error ? <p className="text-xs text-muted-2">{error}</p> : null}
 
       {analysis ? (
-        <div className="space-y-3 rounded-xl border border-border bg-card-2 px-3.5 py-3">
+        <div className="space-y-3 rounded-xl border border-border bg-elevated px-3.5 py-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-2">
@@ -174,7 +174,7 @@ export function QuickPromptAntigravityPanel({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg p-1 text-muted hover:bg-white/5 hover:text-text"
+              className="rounded-lg p-1 text-muted hover:bg-hover hover:text-text"
               aria-label="Fechar análise"
             >
               <X className="h-4 w-4" />
@@ -251,7 +251,7 @@ export function QuickPromptAntigravityPanel({
         {previewText.trim() === currentPrompt.trim() ? (
           <p className="mb-3 text-xs text-muted-2">A versão sugerida é igual ao prompt atual.</p>
         ) : null}
-        <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-card-2 px-3.5 py-3 font-mono text-xs leading-relaxed text-muted">
+        <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-elevated px-3.5 py-3 font-mono text-xs leading-relaxed text-muted">
           {previewText || '—'}
         </pre>
       </Modal>
