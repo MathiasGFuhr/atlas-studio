@@ -362,6 +362,7 @@ export function HomePage() {
 
           {/* Coluna direita */}
           <div className="flex min-w-0 flex-col gap-4 xl:col-span-1">
+            <div id="team-chat-incoming-slot" className="contents" />
             <HomeMarketsCard
               clocks={worldClocks}
               saving={savingClocks}

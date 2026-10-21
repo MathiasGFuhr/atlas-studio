@@ -1,13 +1,30 @@
 export type LipSyncRefStatus = 'active' | 'archived'
 
+/** Cantor solo ou conjunto da banda. */
+export type LipSyncSubject = 'singer' | 'band'
+
+export const LIPSYNC_SUBJECTS: LipSyncSubject[] = ['singer', 'band']
+
+export const LIPSYNC_SUBJECT_LABEL: Record<LipSyncSubject, string> = {
+  singer: 'Cantor',
+  band: 'Banda',
+}
+
+export function isLipSyncSubject(value: unknown): value is LipSyncSubject {
+  return value === 'singer' || value === 'band'
+}
+
 export type LipSyncRef = {
   id: string
   label: string
   prompt: string
+  /** Trecho da música usado nesta cena. */
+  lyrics: string
   imagePath: string
   imageDataUrl: string | null
   projectId: string | null
   projectName: string | null
+  subject: LipSyncSubject
   status: LipSyncRefStatus
   sortOrder: number
   createdAt: string
@@ -15,17 +32,22 @@ export type LipSyncRef = {
 }
 
 export type LipSyncRefCreateInput = {
-  imagePath: string
+  /** Opcional: a cena pode nascer só com prompt ou trecho e receber a imagem depois. */
+  imagePath?: string
   label?: string
   prompt?: string
+  lyrics?: string
   projectId?: string | null
+  subject?: LipSyncSubject
 }
 
 export type LipSyncRefUpdateInput = {
   label?: string
   prompt?: string
+  lyrics?: string
   projectId?: string | null
   imagePath?: string
+  subject?: LipSyncSubject
 }
 
 export type LipSyncRefListFilters = {
@@ -34,6 +56,7 @@ export type LipSyncRefListFilters = {
   unassignedOnly?: boolean
   /** Padrão: active. Use `all` para incluir arquivados. */
   status?: LipSyncRefStatus | 'all'
+  subject?: LipSyncSubject
 }
 
 export function isLipSyncRefStatus(value: unknown): value is LipSyncRefStatus {

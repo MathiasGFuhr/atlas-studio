@@ -19,7 +19,7 @@ import {
 } from '../../shared/musicVideoProject'
 
 /** Versão lógica do schema. Incremente ao adicionar um passo em SCHEMA_STEPS. */
-export const CURRENT_SCHEMA_VERSION = 19
+export const CURRENT_SCHEMA_VERSION = 20
 
 type SchemaStepResult = {
   historyCreated: number
@@ -156,6 +156,18 @@ const SCHEMA_STEPS: SchemaStep[] = [
     name: 'lipsync-refs-status',
     backup: false,
     up: applyLipSyncRefsStatus,
+  },
+  {
+    version: 20,
+    name: 'lipsync-refs-subject',
+    backup: false,
+    up: applyLipSyncRefsSubject,
+  },
+  {
+    version: 21,
+    name: 'lipsync-refs-lyrics',
+    backup: false,
+    up: applyLipSyncRefsLyrics,
   },
 ]
 
@@ -303,6 +315,34 @@ function applyLipSyncRefsProject(database: AppDatabase): SchemaStepResult {
   }
   ensureColumn(database, 'lipsync_refs', 'project_id', 'TEXT')
   database.exec('CREATE INDEX IF NOT EXISTS idx_lipsync_refs_project ON lipsync_refs(project_id)')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyLipSyncRefsSubject(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'lipsync_refs')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'lipsync_refs', 'subject', "TEXT NOT NULL DEFAULT 'singer'")
+  database.exec(
+    `UPDATE lipsync_refs
+     SET subject = 'singer'
+     WHERE subject IS NULL OR TRIM(subject) = '' OR subject NOT IN ('singer', 'band')`,
+  )
+  database.exec('CREATE INDEX IF NOT EXISTS idx_lipsync_refs_subject ON lipsync_refs(subject)')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyLipSyncRefsLyrics(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'lipsync_refs')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'lipsync_refs', 'lyrics', "TEXT NOT NULL DEFAULT ''")
   return { historyCreated: 0, musicCreated: 0 }
 }
 

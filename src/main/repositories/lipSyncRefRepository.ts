@@ -7,8 +7,9 @@ import type {
   LipSyncRefListFilters,
   LipSyncRefStatus,
   LipSyncRefUpdateInput,
+  LipSyncSubject,
 } from '../../shared/lipSyncRefs'
-import { isLipSyncRefStatus } from '../../shared/lipSyncRefs'
+import { isLipSyncRefStatus, isLipSyncSubject } from '../../shared/lipSyncRefs'
 import { readImageDataUrl } from '../services/storage/profilePhoto'
 import {
   archiveLipSyncRefToProjectFolder,
@@ -23,10 +24,12 @@ type Row = {
   id: string
   label: string
   prompt: string
+  lyrics: string | null
   image_path: string
   project_id: string | null
   project_name: string | null
   project_folder_path: string | null
+  subject: string | null
   status: string | null
   sort_order: number
   created_at: string
@@ -38,10 +41,12 @@ const SELECT = `
     r.id,
     r.label,
     r.prompt,
+    r.lyrics,
     r.image_path,
     r.project_id,
     p.name AS project_name,
     p.folder_path AS project_folder_path,
+    r.subject,
     r.status,
     r.sort_order,
     r.created_at,
@@ -54,15 +59,21 @@ function mapStatus(value: string | null | undefined): LipSyncRefStatus {
   return isLipSyncRefStatus(value) ? value : 'active'
 }
 
+function mapSubject(value: string | null | undefined): LipSyncSubject {
+  return isLipSyncSubject(value) ? value : 'singer'
+}
+
 function mapRow(row: Row): LipSyncRef {
   return {
     id: row.id,
     label: row.label ?? '',
     prompt: row.prompt ?? '',
+    lyrics: row.lyrics ?? '',
     imagePath: row.image_path,
     imageDataUrl: readImageDataUrl(row.image_path),
     projectId: row.project_id?.trim() || null,
     projectName: row.project_name?.trim() || null,
+    subject: mapSubject(row.subject),
     status: mapStatus(row.status),
     sortOrder: Number(row.sort_order) || 0,
     createdAt: row.created_at,
@@ -129,6 +140,11 @@ export const lipSyncRefRepository = {
       params.push(status)
     }
 
+    if (filters?.subject && isLipSyncSubject(filters.subject)) {
+      sql += ` AND COALESCE(NULLIF(TRIM(r.subject), ''), 'singer') = ?`
+      params.push(filters.subject)
+    }
+
     sql += ' ORDER BY r.sort_order ASC, r.created_at ASC'
     return (getDb().prepare(sql).all(...params) as Row[]).map(mapRow)
   },
@@ -139,15 +155,15 @@ export const lipSyncRefRepository = {
   },
 
   create(input: LipSyncRefCreateInput): LipSyncRef {
-    const imagePath = input.imagePath?.trim()
-    if (!imagePath) throw new Error('Selecione uma imagem.')
-
+    const sourceImage = input.imagePath?.trim() ?? ''
     const id = randomUUID()
     const now = new Date().toISOString()
-    const stored = importLipSyncImage(imagePath, id)
-    const label = input.label?.trim() || labelFromPath(imagePath)
+    const stored = sourceImage ? importLipSyncImage(sourceImage, id) : ''
+    const label = input.label?.trim() || (sourceImage ? labelFromPath(sourceImage) : '')
     const prompt = input.prompt?.trim() || ''
+    const lyrics = input.lyrics?.trim() || ''
     const projectId = normalizeProjectId(input.projectId)
+    const subject = mapSubject(input.subject)
     assertProjectExists(projectId)
 
     const maxOrder = getDb()
@@ -158,18 +174,22 @@ export const lipSyncRefRepository = {
 
     getDb()
       .prepare(
-        `INSERT INTO lipsync_refs (id, label, prompt, image_path, project_id, status, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+        `INSERT INTO lipsync_refs (id, label, prompt, lyrics, image_path, project_id, subject, status, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
       )
-      .run(id, label, prompt, stored, projectId, sortOrder, now, now)
+      .run(id, label, prompt, lyrics, stored, projectId, subject, sortOrder, now, now)
 
     return this.get(id)!
   },
 
-  createMany(imagePaths: string[], projectId?: string | null): LipSyncRef[] {
+  createMany(
+    imagePaths: string[],
+    projectId?: string | null,
+    subject?: LipSyncSubject,
+  ): LipSyncRef[] {
     const created: LipSyncRef[] = []
     for (const imagePath of imagePaths) {
-      created.push(this.create({ imagePath, projectId }))
+      created.push(this.create({ imagePath, projectId, subject }))
     }
     return created
   },
@@ -179,8 +199,10 @@ export const lipSyncRefRepository = {
     if (!current) return null
     const label = patch.label !== undefined ? patch.label.trim() : current.label
     const prompt = patch.prompt !== undefined ? patch.prompt : current.prompt
+    const lyrics = patch.lyrics !== undefined ? patch.lyrics : current.lyrics
     const projectId =
       patch.projectId !== undefined ? normalizeProjectId(patch.projectId) : current.projectId
+    const subject = patch.subject !== undefined ? mapSubject(patch.subject) : current.subject
     assertProjectExists(projectId)
 
     let imagePath = current.imagePath
@@ -189,7 +211,7 @@ export const lipSyncRefRepository = {
       const source = patch.imagePath.trim()
       if (!source) throw new Error('Selecione uma imagem.')
       const stored = importLipSyncImage(source, id)
-      if (path.resolve(stored) !== path.resolve(current.imagePath)) {
+      if (current.imagePath.trim() && path.resolve(stored) !== path.resolve(current.imagePath)) {
         previousImage = current.imagePath
       }
       imagePath = stored
@@ -199,10 +221,10 @@ export const lipSyncRefRepository = {
     getDb()
       .prepare(
         `UPDATE lipsync_refs
-         SET label = ?, prompt = ?, project_id = ?, image_path = ?, updated_at = ?
+         SET label = ?, prompt = ?, lyrics = ?, project_id = ?, subject = ?, image_path = ?, updated_at = ?
          WHERE id = ?`,
       )
-      .run(label, prompt, projectId, imagePath, now, id)
+      .run(label, prompt, lyrics, projectId, subject, imagePath, now, id)
 
     if (previousImage) {
       removeLipSyncImage(previousImage)
@@ -221,13 +243,13 @@ export const lipSyncRefRepository = {
     return true
   },
 
-  removeByProject(projectId: string): number {
+  removeByProject(projectId: string, subject?: LipSyncSubject): number {
     const id = normalizeProjectId(projectId)
     if (!id) throw new Error('Informe o projeto.')
     assertProjectExists(id)
-    const rows = getDb()
-      .prepare(`${SELECT} WHERE r.project_id = ?`)
-      .all(id) as Row[]
+    const rows = (
+      getDb().prepare(`${SELECT} WHERE r.project_id = ?`).all(id) as Row[]
+    ).filter((row) => !subject || mapSubject(row.subject) === subject)
     let removed = 0
     for (const row of rows) {
       if (this.remove(row.id)) removed += 1
@@ -235,12 +257,12 @@ export const lipSyncRefRepository = {
     return removed
   },
 
-  archiveByProject(projectId: string): LipSyncRef[] {
+  archiveByProject(projectId: string, subject?: LipSyncSubject): LipSyncRef[] {
     const id = normalizeProjectId(projectId)
     if (!id) throw new Error('Informe o projeto.')
     assertProjectExists(id)
 
-    const active = this.list({ projectId: id, status: 'all' })
+    const active = this.list({ projectId: id, status: 'all', subject })
     if (active.length === 0) {
       throw new Error('Não há referências neste projeto para salvar.')
     }
@@ -254,6 +276,7 @@ export const lipSyncRefRepository = {
         projectFolder,
         label: item.label,
         prompt: item.prompt,
+        lyrics: item.lyrics,
         refId: item.id,
       })
       archived.push(item)

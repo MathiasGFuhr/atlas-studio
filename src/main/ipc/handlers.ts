@@ -54,6 +54,7 @@ import type {
   LipSyncRefCreateInput,
   LipSyncRefListFilters,
   LipSyncRefUpdateInput,
+  LipSyncSubject,
 } from '../../shared/lipSyncRefs'
 import { lipSyncRefRepository } from '../repositories/lipSyncRefRepository'
 import { musicRepository } from '../repositories/musicRepository'
@@ -1079,18 +1080,18 @@ export function registerIpcHandlers(deps: {
   )
   ipcMain.handle(
     IPC.lipSyncRefs.createMany,
-    (_e, imagePaths: string[], projectId?: string | null) =>
-      lipSyncRefRepository.createMany(imagePaths, projectId),
+    (_e, imagePaths: string[], projectId?: string | null, subject?: LipSyncSubject) =>
+      lipSyncRefRepository.createMany(imagePaths, projectId, subject),
   )
   ipcMain.handle(IPC.lipSyncRefs.update, (_e, id: string, patch: LipSyncRefUpdateInput) =>
     lipSyncRefRepository.update(id, patch),
   )
   ipcMain.handle(IPC.lipSyncRefs.remove, (_e, id: string) => lipSyncRefRepository.remove(id))
-  ipcMain.handle(IPC.lipSyncRefs.removeByProject, (_e, projectId: string) =>
-    lipSyncRefRepository.removeByProject(projectId),
+  ipcMain.handle(IPC.lipSyncRefs.removeByProject, (_e, projectId: string, subject?: LipSyncSubject) =>
+    lipSyncRefRepository.removeByProject(projectId, subject),
   )
-  ipcMain.handle(IPC.lipSyncRefs.archiveByProject, (_e, projectId: string) =>
-    lipSyncRefRepository.archiveByProject(projectId),
+  ipcMain.handle(IPC.lipSyncRefs.archiveByProject, (_e, projectId: string, subject?: LipSyncSubject) =>
+    lipSyncRefRepository.archiveByProject(projectId, subject),
   )
 
   ipcMain.handle(IPC.dialog.selectFiles, async () => {

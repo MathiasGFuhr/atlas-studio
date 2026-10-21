@@ -23,7 +23,10 @@ import {
   resolveFolderDialogStart,
 } from '../storage/projectFolders'
 import type { CodexService } from '../codex/CodexService'
+import { foldPersonName, matchNamedTarget, teamChatPath } from '../../../shared/chat/teamMessageTarget'
+import { teamChatService } from '../teamChat/teamChatService'
 import { AtlasActionRegistry, projectNavigatePath, type AtlasActionContext } from './AtlasActionRegistry'
+import { registerStudioActions } from './registerStudioActions'
 
 const LANGUAGE_LABEL: Record<string, string> = {
   de: 'alemão',
@@ -144,6 +147,77 @@ function findPrompt(input: Record<string, unknown>) {
 
 function ok(partial: Omit<ChatActionResult, 'status'> & { status?: ChatActionResult['status'] }): ChatActionResult {
   return { status: 'success', ...partial }
+}
+
+function messageText(input: Record<string, unknown>): string {
+  return str(input, 'text') || str(input, 'body') || str(input, 'message') || str(input, 'content')
+}
+
+function personQuery(input: Record<string, unknown>): string {
+  return str(input, 'to') || str(input, 'person') || str(input, 'nome') || str(input, 'name')
+}
+
+function roomQuery(input: Record<string, unknown>): string {
+  return str(input, 'room') || str(input, 'conversation') || str(input, 'group') || str(input, 'grupo')
+}
+
+function messageLimit(input: Record<string, unknown>): number {
+  const raw = input.limit
+  const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+  if (!Number.isFinite(value) || value <= 0) return 20
+  return Math.min(Math.floor(value), 50)
+}
+
+async function resolveTeamTarget(input: Record<string, unknown>): Promise<{
+  id: string
+  label: string
+}> {
+  const roomId = str(input, 'roomId')
+  if (roomId) {
+    const rooms = await teamChatService.listRooms()
+    const found = rooms.find((room) => room.id === roomId)
+    return { id: roomId, label: found?.title || 'conversa' }
+  }
+
+  const person = personQuery(input)
+  const roomName = roomQuery(input)
+  if (person && !roomName) {
+    const people = await teamChatService.listDirectory()
+    if (people.length === 0) {
+      throw new Error('Não há pessoas da equipe disponíveis. Entre com sua conta no Atlas.')
+    }
+    const peer = matchNamedTarget(
+      people.map((item) => ({
+        id: item.id,
+        name: item.name,
+        aliases: item.email ? [item.email] : [],
+      })),
+      person,
+      'pessoa',
+    )
+    const room = await teamChatService.openDm(peer.id)
+    return { id: room.id, label: peer.name }
+  }
+
+  if (roomName) {
+    const rooms = await teamChatService.listRooms()
+    if (rooms.length === 0) {
+      throw new Error('Você ainda não tem conversas da equipe.')
+    }
+    const match = matchNamedTarget(
+      rooms.map((room) => ({
+        id: room.id,
+        name: room.title || room.name || 'Conversa',
+        aliases: [room.name, room.peer?.name ?? '', room.peer?.email ?? ''].filter(Boolean),
+      })),
+      roomName,
+      'conversa',
+    )
+    const room = rooms.find((item) => item.id === match.id)
+    return { id: match.id, label: room?.title || match.name }
+  }
+
+  throw new Error('Informe para quem enviar: o nome da pessoa (to) ou da conversa (room).')
 }
 
 export function createAtlasActionRegistry(deps: {
@@ -726,6 +800,94 @@ export function createAtlasActionRegistry(deps: {
     })
   })
 
+  registry.register('list_team_people', async (input) => {
+    const query = foldPersonName(str(input, 'query'))
+    const people = await teamChatService.listDirectory()
+    const online = new Set(teamChatService.listOnline().map((peer) => peer.id))
+    const items = people.filter((person) => {
+      if (!query) return true
+      const haystack = foldPersonName(`${person.name} ${person.email}`)
+      return haystack.includes(query)
+    })
+    return ok({
+      name: 'list_team_people',
+      title: items.length === 1 ? '1 pessoa' : `${items.length} pessoas`,
+      data: items.map((person) => ({
+        id: person.id,
+        name: person.name,
+        email: person.email,
+        online: online.has(person.id),
+      })),
+    })
+  })
+
+  registry.register('list_team_online', () => {
+    const items = teamChatService.listOnline()
+    return ok({
+      name: 'list_team_online',
+      title: items.length === 1 ? '1 pessoa online' : `${items.length} pessoas online`,
+      data: items.map((person) => ({ id: person.id, name: person.name })),
+    })
+  })
+
+  registry.register('list_team_conversations', async (input) => {
+    const query = foldPersonName(str(input, 'query'))
+    const rooms = await teamChatService.listRooms()
+    const items = rooms.filter((room) => {
+      if (!query) return true
+      const haystack = foldPersonName(`${room.title} ${room.name} ${room.peer?.name ?? ''}`)
+      return haystack.includes(query)
+    })
+    return ok({
+      name: 'list_team_conversations',
+      title: items.length === 1 ? '1 conversa' : `${items.length} conversas`,
+      data: items.map((room) => ({
+        id: room.id,
+        title: room.title,
+        kind: room.kind,
+        lastMessage: room.lastMessagePreview,
+      })),
+    })
+  })
+
+  registry.register('list_team_messages', async (input) => {
+    const target = await resolveTeamTarget(input)
+    const limit = messageLimit(input)
+    const messages = await teamChatService.listMessages(target.id)
+    const recent = messages.slice(-limit)
+    return ok({
+      name: 'list_team_messages',
+      title: recent.length === 1 ? '1 mensagem' : `${recent.length} mensagens`,
+      subtitle: target.label,
+      navigateTo: teamChatPath(target.id),
+      navigateLabel: 'Abrir conversa',
+      data: recent.map((message) => ({
+        author: message.authorName,
+        text: message.body,
+        at: message.createdAt,
+      })),
+    })
+  })
+
+  registry.register('send_team_message', async (input) => {
+    const text = messageText(input)
+    if (!text) throw new Error('Informe o texto da mensagem.')
+    if (text.length > 4000) throw new Error('A mensagem passa de 4000 caracteres.')
+    const target = await resolveTeamTarget(input)
+    const sent = await teamChatService.sendMessage({ roomId: target.id, body: text })
+    const preview = text.length > 140 ? `${text.slice(0, 137)}...` : text
+    return ok({
+      name: 'send_team_message',
+      title: 'Mensagem enviada',
+      subtitle: `Para ${target.label}: “${preview}”`,
+      navigateTo: teamChatPath(target.id),
+      navigateLabel: 'Abrir conversa',
+      entityType: 'team_message',
+      entityId: sent.id,
+      data: { roomId: target.id, to: target.label, text },
+    })
+  })
+
   registry.register('get_current_view', (_input, ctx) =>
     ok({
       name: 'get_current_view',
@@ -757,6 +919,8 @@ export function createAtlasActionRegistry(deps: {
       },
     })
   })
+
+  registerStudioActions(registry, { getMainWindow })
 
   return registry
 }

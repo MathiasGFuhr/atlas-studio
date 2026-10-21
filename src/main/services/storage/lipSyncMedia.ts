@@ -51,37 +51,60 @@ export function archiveLipSyncRefToProjectFolder(input: {
   projectFolder: string
   label: string
   prompt: string
+  lyrics?: string
   refId: string
 }): { imagePath: string; promptPath: string } {
-  const source = path.resolve(input.sourceImagePath)
-  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
-    throw new Error('Arquivo de imagem não encontrado.')
-  }
+  const sourceRaw = input.sourceImagePath?.trim() ?? ''
+  const source = sourceRaw ? path.resolve(sourceRaw) : ''
+  const hasImage = Boolean(source) && fs.existsSync(source) && fs.statSync(source).isFile()
 
   const destDir = projectLipsyncDir(input.projectFolder)
   fs.mkdirSync(destDir, { recursive: true })
 
-  const ext = path.extname(source).toLowerCase() || '.png'
-  const baseName = sanitizeWindowsFolderName(input.label || 'Referencia', 'Referencia')
+  const ext = hasImage ? path.extname(source).toLowerCase() || '.png' : ''
+  const baseName = sanitizeWindowsFolderName(input.label || 'Cena', 'Cena')
   let stem = baseName
   let attempt = 2
-  let imagePath = path.join(destDir, `${stem}${ext}`)
-  while (fs.existsSync(imagePath) && !isSameFile(source, imagePath)) {
+  let target = scenePaths(destDir, stem, ext)
+  while (sceneNameTaken(target, source)) {
     stem = `${baseName}-${input.refId.slice(0, 8)}`
     if (attempt > 2) stem = `${baseName}-${input.refId.slice(0, 8)}-${attempt}`
-    imagePath = path.join(destDir, `${stem}${ext}`)
+    target = scenePaths(destDir, stem, ext)
     attempt += 1
     if (attempt > 999) throw new Error('Não foi possível criar um nome único na pasta do projeto.')
   }
 
-  if (!isSameFile(source, imagePath)) {
-    fs.copyFileSync(source, imagePath)
+  if (hasImage && target.imagePath && !isSameFile(source, target.imagePath)) {
+    fs.copyFileSync(source, target.imagePath)
   }
 
-  const promptPath = path.join(destDir, `${stem}.txt`)
-  fs.writeFileSync(promptPath, input.prompt ?? '', 'utf8')
+  fs.writeFileSync(target.promptPath, sceneText(input.prompt, input.lyrics), 'utf8')
+  return target
+}
 
-  return { imagePath, promptPath }
+function scenePaths(destDir: string, stem: string, ext: string) {
+  return {
+    imagePath: ext ? path.join(destDir, `${stem}${ext}`) : '',
+    promptPath: path.join(destDir, `${stem}.txt`),
+  }
+}
+
+function sceneNameTaken(target: { imagePath: string; promptPath: string }, source: string) {
+  const imageTaken =
+    Boolean(target.imagePath) &&
+    fs.existsSync(target.imagePath) &&
+    !isSameFile(source, target.imagePath)
+  if (imageTaken) return true
+  if (!fs.existsSync(target.promptPath)) return false
+  return !(target.imagePath && source && isSameFile(source, target.imagePath))
+}
+
+function sceneText(prompt: string | undefined, lyrics: string | undefined): string {
+  const promptText = prompt ?? ''
+  const lyricsText = lyrics?.trim() ?? ''
+  if (!lyricsText) return promptText
+  if (!promptText.trim()) return lyricsText
+  return `${promptText.trimEnd()}\n\nTrecho:\n${lyricsText}\n`
 }
 
 function isSameFile(a: string, b: string): boolean {

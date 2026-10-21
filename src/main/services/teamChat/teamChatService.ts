@@ -5,7 +5,6 @@ import { Notification, type BrowserWindow } from 'electron'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { IPC } from '../../../shared/types'
 import {
-  peersWhoJoined,
   type TeamChatAttachment,
   type TeamChatAttachmentKind,
   type TeamChatCreateGroupInput,
@@ -84,7 +83,6 @@ let getWindow: (() => BrowserWindow | null) | null = null
 let online: TeamChatPeer[] = []
 let presenceSelfId = ''
 let presenceSelfName = ''
-let presenceReady = false
 let channelReady = false
 let activeRoomId: string | null = null
 
@@ -123,24 +121,14 @@ function messageNotifyBody(message: TeamChatMessage): string {
   return 'Nova mensagem'
 }
 
-function showOnlineToast(peer: TeamChatPeer) {
-  if (!Notification.isSupported()) return
-  const toast = new Notification({
-    title: 'Atlas Studio',
-    body: `${peer.name.trim() || 'Alguém'} entrou e está online`,
-    icon: resolveNotifyIcon(),
-  })
-  toast.on('click', () => {
-    focusMainWindow()
-    emit(IPC.teamChat.openChat, null)
-  })
-  toast.show()
-}
-
 function showMessageToast(message: TeamChatMessage) {
   if (!Notification.isSupported()) return
   if (presenceSelfId && message.authorId === presenceSelfId) return
-  if (isWindowActivelyViewed() && activeRoomId === message.roomId) return
+  if (isWindowActivelyViewed()) {
+    // Na sala aberta a mensagem já está no chat. Fora do chat, o card interno avisa.
+    // A notificação do sistema fica para a janela em segundo plano, ou para outra sala.
+    if (!activeRoomId || activeRoomId === message.roomId) return
+  }
 
   const author = message.authorName.trim() || 'Alguém'
   const toast = new Notification({
@@ -667,13 +655,6 @@ export const teamChatService = {
     })
     channel.on('presence', { event: 'sync' }, () => {
       const next = peersFromPresence(channel?.presenceState() ?? {})
-      if (presenceReady) {
-        for (const peer of peersWhoJoined(online, next, user.id)) {
-          emit(IPC.teamChat.peerOnline, peer)
-          showOnlineToast(peer)
-        }
-      }
-      presenceReady = true
       online = next
       emit(IPC.teamChat.presence, onlineOthers())
     })
@@ -697,7 +678,6 @@ export const teamChatService = {
     online = []
     presenceSelfId = ''
     presenceSelfName = ''
-    presenceReady = false
     channelReady = false
     activeRoomId = null
     emit(IPC.teamChat.presence, [])

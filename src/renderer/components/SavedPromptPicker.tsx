@@ -22,8 +22,8 @@ function preview(text: string): string {
 }
 
 /**
- * Escolhe um texto da biblioteca de Prompts e devolve o conteúdo para
- * preencher o campo da imagem de lipsync.
+ * Marca um ou mais textos da biblioteca de Prompts, na ordem do clique,
+ * para preencher o campo da imagem de lipsync.
  */
 export function SavedPromptPicker({
   open,
@@ -32,7 +32,7 @@ export function SavedPromptPicker({
 }: {
   open: boolean
   onClose: () => void
-  onPick: (prompt: CustomPrompt) => void
+  onPick: (prompts: CustomPrompt[]) => void
 }) {
   const api = getAtlasApi()
   const { pushError } = useToast()
@@ -41,6 +41,7 @@ export function SavedPromptPicker({
   const [loading, setLoading] = useState(false)
   const [query, setQuery] = useState('')
   const [tabId, setTabId] = useState(ALL_PROMPT_TABS_ID)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   useEffect(() => {
     if (!open) return
@@ -48,6 +49,7 @@ export function SavedPromptPicker({
     setLoading(true)
     setQuery('')
     setTabId(ALL_PROMPT_TABS_ID)
+    setSelectedIds([])
 
     async function load() {
       try {
@@ -100,6 +102,21 @@ export function SavedPromptPicker({
     { value: UNTABBED_ID, label: 'Sem aba' },
   ]
 
+  const selectedPrompts = selectedIds
+    .map((id) => prompts.find((prompt) => prompt.id === id))
+    .filter((prompt): prompt is CustomPrompt => Boolean(prompt))
+
+  function toggle(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    )
+  }
+
+  function apply() {
+    if (selectedPrompts.length === 0) return
+    onPick(selectedPrompts)
+  }
+
   return (
     <Modal
       open={open}
@@ -107,16 +124,31 @@ export function SavedPromptPicker({
       size="lg"
       onClose={onClose}
       footer={
-        <Button variant="secondary" onClick={onClose}>
-          Fechar
-        </Button>
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Fechar
+          </Button>
+          <Button disabled={selectedPrompts.length === 0} onClick={apply}>
+            {selectedPrompts.length === 0
+              ? 'Usar'
+              : selectedPrompts.length === 1
+                ? 'Usar 1 prompt'
+                : `Usar ${selectedPrompts.length} prompts`}
+          </Button>
+        </>
       }
     >
       <div className="space-y-3">
         <p className="text-sm text-muted">
-          Escolha um texto da aba Prompts. Ele entra no campo desta imagem e você ainda pode editar
-          depois.
+          Marque um ou mais textos, de qualquer aba. Eles entram nesta imagem, um embaixo do outro,
+          na ordem em que você marcou. Depois você ainda pode editar.
         </p>
+        {selectedPrompts.length > 0 ? (
+          <p className="text-xs leading-relaxed text-text">
+            <span className="font-medium text-muted">Ordem: </span>
+            {selectedPrompts.map((prompt) => prompt.name).join(' → ')}
+          </p>
+        ) : null}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-2" />
@@ -169,14 +201,33 @@ export function SavedPromptPicker({
           <ul className="space-y-2">
             {filtered.map((prompt) => {
               const tabName = prompt.tabId ? tabById.get(prompt.tabId)?.name : null
+              const order = selectedIds.indexOf(prompt.id)
+              const selected = order >= 0
               return (
                 <li key={prompt.id}>
                   <button
                     type="button"
-                    onClick={() => onPick(prompt)}
-                    className="w-full rounded-xl border border-border bg-card-2 px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-accent/5"
+                    aria-pressed={selected}
+                    onClick={() => toggle(prompt.id)}
+                    className={cn(
+                      'w-full rounded-xl border px-3 py-2.5 text-left transition-colors',
+                      selected
+                        ? 'border-accent/60 bg-accent/10'
+                        : 'border-border bg-card-2 hover:border-accent/50 hover:bg-accent/5',
+                    )}
                   >
                     <span className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold',
+                          selected
+                            ? 'bg-accent text-black'
+                            : 'border border-border text-transparent',
+                        )}
+                        aria-hidden
+                      >
+                        {selected ? order + 1 : ''}
+                      </span>
                       <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text">
                         {prompt.name}
                       </span>

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { Bell } from 'lucide-react'
 import type { AtlasTask } from '@shared/types'
 import {
-  deriveOnlineNotification,
   deriveTaskNotifications,
   deriveUpdateNotification,
   mergeReadKeys,
@@ -24,7 +23,6 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [tasks, setTasks] = useState<AtlasTask[]>([])
   const [readKeys, setReadKeys] = useState<string[]>([])
-  const [onlineItems, setOnlineItems] = useState<AtlasNotification[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const writeGen = useRef(0)
 
@@ -42,10 +40,6 @@ export function NotificationBell() {
     const offTasks = onTasksChanged(() => {
       void loadTasks()
     })
-    const offPeer = api.teamChat.onPeerOnline((peer) => {
-      const item = deriveOnlineNotification(peer)
-      setOnlineItems((current) => [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 20))
-    })
     const offOpenChat = api.teamChat.onOpenChat((roomId) => {
       setOpen(false)
       const id = typeof roomId === 'string' ? roomId.trim() : ''
@@ -53,7 +47,6 @@ export function NotificationBell() {
     })
     return () => {
       offTasks()
-      offPeer()
       offOpenChat()
     }
   }, [api, loadTasks, navigate])
@@ -61,9 +54,8 @@ export function NotificationBell() {
   const items = useMemo(() => {
     const update = updateStatus ? deriveUpdateNotification(updateStatus) : null
     const next = deriveTaskNotifications(tasks)
-    const merged = [...onlineItems, ...next]
-    return update ? [update, ...merged] : merged
-  }, [onlineItems, tasks, updateStatus])
+    return update ? [update, ...next] : next
+  }, [tasks, updateStatus])
   const unread = useMemo(() => unreadNotifications(items, readKeys), [items, readKeys])
   const unreadCount = unread.length
 
@@ -214,7 +206,7 @@ export function NotificationBell() {
                           'pl-3.5 text-xs',
                           item.kind === 'task-overdue'
                             ? 'text-danger'
-                            : item.kind === 'app-update' || item.kind === 'user-online'
+                            : item.kind === 'app-update'
                               ? 'text-accent'
                               : 'text-warning',
                         )}

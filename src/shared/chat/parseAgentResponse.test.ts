@@ -15,6 +15,14 @@ describe('Atlas action catalog', () => {
     expect(actionRequiresConfirmation('delete_project_files')).toBe(true)
     expect(actionRequiresConfirmation('create_channel')).toBe(false)
     expect(actionRequiresConfirmation('create_task')).toBe(false)
+    expect(actionRequiresConfirmation('send_team_message')).toBe(false)
+    expect(getActionDefinition('send_team_message')?.category).toBe('team')
+    expect(getActionDefinition('open_screen')?.category).toBe('studio')
+    expect(getActionDefinition('import_track')).toBeTruthy()
+    expect(getActionDefinition('create_video')).toBeTruthy()
+    expect(actionRequiresConfirmation('delete_track')).toBe(true)
+    expect(actionRequiresConfirmation('delete_short')).toBe(true)
+    expect(actionRequiresConfirmation('delete_video')).toBe(true)
   })
 
   it('exposes definitions used by the registry', () => {

@@ -78,6 +78,7 @@ import type {
   LipSyncRefCreateInput,
   LipSyncRefListFilters,
   LipSyncRefUpdateInput,
+  LipSyncSubject,
 } from '../shared/lipSyncRefs'
 import type { WorkspaceCapabilities } from '../shared/workspaceCapabilities'
 import type { AgentModelSnapshot, AgentModelsBundle, AgentProviderId } from '../shared/agents/types'
@@ -523,15 +524,19 @@ const api = {
       ipcRenderer.invoke(IPC.lipSyncRefs.list, filters) as Promise<LipSyncRef[]>,
     create: (input: LipSyncRefCreateInput) =>
       ipcRenderer.invoke(IPC.lipSyncRefs.create, input) as Promise<LipSyncRef>,
-    createMany: (imagePaths: string[], projectId?: string | null) =>
-      ipcRenderer.invoke(IPC.lipSyncRefs.createMany, imagePaths, projectId) as Promise<LipSyncRef[]>,
+    createMany: (imagePaths: string[], projectId?: string | null, subject?: LipSyncSubject) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.createMany, imagePaths, projectId, subject) as Promise<
+        LipSyncRef[]
+      >,
     update: (id: string, patch: LipSyncRefUpdateInput) =>
       ipcRenderer.invoke(IPC.lipSyncRefs.update, id, patch) as Promise<LipSyncRef | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.lipSyncRefs.remove, id) as Promise<boolean>,
-    removeByProject: (projectId: string) =>
-      ipcRenderer.invoke(IPC.lipSyncRefs.removeByProject, projectId) as Promise<number>,
-    archiveByProject: (projectId: string) =>
-      ipcRenderer.invoke(IPC.lipSyncRefs.archiveByProject, projectId) as Promise<LipSyncRef[]>,
+    removeByProject: (projectId: string, subject?: LipSyncSubject) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.removeByProject, projectId, subject) as Promise<number>,
+    archiveByProject: (projectId: string, subject?: LipSyncSubject) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.archiveByProject, projectId, subject) as Promise<
+        LipSyncRef[]
+      >,
   },
   system: {
     copyText: (text: string) => ipcRenderer.invoke(IPC.system.copyText, text) as Promise<boolean>,

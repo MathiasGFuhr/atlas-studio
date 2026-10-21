@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { AtlasTask } from './types'
 import {
-  deriveOnlineNotification,
   deriveTaskNotifications,
   mergeReadKeys,
   normalizeNotificationReadKeys,
   notificationDueHint,
-  onlineNotificationId,
   taskNotificationId,
   unreadNotifications,
 } from './notifications'
@@ -106,19 +104,5 @@ describe('notificações de tarefas', () => {
     expect(keys).toEqual([items[0].id])
     expect(unreadNotifications(items, keys)).toHaveLength(0)
     expect(mergeReadKeys([], [items[0].id, items[0].id])).toEqual([items[0].id])
-  })
-})
-
-describe('notificações de presença', () => {
-  it('gera aviso de quem acabou de entrar', () => {
-    const joinedAt = '2026-10-10T13:00:00.000Z'
-    const item = deriveOnlineNotification({ id: 'u1', name: 'Ana' }, joinedAt)
-    expect(item).toMatchObject({
-      id: onlineNotificationId('u1', joinedAt),
-      kind: 'user-online',
-      title: 'Online',
-      body: 'Ana entrou e está online',
-      href: '/equipe',
-    })
   })
 })

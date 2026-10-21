@@ -2,6 +2,8 @@ import type { BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '../../../shared/types'
 import { ATLAS_ACTION_CATALOG, actionRequiresConfirmation, formatActionCatalogForPrompt } from '../../../shared/chat/actionCatalog'
+import { ATLAS_SYSTEM_GUIDE } from '../../../shared/chat/atlasKnowledge'
+import { workspaceBriefingText } from './workspaceBriefing'
 import { chatAreasPromptNote, filterChatActions } from '../../../shared/workspaceCapabilities'
 import { getWorkspaceCapabilities } from '../workspace/getWorkspaceCapabilities'
 import { parseAgentResponse, titleFromFirstMessage } from '../../../shared/chat/parseAgentResponse'
@@ -52,10 +54,21 @@ function runningLabel(name: string): string {
     open_project: 'Abrindo projeto...',
     list_tasks: 'Consultando tarefas...',
     list_projects: 'Consultando projetos...',
+    list_team_people: 'Procurando pessoas...',
+    list_team_online: 'Vendo quem está online...',
+    list_team_conversations: 'Abrindo conversas...',
+    list_team_messages: 'Lendo mensagens...',
+    send_team_message: 'Enviando mensagem...',
     create_script: 'Criando roteiro...',
     adjust_script: 'Revisando roteiro...',
   }
-  return map[name] ?? 'Executando ação...'
+  if (map[name]) return map[name]
+  if (name.startsWith('list_') || name.startsWith('get_')) return 'Consultando...'
+  if (name.startsWith('open_')) return 'Abrindo...'
+  if (name.startsWith('delete_')) return 'Excluindo...'
+  if (name.startsWith('create_') || name.startsWith('save_') || name.startsWith('import_')) return 'Criando...'
+  if (name.startsWith('update_') || name.startsWith('rename_')) return 'Atualizando...'
+  return 'Executando ação...'
 }
 
 function confirmationCopy(actions: ChatActionCall[]): ChatPendingConfirmation {
@@ -94,8 +107,9 @@ function buildSystemPrompt(ctx: ChatClientContext, today: string): string {
   const capabilities = getWorkspaceCapabilities()
   const contextLines: string[] = [
     `Hoje é ${today}.`,
-    'Você é o assistente do Atlas Studio. Pode conversar normalmente OU solicitar ações oficiais.',
-    'Não invente SQL, shell ou acesso a arquivos. Só use as ações listadas.',
+    ATLAS_SYSTEM_GUIDE,
+    'Pode conversar normalmente ou executar as ações oficiais. Não invente SQL, shell nem acesso livre a arquivos.',
+    'Não diga que o Atlas não oferece uma função se ela estiver nas ações ou no panorama.',
     'Não diga que executou uma ação se ela não estiver em "actions".',
     'Ações destrutivas (delete_*) exigem confirmação do usuário — ainda assim inclua-as em actions.',
     'delete_project NUNCA apaga pasta física. Só use delete_project_files se o usuário pedir explicitamente para apagar arquivos do disco.',
@@ -103,8 +117,12 @@ function buildSystemPrompt(ctx: ChatClientContext, today: string): string {
     'Responda em JSON com: message (texto para o usuário), actions (array de {name, input}), conversationTitle opcional.',
     'Se for só conversa (ideias, títulos, rascunhos), actions deve ser [].',
     'Se o usuário pedir para salvar, guardar, criar ou cadastrar um prompt, use save_quick_prompt com name e o texto completo. O item aparece em Prompts → Meus prompts. Se ele pedir uma aba (lipsync, câmeras, etc.), passe category com o nome da aba. Não deixe o prompt só no chat.',
+    'O chat da equipe existe. Quando pedirem para mandar, enviar ou escrever uma mensagem para alguém (ex.: "manda uma msg pro Rodnei, escrito teste"), use send_team_message com to=nome e text=texto exato. Não diga que não há ação de mensagens. Para ler o que alguém escreveu, use list_team_messages. Para ver a equipe, use list_team_people.',
     'Não misture agentes: você é um único agente nesta resposta.',
     chatAreasPromptNote(capabilities),
+    '',
+    'Panorama atual:',
+    workspaceBriefingText(),
     '',
     'Ações:',
     formatActionCatalogForPrompt(filterChatActions(ATLAS_ACTION_CATALOG, capabilities)),
@@ -468,12 +486,21 @@ export class ChatService {
     )
     if (!pending && lookups.length > 0 && parsed.actions.length > 0 && !opts.extra) {
       const extra = JSON.stringify(
-        lookups.map((item) => ({ name: item.name, data: item.data, title: item.title })),
+        results
+          .filter((item) => item.status === 'success' || item.status === 'error')
+          .map((item) => ({
+            name: item.name,
+            status: item.status,
+            title: item.title,
+            subtitle: item.subtitle,
+            error: item.error,
+            data: item.data,
+          })),
       ).slice(0, 8000)
       try {
         const followRaw = await this.callAgent(
           agent,
-          `${prompt}\n\nResultados já executados (use para responder com precisão, sem repetir as ações):\n${extra}\n\nJSON final com message e actions vazio, a menos que falte uma ação de escrita.`,
+          `${prompt}\n\nResultados já executados (use para responder com precisão). Não repita nenhuma ação que já esteja nesses resultados — inclusive send_team_message. Só inclua uma ação nova se ela ainda não tiver sido executada:\n${extra}\n\nJSON final com message e actions vazio, a menos que ainda falte uma ação de escrita.`,
           opts.readableDirs,
           { model: opts.model, effort: opts.effort },
         )

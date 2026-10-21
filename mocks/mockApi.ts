@@ -76,6 +76,7 @@ import type {
   LipSyncRefCreateInput,
   LipSyncRefListFilters,
   LipSyncRefUpdateInput,
+  LipSyncSubject,
 } from '../src/shared/lipSyncRefs'
 
 /**
@@ -1298,21 +1299,28 @@ export const mockApi = {
       if (status !== 'all') {
         list = list.filter((item) => item.status === status)
       }
+      if (filters?.subject) {
+        list = list.filter((item) => item.subject === filters.subject)
+      }
       return list.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt))
     },
     create: async (input: LipSyncRefCreateInput) => {
       const now = new Date().toISOString()
       const projectId = input.projectId?.trim() || null
       const project = projectId ? projects.find((item) => item.id === projectId) : null
+      const imagePath = input.imagePath?.trim() ?? ''
       const item: LipSyncRef = {
         id: crypto.randomUUID(),
-        label: input.label?.trim() || 'Referência',
+        label: input.label?.trim() || (imagePath ? 'Referência' : ''),
         prompt: input.prompt?.trim() || '',
-        imagePath: input.imagePath,
-        imageDataUrl:
-          'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="400"><rect width="100%" height="100%" fill="%231a1a1a"/><text x="50%" y="50%" fill="%2388ff99" font-size="18" text-anchor="middle" dy=".3em">Lipsync</text></svg>',
+        lyrics: input.lyrics?.trim() || '',
+        imagePath,
+        imageDataUrl: imagePath
+          ? 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="400"><rect width="100%" height="100%" fill="%231a1a1a"/><text x="50%" y="50%" fill="%2388ff99" font-size="18" text-anchor="middle" dy=".3em">Lipsync</text></svg>'
+          : null,
         projectId,
         projectName: project?.name ?? null,
+        subject: input.subject === 'band' ? 'band' : 'singer',
         status: 'active',
         sortOrder: lipSyncRefs.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1,
         createdAt: now,
@@ -1321,10 +1329,10 @@ export const mockApi = {
       lipSyncRefs.push(item)
       return item
     },
-    createMany: async (imagePaths: string[], projectId?: string | null) => {
+    createMany: async (imagePaths: string[], projectId?: string | null, subject?: LipSyncSubject) => {
       const created: LipSyncRef[] = []
       for (const imagePath of imagePaths) {
-        created.push(await mockApi.lipSyncRefs.create({ imagePath, projectId }))
+        created.push(await mockApi.lipSyncRefs.create({ imagePath, projectId, subject }))
       }
       return created
     },
@@ -1342,9 +1350,11 @@ export const mockApi = {
         ...current,
         label: patch.label !== undefined ? patch.label.trim() : current.label,
         prompt: patch.prompt !== undefined ? patch.prompt : current.prompt,
+        lyrics: patch.lyrics !== undefined ? patch.lyrics : current.lyrics,
         imagePath: patch.imagePath !== undefined ? patch.imagePath.trim() : current.imagePath,
         projectId,
         projectName: project?.name ?? null,
+        subject: patch.subject === 'band' ? 'band' : patch.subject === 'singer' ? 'singer' : current.subject,
         updatedAt: new Date().toISOString(),
       }
       lipSyncRefs[index] = next
@@ -1356,19 +1366,25 @@ export const mockApi = {
       lipSyncRefs.splice(index, 1)
       return true
     },
-    removeByProject: async (projectId: string) => {
+    removeByProject: async (projectId: string, subject?: LipSyncSubject) => {
       const before = lipSyncRefs.length
-      const remaining = lipSyncRefs.filter((item) => item.projectId !== projectId)
+      const remaining = lipSyncRefs.filter(
+        (item) => item.projectId !== projectId || (subject && item.subject !== subject),
+      )
       lipSyncRefs.length = 0
       lipSyncRefs.push(...remaining)
       return before - remaining.length
     },
-    archiveByProject: async (projectId: string) => {
-      const archived = lipSyncRefs.filter((item) => item.projectId === projectId)
+    archiveByProject: async (projectId: string, subject?: LipSyncSubject) => {
+      const archived = lipSyncRefs.filter(
+        (item) => item.projectId === projectId && (!subject || item.subject === subject),
+      )
       if (archived.length === 0) {
         throw new Error('Não há referências neste projeto para salvar.')
       }
-      const remaining = lipSyncRefs.filter((item) => item.projectId !== projectId)
+      const remaining = lipSyncRefs.filter(
+        (item) => item.projectId !== projectId || (subject && item.subject !== subject),
+      )
       lipSyncRefs.length = 0
       lipSyncRefs.push(...remaining)
       return archived

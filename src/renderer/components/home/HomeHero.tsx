@@ -1,16 +1,6 @@
 import heroImage from '../../assets/home-hero.jpg'
 import { AtlasLogo } from '../AtlasLogo'
-
-const QUOTES = [
-  'O show começa no silêncio do estúdio.',
-  'Cada faixa carrega uma noite inteira.',
-  'Produzir é transformar emoção em cena.',
-  'O público sente o que você termina bem.',
-]
-
-function quoteForToday(now = new Date()) {
-  return QUOTES[now.getDate() % QUOTES.length] ?? QUOTES[0]
-}
+import { quoteForDate } from './homeQuotes'
 
 export function HomeHero({
   hello,
@@ -59,7 +49,7 @@ export function HomeHero({
 
         <blockquote className="max-w-sm justify-self-start rounded-2xl border border-white/[0.08] bg-black/35 px-4 py-3.5 backdrop-blur-md lg:justify-self-end">
           <p className="home-greeting text-[1.15rem] leading-snug text-text/95 sm:text-[1.35rem]">
-            “{quoteForToday()}”
+            “{quoteForDate()}”
           </p>
         </blockquote>
       </div>

@@ -6,6 +6,8 @@ export type ChatActionCategory =
   | 'tasks'
   | 'quick_prompts'
   | 'scripts'
+  | 'team'
+  | 'studio'
   | 'context'
 
 export type ChatActionStatus = 'running' | 'success' | 'error' | 'pending'

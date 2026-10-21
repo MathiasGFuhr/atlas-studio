@@ -29,6 +29,7 @@ import { TasksPage } from './pages/TasksPage'
 import { LoginPage } from './pages/LoginPage'
 import { TeamChatPage } from './pages/TeamChatPage'
 import { ChatDock } from './components/chat/ChatDock'
+import { TeamChatIncoming } from './components/team/TeamChatIncoming'
 import { getAtlasApi } from './lib/api'
 import { openAtlasChat } from './lib/chatEvents'
 import { useCodexAuth } from './hooks/useCodexAuth'
@@ -206,6 +207,7 @@ export default function App() {
           </div>
         </div>
         <ChatDock />
+        <TeamChatIncoming accountId={session.user.id} />
         <div
           role="status"
           aria-label="Versão do aplicativo"
