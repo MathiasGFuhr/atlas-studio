@@ -35,6 +35,22 @@ export function localImageUrl(filePath: string | null | undefined): string | nul
   if (!filePath?.trim()) return null
   const resolved = path.resolve(filePath)
   if (!isAllowedImagePath(resolved)) return readImageDataUrl(resolved)
+  return versionedMediaUrl(resolved)
+}
+
+/**
+ * Miniatura redimensionada (gerada sob demanda e em cache). Só para imagens do userData;
+ * caminhos legados retornam null e a tela usa `localImageUrl`.
+ */
+export function localImageThumbUrl(filePath: string | null | undefined, width: number): string | null {
+  if (!filePath?.trim()) return null
+  const resolved = path.resolve(filePath)
+  if (!isAllowedImagePath(resolved)) return null
+  const url = versionedMediaUrl(resolved)
+  return url ? `${url}&w=${width}` : null
+}
+
+function versionedMediaUrl(resolved: string): string | null {
   let stats: fs.Stats
   try {
     stats = fs.statSync(resolved)

@@ -7,6 +7,7 @@ import { parseByteRange } from '../../../shared/mediaRange'
 import { shortsRepository } from '../../repositories/shortsRepository'
 import { getUserDataPath } from '../../paths'
 import { ATLAS_MEDIA_SCHEME, isAllowedImagePath } from './localImageUrl'
+import { getImageThumbnail, parseThumbWidth } from './imageThumbnails'
 
 export { ATLAS_MEDIA_SCHEME, toAtlasMediaUrl } from './localImageUrl'
 
@@ -126,6 +127,12 @@ export function registerAtlasMediaProtocol() {
     const stats = filePath ? statFile(filePath) : null
     if (!filePath || !stats || !isAllowedMediaPath(filePath)) {
       return new Response('Not found', { status: 404 })
+    }
+    const width = parseThumbWidth(new URL(request.url).searchParams.get('w'))
+    if (width && isAllowedImagePath(filePath)) {
+      const thumb = await getImageThumbnail(filePath, stats, width)
+      const thumbStats = thumb ? statFile(thumb) : null
+      if (thumb && thumbStats) return serveLocalFile(thumb, thumbStats.size, request)
     }
     try {
       return serveLocalFile(filePath, stats.size, request)

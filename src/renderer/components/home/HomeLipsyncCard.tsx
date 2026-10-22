@@ -48,7 +48,13 @@ export function HomeLipsyncCard({
                 >
                   <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-elevated">
                     {ref.imageDataUrl ? (
-                      <img src={ref.imageDataUrl} alt="" className="h-full w-full object-cover" />
+                      <img
+                        src={ref.imageThumbUrl ?? ref.imageDataUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                      />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-muted-2">
                         <Mic2 className="h-4 w-4" />

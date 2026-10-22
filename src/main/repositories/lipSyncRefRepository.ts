@@ -10,7 +10,8 @@ import type {
   LipSyncSubject,
 } from '../../shared/lipSyncRefs'
 import { isLipSyncRefStatus, isLipSyncSubject } from '../../shared/lipSyncRefs'
-import { localImageUrl } from '../services/media/localImageUrl'
+import { localImageThumbUrl, localImageUrl } from '../services/media/localImageUrl'
+import { warmImageThumbnails } from '../services/media/imageThumbnails'
 import {
   archiveLipSyncRefToProjectFolder,
   importLipSyncImage,
@@ -71,6 +72,8 @@ function mapRow(row: Row): LipSyncRef {
     lyrics: row.lyrics ?? '',
     imagePath: row.image_path,
     imageDataUrl: localImageUrl(row.image_path),
+    imageThumbUrl: localImageThumbUrl(row.image_path, 360),
+    imagePreviewUrl: localImageThumbUrl(row.image_path, 1080),
     projectId: row.project_id?.trim() || null,
     projectName: row.project_name?.trim() || null,
     subject: mapSubject(row.subject),
@@ -159,6 +162,7 @@ export const lipSyncRefRepository = {
     const id = randomUUID()
     const now = new Date().toISOString()
     const stored = sourceImage ? importLipSyncImage(sourceImage, id) : ''
+    warmImageThumbnails(stored)
     const label = input.label?.trim() || (sourceImage ? labelFromPath(sourceImage) : '')
     const prompt = input.prompt?.trim() || ''
     const lyrics = input.lyrics?.trim() || ''
@@ -211,6 +215,7 @@ export const lipSyncRefRepository = {
       const source = patch.imagePath.trim()
       if (!source) throw new Error('Selecione uma imagem.')
       const stored = importLipSyncImage(source, id)
+      warmImageThumbnails(stored)
       if (current.imagePath.trim() && path.resolve(stored) !== path.resolve(current.imagePath)) {
         previousImage = current.imagePath
       }

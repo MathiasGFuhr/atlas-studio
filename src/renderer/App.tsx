@@ -24,6 +24,7 @@ import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
 import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { version as appVersion } from '../../package.json'
 import { AtlasLogo } from './components/AtlasLogo'
+import { shouldShowWelcome, WelcomeSplash } from './components/WelcomeSplash'
 
 /*
  * Páginas fora da Home viram chunks separados: o bundle inicial fica menor e
@@ -112,6 +113,8 @@ export default function App() {
   const codexAuth = useCodexAuth()
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [pageTourOpen, setPageTourOpen] = useState(false)
+  const [welcomeOpen, setWelcomeOpen] = useState(shouldShowWelcome)
+  const closeWelcome = useCallback(() => setWelcomeOpen(false), [])
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
@@ -284,8 +287,15 @@ export default function App() {
           v{appVersion}
         </div>
 
+        {welcomeOpen && tourChecked ? (
+          <WelcomeSplash
+            name={settings?.accountName?.trim() || session.user.name}
+            onDone={closeWelcome}
+          />
+        ) : null}
+
         <ProductTour
-          open={tourOpen}
+          open={tourOpen && !welcomeOpen}
           steps={INTRO_TOUR_STEPS}
           aiConnected={codexAuth.isConnected}
           offerConnect
@@ -295,7 +305,7 @@ export default function App() {
         />
         <PageTourHost
           ready={tourChecked}
-          blocked={tourOpen || codexAuth.showOnboarding || linkModalOpen}
+          blocked={welcomeOpen || tourOpen || codexAuth.showOnboarding || linkModalOpen}
           seen={settings?.seenProductTours ?? []}
           onSeen={markPageTourSeen}
           onActiveChange={setPageTourOpen}
@@ -303,7 +313,7 @@ export default function App() {
 
         {/* Onboarding modal - first run only, depois do tour */}
         <CodexOnboarding
-          open={tourChecked && !tourOpen && !pageTourOpen && codexAuth.showOnboarding}
+          open={tourChecked && !welcomeOpen && !tourOpen && !pageTourOpen && codexAuth.showOnboarding}
           onLink={handleOnboardingLink}
           onSkip={handleOnboardingSkip}
         />

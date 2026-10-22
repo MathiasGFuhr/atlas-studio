@@ -191,6 +191,147 @@ select:focus-visible {
     height 320ms ease;
 }
 
+@keyframes atlas-welcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes atlas-welcome-logo {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-8deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06) rotate(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes atlas-welcome-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+@keyframes atlas-welcome-bg {
+  from {
+    transform: scale(1.12);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes atlas-welcome-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+@keyframes atlas-welcome-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes atlas-welcome-out {
+  to {
+    opacity: 0;
+    transform: scale(1.04);
+    filter: blur(6px);
+  }
+}
+
+.atlas-welcome__bg {
+  opacity: 0.35;
+  animation: atlas-welcome-bg 4s ease-out both;
+}
+
+.atlas-welcome__glow {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--color-accent) 38%, transparent) 0%,
+    transparent 65%
+  );
+  animation: atlas-welcome-glow 3.2s ease-in-out infinite;
+}
+
+.atlas-welcome__logo {
+  animation: atlas-welcome-logo 700ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.atlas-welcome__ring {
+  border: 2px solid var(--color-accent);
+  animation: atlas-welcome-ring 1.4s ease-out 450ms infinite;
+}
+
+.atlas-welcome__in {
+  animation: atlas-welcome-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.atlas-welcome__name {
+  font-style: normal;
+  background: linear-gradient(
+    100deg,
+    var(--color-accent) 0%,
+    color-mix(in srgb, var(--color-accent) 55%, white) 50%,
+    var(--color-accent) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.atlas-welcome__bar {
+  transform-origin: left;
+  animation: atlas-welcome-bar 4000ms cubic-bezier(0.4, 0, 0.6, 1) 1100ms both;
+}
+
+.atlas-welcome--leaving {
+  pointer-events: none;
+  animation: atlas-welcome-out 600ms ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-welcome__bg,
+  .atlas-welcome__glow,
+  .atlas-welcome__logo,
+  .atlas-welcome__ring,
+  .atlas-welcome__in,
+  .atlas-welcome__bar {
+    animation: none;
+  }
+  .atlas-welcome--leaving {
+    animation: atlas-welcome-out 200ms linear forwards;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .atlas-tour-card,
   .atlas-tour-spot,

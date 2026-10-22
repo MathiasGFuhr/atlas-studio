@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Archive,
   Check,
   Copy,
   FolderPlus,
@@ -79,17 +78,6 @@ type SceneMenuState = {
   flip: boolean
 }
 
-function savedQueueMessage(archived: Array<{ subject: LipSyncSubject }>): string {
-  const singer = archived.filter((item) => item.subject === 'singer').length
-  const band = archived.filter((item) => item.subject === 'band').length
-  const parts: string[] = []
-  if (singer > 0) parts.push(singer === 1 ? '1 cena do cantor' : `${singer} cenas do cantor`)
-  if (band > 0) parts.push(band === 1 ? '1 cena da banda' : `${band} cenas da banda`)
-  const summary = parts.join(' e ') || 'Cenas'
-  const plural = archived.length !== 1
-  return `${summary} ${plural ? 'salvas' : 'salva'} na pasta do projeto e ${plural ? 'removidas' : 'removida'} da fila.`
-}
-
 function countClass(length: number): string {
   return length > TEXT_SOFT_LIMIT ? 'text-warning' : 'text-muted-2'
 }
@@ -147,7 +135,7 @@ const SceneListRow = memo(function SceneListRow({
           onClick={() => onSelect(item.id)}
         >
           <div className="h-14 w-11 shrink-0 overflow-hidden rounded-md bg-bg/40">
-            <SceneThumb src={item.imageDataUrl} alt={name} />
+            <SceneThumb src={item.imageThumbUrl ?? item.imageDataUrl} alt={name} />
           </div>
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline gap-1.5">
@@ -207,7 +195,7 @@ const StoryboardItem = memo(function StoryboardItem({
           selected ? 'border-accent' : 'border-transparent',
         )}
       >
-        <SceneThumb src={item.imageDataUrl} alt={name} />
+        <SceneThumb src={item.imageThumbUrl ?? item.imageDataUrl} alt={name} />
       </div>
       <p className="mt-1 truncate text-[10px] text-muted">
         <span className={cn('mr-1 font-semibold', selected ? 'text-accent' : 'text-muted-2')}>
@@ -219,27 +207,21 @@ const StoryboardItem = memo(function StoryboardItem({
   )
 })
 
-const FILTER_ALL = '__all__'
-const FILTER_NONE = '__none__'
-
 export function LipSyncRefsPage() {
   const api = getAtlasApi()
   const { push, pushError } = useToast()
   const [items, setItems] = useState<LipSyncRef[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [channels, setChannels] = useState<Channel[]>([])
-  const [filterChannelId, setFilterChannelId] = useState(FILTER_ALL)
-  const [filterProjectId, setFilterProjectId] = useState(FILTER_ALL)
   const [attachProjectId, setAttachProjectId] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
   const [thumbSize, setThumbSize] = useState(96)
   const [menu, setMenu] = useState<SceneMenuState | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const storyboardRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [discardOpen, setDiscardOpen] = useState(false)
+  const [clearOpen, setClearOpen] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const itemsRef = useRef(items)
   const draftsRef = useRef(drafts)
@@ -250,17 +232,6 @@ export function LipSyncRefsPage() {
   const [projectSaving, setProjectSaving] = useState(false)
   const [pickerItemId, setPickerItemId] = useState<string | null>(null)
   const [focusSceneId, setFocusSceneId] = useState<string | null>(null)
-
-  const projectsInFilter = useMemo(() => {
-    if (filterChannelId === FILTER_ALL) return projects
-    return projects.filter((project) => project.channelId === filterChannelId)
-  }, [filterChannelId, projects])
-
-  const listFilters = useMemo(() => {
-    if (filterProjectId === FILTER_NONE) return { unassignedOnly: true as const, status: 'active' as const }
-    if (filterProjectId === FILTER_ALL) return { status: 'active' as const }
-    return { projectId: filterProjectId, status: 'active' as const }
-  }, [filterProjectId])
 
   const refreshSeq = useRef(0)
   const pushErrorRef = useRef(pushError)
@@ -285,33 +256,19 @@ export function LipSyncRefsPage() {
     )
 
     const [list, projectList, channelList] = await Promise.all([
-      api.lipSyncRefs.list(listFilters),
+      api.lipSyncRefs.list({ status: 'active' }),
       api.projects.list({ projectType: 'music' }),
       api.channels.list({ channelType: 'music' }),
     ])
-    // Trocas rápidas de filtro: só a resposta mais recente pode aplicar estado.
+    // Recargas concorrentes: só a resposta mais recente pode aplicar estado.
     if (seq !== refreshSeq.current) return
     setProjects(projectList)
     setChannels(channelList)
 
-    const channelProjectIds =
-      filterChannelId === FILTER_ALL
-        ? null
-        : new Set(
-            projectList
-              .filter((project) => project.channelId === filterChannelId)
-              .map((project) => project.id),
-          )
-
-    const scoped =
-      filterProjectId === FILTER_ALL && channelProjectIds
-        ? list.filter((item) => item.projectId && channelProjectIds.has(item.projectId))
-        : list
-
-    setItems(scoped)
+    setItems(list)
     setDrafts((current) =>
       Object.fromEntries(
-        scoped.map((item) => {
+        list.map((item) => {
           const previous = current[item.id]
           if (previous && isDirty(item, previous)) return [item.id, previous]
           return [item.id, toDraft(item)]
@@ -319,19 +276,11 @@ export function LipSyncRefsPage() {
       ),
     )
 
-    const attachPool =
-      filterChannelId === FILTER_ALL
-        ? projectList
-        : projectList.filter((project) => project.channelId === filterChannelId)
-
     setAttachProjectId((current) => {
-      if (current && attachPool.some((project) => project.id === current)) return current
-      if (filterProjectId !== FILTER_ALL && filterProjectId !== FILTER_NONE) {
-        if (attachPool.some((project) => project.id === filterProjectId)) return filterProjectId
-      }
-      return attachPool[0]?.id ?? ''
+      if (current && projectList.some((project) => project.id === current)) return current
+      return projectList[0]?.id ?? ''
     })
-  }, [api, filterChannelId, filterProjectId, listFilters])
+  }, [api])
 
   useEffect(() => {
     let active = true
@@ -379,22 +328,19 @@ export function LipSyncRefsPage() {
     setFocusSceneId(null)
   }, [focusSceneId, items])
 
+  /** Nova cena entra no projeto da cena aberta; senão no projeto da fila; senão no primeiro projeto. */
   function currentProjectId() {
-    if (filterProjectId === FILTER_NONE) return ''
-    if (filterProjectId !== FILTER_ALL) return filterProjectId
-    return attachProjectId
+    const selected = selectedId ? items.find((item) => item.id === selectedId) : undefined
+    const fromSelected = selected ? (drafts[selected.id]?.projectId ?? selected.projectId ?? '') : ''
+    return fromSelected || items.find((item) => item.projectId)?.projectId || attachProjectId
   }
 
   function canCreateScene() {
-    return filterProjectId === FILTER_NONE || Boolean(currentProjectId())
+    return Boolean(currentProjectId())
   }
 
   function openCreateProject() {
-    setProjectForm({
-      ...EMPTY_PROJECT_FORM,
-      channelId: filterChannelId !== FILTER_ALL ? filterChannelId : '',
-      publicationTitle: '',
-    })
+    setProjectForm({ ...EMPTY_PROJECT_FORM, publicationTitle: '' })
     setEditorOpen(true)
   }
 
@@ -432,9 +378,8 @@ export function LipSyncRefsPage() {
       notifyProjectsChanged()
       setEditorOpen(false)
       setProjectForm(EMPTY_PROJECT_FORM)
-      if (projectForm.channelId) setFilterChannelId(projectForm.channelId)
-      setFilterProjectId(created.id)
       setAttachProjectId(created.id)
+      await refresh()
       push(
         projectForm.channelId && projectForm.scheduledDate
           ? 'Projeto criado e publicação agendada.'
@@ -450,18 +395,17 @@ export function LipSyncRefsPage() {
 
   async function addScene() {
     const projectId = currentProjectId()
-    if (!projectId && filterProjectId !== FILTER_NONE) {
-      push('Selecione um projeto no filtro para criar a cena.')
+    if (!projectId) {
+      push('Crie um projeto de música para criar a cena.')
       return
     }
     setBusy(true)
     try {
       const created = await api.lipSyncRefs.create({
-        projectId: projectId || null,
+        projectId,
         subject: 'singer',
       })
       await refresh()
-      setQuery('')
       setSelectedId(created.id)
       setFocusSceneId(created.id)
       push('Cena criada.', 'success')
@@ -474,8 +418,8 @@ export function LipSyncRefsPage() {
 
   async function addImages() {
     const projectId = currentProjectId()
-    if (!projectId && filterProjectId !== FILTER_NONE) {
-      push('Selecione um projeto no filtro para vincular as imagens.')
+    if (!projectId) {
+      push('Crie um projeto de música para anexar as imagens.')
       return
     }
     setBusy(true)
@@ -484,7 +428,6 @@ export function LipSyncRefsPage() {
       if (paths.length === 0) return
       const created = await api.lipSyncRefs.createMany(paths, projectId, 'singer')
       await refresh()
-      setQuery('')
       if (created[0]) {
         setSelectedId(created[0].id)
         setFocusSceneId(created[0].id)
@@ -500,16 +443,6 @@ export function LipSyncRefsPage() {
     }
   }
 
-  function itemLeavesCurrentFilter(projectId: string | null | undefined) {
-    if (filterProjectId === FILTER_NONE) return Boolean(projectId)
-    if (filterProjectId !== FILTER_ALL) return projectId !== filterProjectId
-    if (filterChannelId === FILTER_ALL) return false
-    if (!projectId) return true
-    return !projects.some(
-      (project) => project.id === projectId && project.channelId === filterChannelId,
-    )
-  }
-
   async function saveItem(id: string): Promise<boolean> {
     const draft = drafts[id]
     if (!draft) return false
@@ -521,15 +454,6 @@ export function LipSyncRefsPage() {
         projectId: draft.projectId || null,
       })
       if (!updated) return false
-      if (itemLeavesCurrentFilter(updated.projectId)) {
-        setItems((current) => current.filter((item) => item.id !== id))
-        setDrafts((current) => {
-          const next = { ...current }
-          delete next[id]
-          return next
-        })
-        return true
-      }
       setItems((current) => current.map((item) => (item.id === id ? updated : item)))
       setDrafts((current) => ({
         ...current,
@@ -558,15 +482,6 @@ export function LipSyncRefsPage() {
         projectId: (draft?.projectId ?? item?.projectId) || null,
       })
       if (!updated) return
-      if (itemLeavesCurrentFilter(updated.projectId)) {
-        setItems((current) => current.filter((entry) => entry.id !== id))
-        setDrafts((current) => {
-          const next = { ...current }
-          delete next[id]
-          return next
-        })
-        return
-      }
       setItems((current) => current.map((entry) => (entry.id === id ? updated : entry)))
       setDrafts((current) => ({
         ...current,
@@ -622,15 +537,6 @@ export function LipSyncRefsPage() {
         projectId: next.projectId || null,
       })
       if (!updated) return
-      if (itemLeavesCurrentFilter(updated.projectId)) {
-        setItems((current) => current.filter((entry) => entry.id !== id))
-        setDrafts((current) => {
-          const following = { ...current }
-          delete following[id]
-          return following
-        })
-        return
-      }
       setItems((current) => current.map((entry) => (entry.id === id ? updated : entry)))
       setDrafts((current) => ({
         ...current,
@@ -667,46 +573,9 @@ export function LipSyncRefsPage() {
     }
   }
 
-  const projectOptions = projectsInFilter
-
-  const filteredItems = useMemo(() => {
-    const term = query.trim().toLowerCase()
-    if (!term) return items
-    return items.filter((item) => {
-      const draft = drafts[item.id]
-      const label = (draft?.label ?? item.label).trim()
-      const haystack = [
-        label || 'Cena sem nome',
-        draft?.prompt ?? item.prompt,
-        draft?.lyrics ?? item.lyrics,
-        item.projectName ?? '',
-        LIPSYNC_SUBJECT_LABEL[item.subject],
-      ]
-        .join('\n')
-        .toLowerCase()
-      return haystack.includes(term)
-    })
-  }, [drafts, items, query])
-
-  const finishProjectId = useMemo(() => {
-    if (filterProjectId !== FILTER_ALL && filterProjectId !== FILTER_NONE) return filterProjectId
-    if (items.length === 0) return null
-    const first = items[0]?.projectId
-    if (!first) return null
-    return items.every((item) => item.projectId === first) ? first : null
-  }, [filterProjectId, items])
-
-  const finishProject = finishProjectId
-    ? projects.find((project) => project.id === finishProjectId) ?? null
-    : null
-  const canArchiveProject =
-    Boolean(finishProjectId) && items.some((item) => item.projectId === finishProjectId)
-  const canDiscardProject =
-    Boolean(finishProjectId) && items.some((item) => item.projectId === finishProjectId)
-
   const indexById = useMemo(() => new Map(items.map((item, index) => [item.id, index])), [items])
 
-  const selectedItem = filteredItems.find((item) => item.id === selectedId) ?? null
+  const selectedItem = items.find((item) => item.id === selectedId) ?? null
   const selectedDraft = selectedItem ? (drafts[selectedItem.id] ?? toDraft(selectedItem)) : null
   const selectedDirty = Boolean(selectedItem && selectedDraft && isDirty(selectedItem, selectedDraft))
   const selectedNumber =
@@ -715,11 +584,11 @@ export function LipSyncRefsPage() {
 
   useEffect(() => {
     setSelectedId((current) => {
-      if (filteredItems.length === 0) return null
-      if (current && filteredItems.some((item) => item.id === current)) return current
-      return filteredItems[0]?.id ?? null
+      if (items.length === 0) return null
+      if (current && items.some((item) => item.id === current)) return current
+      return items[0]?.id ?? null
     })
-  }, [filteredItems])
+  }, [items])
 
   useEffect(() => {
     if (!menu) return
@@ -749,37 +618,6 @@ export function LipSyncRefsPage() {
     })
   }, [selectedId])
 
-  async function archiveProjectRefs() {
-    if (!finishProjectId) {
-      push('Selecione um projeto (ou deixe só refs do mesmo projeto) para salvar.')
-      return
-    }
-    setBusy(true)
-    try {
-      const pending = items.filter((item) => item.projectId === finishProjectId)
-      for (const item of pending) {
-        const draft = drafts[item.id]
-        if (!draft) continue
-        if (!isDirty(item, draft)) continue
-        await api.lipSyncRefs.update(item.id, {
-          label: draft.label,
-          prompt: draft.prompt,
-          lyrics: draft.lyrics,
-          projectId: draft.projectId || null,
-        })
-      }
-
-      const archived = await api.lipSyncRefs.archiveByProject(finishProjectId)
-      notifyProjectsChanged()
-      await refresh()
-      push(savedQueueMessage(archived), 'success')
-    } catch (error) {
-      pushError(error, 'Não foi possível salvar as referências no projeto.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function changeSubject(id: string, nextSubject: LipSyncSubject) {
     const draft = drafts[id]
     const item = items.find((entry) => entry.id === id)
@@ -793,15 +631,6 @@ export function LipSyncRefsPage() {
         subject: nextSubject,
       })
       if (!updated) return
-      if (itemLeavesCurrentFilter(updated.projectId)) {
-        setItems((current) => current.filter((entry) => entry.id !== id))
-        setDrafts((current) => {
-          const next = { ...current }
-          delete next[id]
-          return next
-        })
-        return
-      }
       setItems((current) => current.map((entry) => (entry.id === id ? updated : entry)))
       setDrafts((current) => ({
         ...current,
@@ -812,16 +641,29 @@ export function LipSyncRefsPage() {
     }
   }
 
-  async function discardProjectRefs() {
-    if (!finishProjectId) return
+  /** Apaga de vez as cenas da fila (imagem, prompt e trecho). Nada é salvo no projeto. */
+  async function clearQueue() {
+    const ids = itemsRef.current.map((item) => item.id)
+    setClearOpen(false)
+    if (ids.length === 0) return
     setBusy(true)
     try {
-      const removed = await api.lipSyncRefs.removeByProject(finishProjectId)
-      setDiscardOpen(false)
+      const results = await Promise.allSettled(ids.map((id) => api.lipSyncRefs.remove(id)))
+      const failed = results.filter((result) => result.status === 'rejected')
+      // Sem isso o refresh tentaria gravar rascunhos de cenas que acabaram de ser apagadas.
+      itemsRef.current = []
+      draftsRef.current = {}
+      setItems([])
+      setDrafts({})
       await refresh()
-      push(removed === 1 ? 'Cena descartada.' : `${removed} cenas descartadas.`, 'success')
+      if (failed.length > 0) {
+        const reason = (failed[0] as PromiseRejectedResult).reason
+        pushError(reason, `${failed.length} de ${ids.length} cenas não puderam ser apagadas.`)
+      } else {
+        push(ids.length === 1 ? 'Fila limpa: 1 cena apagada.' : `Fila limpa: ${ids.length} cenas apagadas.`, 'success')
+      }
     } catch (error) {
-      pushError(error, 'Não foi possível descartar as referências.')
+      pushError(error, 'Não foi possível limpar a fila.')
     } finally {
       setBusy(false)
     }
@@ -886,7 +728,6 @@ export function LipSyncRefsPage() {
   )
 
   function showAllScenes() {
-    setQuery('')
     setThumbSize(72)
     storyboardRef.current?.scrollTo({ left: 0, behavior: 'smooth' })
   }
@@ -894,7 +735,7 @@ export function LipSyncRefsPage() {
   const toolbarButtonClass = 'h-9 px-3 py-0 text-xs'
 
   return (
-    <PageShell scroll={false} className="flex min-h-0 flex-col">
+    <PageShell className="flex flex-col">
       <PageHeader
         className="mb-4 shrink-0"
         breadcrumb={environmentBreadcrumb('music', 'Lipsync')}
@@ -920,107 +761,19 @@ export function LipSyncRefsPage() {
           </Button>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted" htmlFor="lipsync-channel-filter">
-                Filtrar por canal
-              </label>
-              <select
-                id="lipsync-channel-filter"
-                value={filterChannelId}
-                onChange={(event) => {
-                  const next = event.target.value
-                  setFilterChannelId(next)
-                  setFilterProjectId((current) => {
-                    if (current === FILTER_ALL || current === FILTER_NONE) return current
-                    const project = projects.find((entry) => entry.id === current)
-                    if (!project) return FILTER_ALL
-                    if (next !== FILTER_ALL && project.channelId !== next) return FILTER_ALL
-                    return current
-                  })
-                }}
-                className="h-9 min-w-[9.5rem] rounded-xl border border-border bg-elevated px-3 text-xs text-text focus:border-accent/60 focus:outline-none"
-              >
-                <option value={FILTER_ALL}>Todos</option>
-                {channels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>
-                    {channel.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted" htmlFor="lipsync-project-filter">
-                Filtrar por projeto
-              </label>
-              <select
-                id="lipsync-project-filter"
-                value={filterProjectId}
-                onChange={(event) => {
-                  const next = event.target.value
-                  setFilterProjectId(next)
-                  if (next !== FILTER_ALL && next !== FILTER_NONE) setAttachProjectId(next)
-                }}
-                className="h-9 min-w-[9.5rem] rounded-xl border border-border bg-elevated px-3 text-xs text-text focus:border-accent/60 focus:outline-none"
-              >
-                <option value={FILTER_ALL}>Todos</option>
-                <option value={FILTER_NONE}>Sem projeto</option>
-                {projectOptions.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                title="Novo projeto"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-elevated text-muted transition-colors hover:text-text"
-                onClick={openCreateProject}
-              >
-                <FolderPlus className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="relative min-w-[10rem] flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-2" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar cenas..."
-                aria-label="Buscar cenas"
-                className="h-9 w-full rounded-xl border border-border bg-elevated pl-9 pr-3 text-xs text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
-              />
-            </div>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className={toolbarButtonClass}
-                icon={<Archive className="h-3.5 w-3.5" />}
-                disabled={busy || !canArchiveProject}
-                title={
-                  canArchiveProject
-                    ? 'Salva e remove as cenas do cantor e da banda deste projeto'
-                    : 'Filtre um projeto para salvar a fila'
-                }
-                onClick={() => void archiveProjectRefs()}
-              >
-                Salvar e limpar fila
-              </Button>
+        <div className="flex flex-1 flex-col">
+          <div className="mb-3 flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="secondary"
                 className={toolbarButtonClass}
                 icon={<Trash2 className="h-3.5 w-3.5" />}
-                disabled={busy || !canDiscardProject}
-                title={
-                  canDiscardProject
-                    ? 'Apaga as cenas deste projeto da fila'
-                    : 'Filtre um projeto para descartar a fila'
-                }
-                onClick={() => setDiscardOpen(true)}
+                disabled={busy || items.length === 0}
+                title="Apaga todas as cenas da fila. Nada é salvo."
+                onClick={() => setClearOpen(true)}
               >
-                Descartar
+                Limpar fila
               </Button>
               <Button
                 type="button"
@@ -1034,12 +787,12 @@ export function LipSyncRefsPage() {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 gap-3">
+          <div className="flex min-h-[560px] flex-1 gap-3">
             <aside className="flex w-[272px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
               <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2.5">
                 <h2 className="text-sm font-semibold text-text">
                   Cenas{' '}
-                  <span className="font-medium text-muted">({filteredItems.length})</span>
+                  <span className="font-medium text-muted">({items.length})</span>
                 </h2>
                 <button
                   type="button"
@@ -1051,31 +804,32 @@ export function LipSyncRefsPage() {
                   <ImagePlus className="h-4 w-4" />
                 </button>
               </div>
-              <div
-                className="min-h-0 flex-1 overflow-y-auto p-2"
-                onScroll={() => setMenu(null)}
-              >
-                {filteredItems.length === 0 ? (
-                  <p className="px-2 py-8 text-center text-xs leading-relaxed text-muted">
-                    {items.length === 0
-                      ? 'Nenhuma cena nesta fila. Crie a primeira pela imagem, pelo prompt ou pelo trecho.'
-                      : 'Nenhuma cena encontrada.'}
-                  </p>
-                ) : (
-                  <ul className="space-y-1">
-                    {filteredItems.map((item) => (
-                      <SceneListRow
-                        key={item.id}
-                        item={item}
-                        number={sceneNumber(indexById.get(item.id) ?? 0)}
-                        name={(drafts[item.id]?.label ?? item.label).trim() || 'Cena sem nome'}
-                        selected={item.id === selectedId}
-                        onSelect={handleSelectScene}
-                        onOpenMenu={handleOpenSceneMenu}
-                      />
-                    ))}
-                  </ul>
-                )}
+              {/* Lista posicionada em absoluto: a altura da coluna segue o card de edição, não o nº de cenas. */}
+              <div className="relative min-h-[12rem] flex-1">
+                <div
+                  className="absolute inset-0 overflow-y-auto p-2"
+                  onScroll={() => setMenu(null)}
+                >
+                  {items.length === 0 ? (
+                    <p className="px-2 py-8 text-center text-xs leading-relaxed text-muted">
+                      Nenhuma cena nesta fila. Crie a primeira pela imagem, pelo prompt ou pelo trecho.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {items.map((item) => (
+                        <SceneListRow
+                          key={item.id}
+                          item={item}
+                          number={sceneNumber(indexById.get(item.id) ?? 0)}
+                          name={(drafts[item.id]?.label ?? item.label).trim() || 'Cena sem nome'}
+                          selected={item.id === selectedId}
+                          onSelect={handleSelectScene}
+                          onOpenMenu={handleOpenSceneMenu}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
               <div className="border-t border-border p-2">
                 <button
@@ -1090,7 +844,7 @@ export function LipSyncRefsPage() {
               </div>
             </aside>
 
-            <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card">
+            <section className="flex min-w-0 flex-1 flex-col rounded-2xl border border-border bg-card">
               {selectedItem && selectedDraft ? (
                 <>
                   <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
@@ -1099,13 +853,13 @@ export function LipSyncRefsPage() {
                       #{selectedNumber}
                     </span>
                   </div>
-                  <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 xl:grid-cols-[minmax(220px,0.9fr)_minmax(0,1.1fr)] xl:overflow-hidden">
-                    <div className="flex min-h-[220px] flex-col">
+                  <div className="grid flex-1 grid-cols-1 gap-5 p-5 xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,1.2fr)]">
+                    <div className="flex flex-col xl:sticky xl:top-0 xl:self-start">
                       <p className="mb-2 text-xs font-medium text-muted">Imagem da cena</p>
-                      <div className="relative min-h-[200px] flex-1 overflow-hidden rounded-xl bg-bg/40">
+                      <div className="relative h-[360px] overflow-hidden rounded-xl bg-bg/40 xl:h-[460px]">
                         {selectedItem.imageDataUrl ? (
                           <SceneThumb
-                            src={selectedItem.imageDataUrl}
+                            src={selectedItem.imagePreviewUrl ?? selectedItem.imageDataUrl}
                             alt={selectedDraft.label || 'Cena de lipsync'}
                             eager
                           />
@@ -1140,7 +894,7 @@ export function LipSyncRefsPage() {
                       </div>
                     </div>
 
-                    <div className="flex min-h-0 flex-col gap-3 xl:overflow-y-auto xl:pr-1">
+                    <div className="flex flex-col gap-4">
                       <div>
                         <div className="mb-1.5 flex items-center justify-between gap-2">
                           <label className="text-xs font-medium text-muted" htmlFor="lipsync-scene-name">
@@ -1193,7 +947,7 @@ export function LipSyncRefsPage() {
                         </select>
                       </label>
 
-                      <div className="flex min-h-[8.5rem] flex-1 flex-col">
+                      <div className="flex flex-col">
                         <div className="mb-1.5 flex items-center justify-between gap-2">
                           <span className="text-xs font-medium text-muted">Prompt de lipsync desta cena</span>
                           <button
@@ -1210,14 +964,14 @@ export function LipSyncRefsPage() {
                           onChange={(event) => patchDraft(selectedItem.id, { prompt: event.target.value })}
                           placeholder="Cantando com emoção, olhar para a câmera, iluminação cinematográfica…"
                           spellCheck={false}
-                          className="min-h-[7.5rem] w-full flex-1 resize-y rounded-xl border border-border bg-bg/50 px-3 py-2 text-sm leading-relaxed text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
+                          className="h-32 w-full resize-none overflow-y-auto rounded-xl border border-border bg-bg/50 px-3 py-2 text-sm leading-relaxed text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
                         />
                         <p className={cn('mt-1 text-right text-[10px] tabular-nums', countClass(selectedDraft.prompt.length))}>
                           {selectedDraft.prompt.length}/{TEXT_SOFT_LIMIT}
                         </p>
                       </div>
 
-                      <div className="flex min-h-[8.5rem] flex-1 flex-col">
+                      <div className="flex flex-col">
                         <span className="mb-1.5 block text-xs font-medium text-muted">
                           Trecho da música desta cena
                         </span>
@@ -1226,7 +980,7 @@ export function LipSyncRefsPage() {
                           onChange={(event) => patchDraft(selectedItem.id, { lyrics: event.target.value })}
                           placeholder="Trecho da música desta cena…"
                           spellCheck={false}
-                          className="min-h-[7.5rem] w-full flex-1 resize-y rounded-xl border border-border bg-bg/50 px-3 py-2 text-sm leading-relaxed text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
+                          className="h-32 w-full resize-none overflow-y-auto rounded-xl border border-border bg-bg/50 px-3 py-2 text-sm leading-relaxed text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
                         />
                         <p className={cn('mt-1 text-right text-[10px] tabular-nums', countClass(selectedDraft.lyrics.length))}>
                           {selectedDraft.lyrics.length}/{TEXT_SOFT_LIMIT}
@@ -1270,7 +1024,7 @@ export function LipSyncRefsPage() {
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
                   <p className="text-sm font-medium text-text">
-                    {query.trim() ? 'Nenhuma cena com essa busca' : 'Nenhuma cena selecionada'}
+                    Nenhuma cena selecionada
                   </p>
                   <p className="mt-1 max-w-sm text-sm text-muted">
                     Crie a cena e comece pela imagem, pelo prompt de lipsync ou pelo trecho da música.
@@ -1316,7 +1070,7 @@ export function LipSyncRefsPage() {
               </div>
             </div>
             <div ref={storyboardRef} className="flex items-start gap-2 overflow-x-auto pb-1">
-              {filteredItems.map((item) => (
+              {items.map((item) => (
                 <StoryboardItem
                   key={item.id}
                   item={item}
@@ -1365,16 +1119,14 @@ export function LipSyncRefsPage() {
       />
 
       <ConfirmDialog
-        open={discardOpen}
-        title="Descartar cenas de lipsync?"
-        message={
-          finishProject
-            ? `As cenas de “${finishProject.name}” serão apagadas da fila. O projeto de música continua.`
-            : 'As cenas deste projeto serão apagadas da fila. O projeto de música continua.'
-        }
-        confirmLabel="Descartar"
-        onConfirm={() => void discardProjectRefs()}
-        onClose={() => setDiscardOpen(false)}
+        open={clearOpen}
+        title="Limpar fila de lipsync?"
+        message={`${
+          items.length === 1 ? 'A cena da fila será apagada' : `As ${items.length} cenas da fila serão apagadas`
+        } de vez, com imagem, prompt e trecho. Nada é salvo. Os projetos de música continuam.`}
+        confirmLabel="Limpar fila"
+        onConfirm={() => void clearQueue()}
+        onClose={() => setClearOpen(false)}
       />
 
       {menu && menuItem ? (

@@ -22,6 +22,10 @@ export type LipSyncRef = {
   lyrics: string
   imagePath: string
   imageDataUrl: string | null
+  /** Miniatura (lado menor ~360px) para listas; null em imagens legadas — use `imageDataUrl`. */
+  imageThumbUrl?: string | null
+  /** Versão reduzida (lado menor ~1080px) para o preview grande; null em imagens legadas. */
+  imagePreviewUrl?: string | null
   projectId: string | null
   projectName: string | null
   subject: LipSyncSubject

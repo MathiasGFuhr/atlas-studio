@@ -13,7 +13,8 @@ vi.mock('electron', () => ({
   },
 }))
 
-import { isAllowedImagePath, localImageUrl } from './localImageUrl'
+import { isAllowedImagePath, localImageThumbUrl, localImageUrl } from './localImageUrl'
+import { parseThumbWidth } from './imageThumbnails'
 
 const TINY_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -60,6 +61,27 @@ describe('localImageUrl', () => {
     fs.mkdirSync(path.dirname(empty), { recursive: true })
     fs.writeFileSync(empty, '')
     expect(localImageUrl(empty)).toBeNull()
+  })
+
+  it('gera URL de miniatura só para imagens do userData', () => {
+    const scene = writeImage(userData, 'lipsync-refs', 'thumb', 'cena.jpg')
+    const thumb = localImageThumbUrl(scene, 360)
+    expect(thumb).toMatch(/^atlas-media:\/\/local\/\?p=.*&v=\d+-\d+&w=360$/)
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-legacy-thumb-'))
+    try {
+      expect(localImageThumbUrl(writeImage(dir, 'thumb.png'), 360)).toBeNull()
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+    expect(localImageThumbUrl('', 360)).toBeNull()
+  })
+
+  it('aceita só os tamanhos de miniatura conhecidos', () => {
+    expect(parseThumbWidth('360')).toBe(360)
+    expect(parseThumbWidth('1080')).toBe(1080)
+    expect(parseThumbWidth('5000')).toBeNull()
+    expect(parseThumbWidth(null)).toBeNull()
+    expect(parseThumbWidth('abc')).toBeNull()
   })
 
   it('não libera arquivos fora das pastas de imagem nem extensões não-imagem', () => {
