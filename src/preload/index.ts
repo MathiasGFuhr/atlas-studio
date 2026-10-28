@@ -74,6 +74,7 @@ import type {
   TeamChatTyping,
 } from '../shared/account'
 import type {
+  LipSyncFolderScan,
   LipSyncRef,
   LipSyncRefCreateInput,
   LipSyncRefListFilters,
@@ -537,6 +538,8 @@ const api = {
       ipcRenderer.invoke(IPC.lipSyncRefs.archiveByProject, projectId, subject) as Promise<
         LipSyncRef[]
       >,
+    scanFolder: (folder: string) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.scanFolder, folder) as Promise<LipSyncFolderScan>,
   },
   system: {
     copyText: (text: string) => ipcRenderer.invoke(IPC.system.copyText, text) as Promise<boolean>,

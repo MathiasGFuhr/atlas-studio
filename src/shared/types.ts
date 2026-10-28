@@ -773,6 +773,7 @@ export const IPC = {
     remove: 'lipSyncRefs:remove',
     removeByProject: 'lipSyncRefs:removeByProject',
     archiveByProject: 'lipSyncRefs:archiveByProject',
+    scanFolder: 'lipSyncRefs:scanFolder',
   },
   prompts: {
     list: 'prompts:list',

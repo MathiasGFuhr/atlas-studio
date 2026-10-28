@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   Copy,
+  FolderInput,
   FolderPlus,
   ImagePlus,
   LayoutGrid,
@@ -14,14 +15,14 @@ import {
   Trash2,
   Users,
 } from 'lucide-react'
-import type { LipSyncRef, LipSyncSubject } from '@shared/lipSyncRefs'
+import type { LipSyncFolderScan, LipSyncRef, LipSyncSubject } from '@shared/lipSyncRefs'
 import { LIPSYNC_SUBJECT_LABEL } from '@shared/lipSyncRefs'
 import type { CustomPrompt } from '@shared/quickPrompts'
 import type { Channel, Project } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
-import { ConfirmDialog } from '../components/Modal'
+import { ConfirmDialog, Modal } from '../components/Modal'
 import { SavedPromptPicker } from '../components/SavedPromptPicker'
 import {
   EMPTY_PROJECT_FORM,
@@ -222,6 +223,7 @@ export function LipSyncRefsPage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
+  const [folderImport, setFolderImport] = useState<LipSyncFolderScan | null>(null)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const itemsRef = useRef(items)
   const draftsRef = useRef(drafts)
@@ -490,6 +492,117 @@ export function LipSyncRefsPage() {
       push(item?.imagePath ? 'Imagem trocada.' : 'Imagem adicionada.', 'success')
     } catch (error) {
       pushError(error, 'Não foi possível trocar a imagem.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function countFolderConflicts(scan: LipSyncFolderScan): number {
+    return scan.matches.filter((match) => items[match.number - 1]?.imagePath.trim()).length
+  }
+
+  /** O usuário sempre escolhe a pasta; a do projeto só serve de ponto de partida no diálogo. */
+  async function importFromFolder() {
+    const projectId = currentProjectId()
+    if (!projectId) {
+      push('Crie um projeto de música para puxar as imagens.')
+      return
+    }
+    const project = projects.find((entry) => entry.id === projectId)
+    const linked =
+      project?.projectFolderPath && project.folderExists !== false ? project.projectFolderPath : ''
+    setBusy(true)
+    try {
+      const folder = await api.dialog.selectFolder({
+        title: 'Pasta com as imagens da música',
+        defaultPath: linked || undefined,
+      })
+      if (!folder) return
+      const scan = await api.lipSyncRefs.scanFolder(folder)
+      if (!linked && project) {
+        await api.projects.update(project.id, { projectFolderPath: scan.folder })
+        notifyProjectsChanged()
+      }
+      if (scan.matches.length === 0) {
+        push(`Nenhuma imagem com nome só de número (1.png, 2.jpg…) em ${scan.folder}.`, 'error')
+        return
+      }
+      if (countFolderConflicts(scan) > 0) {
+        setFolderImport(scan)
+        return
+      }
+      await applyFolderImport(scan, true)
+    } catch (error) {
+      pushError(error, 'Não foi possível ler a pasta.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Imagem N vai para a cena N; números além da fila criam cenas, inclusive vazias, para manter a numeração. */
+  async function applyFolderImport(scan: LipSyncFolderScan, replaceExisting: boolean) {
+    setFolderImport(null)
+    const projectId = currentProjectId() || null
+    const queue = itemsRef.current
+    const byNumber = new Map(scan.matches.map((match) => [match.number, match]))
+    const lastNumber = scan.matches[scan.matches.length - 1]?.number ?? 0
+    let applied = 0
+    let kept = 0
+    let created = 0
+    const failed: string[] = []
+    setBusy(true)
+    try {
+      for (const match of scan.matches) {
+        const item = queue[match.number - 1]
+        if (!item) continue
+        if (item.imagePath.trim() && !replaceExisting) {
+          kept += 1
+          continue
+        }
+        const draft = draftsRef.current[item.id]
+        try {
+          await api.lipSyncRefs.update(item.id, {
+            imagePath: match.path,
+            label: draft?.label ?? item.label,
+            prompt: draft?.prompt ?? item.prompt,
+            lyrics: draft?.lyrics ?? item.lyrics,
+            projectId: (draft?.projectId ?? item.projectId) || null,
+          })
+          applied += 1
+        } catch {
+          failed.push(match.fileName)
+        }
+      }
+
+      for (let number = queue.length + 1; number <= lastNumber; number += 1) {
+        const match = byNumber.get(number)
+        try {
+          await api.lipSyncRefs.create({ projectId, subject: 'singer', imagePath: match?.path })
+          if (match) applied += 1
+          created += 1
+        } catch {
+          // Parar aqui: seguir criaria as próximas cenas com o número errado.
+          failed.push(match?.fileName ?? `cena ${sceneNumber(number - 1)}`)
+          break
+        }
+      }
+
+      await refresh()
+
+      const parts = [applied === 1 ? '1 imagem aplicada' : `${applied} imagens aplicadas`]
+      if (created > 0) parts.push(created === 1 ? '1 cena criada' : `${created} cenas criadas`)
+      if (kept > 0) parts.push(kept === 1 ? '1 card com imagem mantido' : `${kept} cards com imagem mantidos`)
+      if (scan.ignored.length > 0) {
+        const shown = scan.ignored.slice(0, 5).join(', ')
+        const extra = scan.ignored.length > 5 ? ` e mais ${scan.ignored.length - 5}` : ''
+        parts.push(`ignorados: ${shown}${extra}`)
+      }
+      push(`${parts.join(' · ')}.`, 'success')
+      if (failed.length > 0) {
+        push(`Não foi possível importar: ${failed.join(', ')}.`, 'error')
+      }
+    } catch (error) {
+      pushError(error, 'Não foi possível puxar as imagens da pasta.')
     } finally {
       setBusy(false)
     }
@@ -774,6 +887,17 @@ export function LipSyncRefsPage() {
                 onClick={() => setClearOpen(true)}
               >
                 Limpar fila
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className={toolbarButtonClass}
+                icon={<FolderInput className="h-3.5 w-3.5" />}
+                disabled={busy || !canCreateScene()}
+                title="Escolha a pasta da música: cada imagem com nome só de número (1.png, 2.jpg…) vai para a cena de mesmo número."
+                onClick={() => void importFromFolder()}
+              >
+                Puxar da pasta
               </Button>
               <Button
                 type="button"
@@ -1128,6 +1252,41 @@ export function LipSyncRefsPage() {
         onConfirm={() => void clearQueue()}
         onClose={() => setClearOpen(false)}
       />
+
+      <Modal
+        open={folderImport !== null}
+        title="Substituir imagens das cenas?"
+        onClose={() => setFolderImport(null)}
+        footer={
+          folderImport ? (
+            <>
+              <Button variant="secondary" onClick={() => setFolderImport(null)}>
+                Cancelar
+              </Button>
+              <Button variant="secondary" onClick={() => void applyFolderImport(folderImport, false)}>
+                Só cards vazios
+              </Button>
+              <Button onClick={() => void applyFolderImport(folderImport, true)}>Substituir</Button>
+            </>
+          ) : null
+        }
+      >
+        {folderImport ? (
+          <p className="text-sm leading-relaxed text-muted">
+            {(() => {
+              const conflicts = countFolderConflicts(folderImport)
+              const total = folderImport.matches.length
+              return conflicts === 1
+                ? `1 das ${total} cenas encontradas já tem imagem.`
+                : `${conflicts} das ${total} cenas encontradas já têm imagem.`
+            })()}{' '}
+            Prompt e trecho de cada cena não mudam.
+            <span className="mt-2 block truncate text-xs text-muted-2" title={folderImport.folder}>
+              {folderImport.folder}
+            </span>
+          </p>
+        ) : null}
+      </Modal>
 
       {menu && menuItem ? (
         <div

@@ -112,7 +112,7 @@ export function ChannelCalendarPage() {
     title: '',
     description: '',
     scheduledDate: todayDateKey(),
-    status: 'colocando' as ChannelVideoStatus,
+    status: 'editando' as ChannelVideoStatus,
     projectFolderPath: null as string | null,
     thumbnailText: '',
     songTitle: '',
@@ -212,7 +212,7 @@ export function ChannelCalendarPage() {
       title: '',
       description: '',
       scheduledDate: dateKey ?? todayDateKey(),
-      status: 'colocando',
+      status: 'editando',
       projectFolderPath: null,
       thumbnailText: '',
       songTitle: '',
@@ -233,7 +233,7 @@ export function ChannelCalendarPage() {
       title: video.title,
       description: video.description,
       scheduledDate: video.scheduledDate,
-      status: video.status,
+      status: video.status === 'colocando' ? 'editando' : video.status,
       projectFolderPath: video.projectFolderPath ?? null,
       thumbnailText: '',
       songTitle: '',
@@ -899,7 +899,6 @@ export function ChannelCalendarPage() {
               value={form.status}
               onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ChannelVideoStatus }))}
               options={[
-                { value: 'colocando', label: 'Colocando' },
                 { value: 'editando', label: 'Editando' },
                 { value: 'agendando', label: 'Agendando' },
                 { value: 'publicado', label: 'Publicado' },

@@ -1093,6 +1093,9 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.lipSyncRefs.archiveByProject, (_e, projectId: string, subject?: LipSyncSubject) =>
     lipSyncRefRepository.archiveByProject(projectId, subject),
   )
+  ipcMain.handle(IPC.lipSyncRefs.scanFolder, (_e, folder: string) =>
+    lipSyncRefRepository.scanFolder(folder),
+  )
 
   ipcMain.handle(IPC.dialog.selectFiles, async () => {
     const win = getMainWindow()

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { getDb } from '../db/database'
 import type {
+  LipSyncFolderScan,
   LipSyncRef,
   LipSyncRefCreateInput,
   LipSyncRefListFilters,
@@ -17,6 +18,7 @@ import {
   importLipSyncImage,
   removeLipSyncImage,
 } from '../services/storage/lipSyncMedia'
+import { scanLipSyncFolder } from '../services/storage/lipSyncFolderScan'
 import { createProjectFolder, folderExists } from '../services/storage/projectFolders'
 import { channelRepository } from './channelRepository'
 import { projectRepository } from './projectRepository'
@@ -260,6 +262,10 @@ export const lipSyncRefRepository = {
       if (this.remove(row.id)) removed += 1
     }
     return removed
+  },
+
+  scanFolder(folder: string): LipSyncFolderScan {
+    return scanLipSyncFolder(folder)
   },
 
   archiveByProject(projectId: string, subject?: LipSyncSubject): LipSyncRef[] {

@@ -27,7 +27,7 @@ export const EMPTY_PROJECT_FORM: ProjectFormValues = {
   publicationTitle: '',
   publicationDescription: '',
   scheduledDate: '',
-  publicationStatus: 'colocando',
+  publicationStatus: 'editando',
 }
 
 export function projectToFormValues(project: Project): ProjectFormValues {
@@ -38,7 +38,10 @@ export function projectToFormValues(project: Project): ProjectFormValues {
     publicationTitle: project.scheduledVideoTitle || project.name,
     publicationDescription: project.scheduledVideoDescription ?? '',
     scheduledDate: project.scheduledDate ?? '',
-    publicationStatus: project.scheduledVideoStatus ?? 'colocando',
+    publicationStatus:
+      !project.scheduledVideoStatus || project.scheduledVideoStatus === 'colocando'
+        ? 'editando'
+        : project.scheduledVideoStatus,
   }
 }
 
@@ -160,7 +163,6 @@ function ScheduleFields({
           value={form.publicationStatus}
           onChange={(e) => onChange({ publicationStatus: e.target.value as ChannelVideoStatus })}
           options={[
-            { value: 'colocando', label: 'Colocando' },
             { value: 'editando', label: 'Editando' },
             { value: 'agendando', label: 'Agendando' },
             { value: 'publicado', label: 'Publicado' },
