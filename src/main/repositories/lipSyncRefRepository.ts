@@ -117,7 +117,7 @@ function assertProjectExists(projectId: string | null) {
   if (!row) throw new Error('Projeto não encontrado.')
 }
 
-function ensureProjectFolder(projectId: string): string {
+export function ensureProjectFolder(projectId: string): string {
   const project = projectRepository.get(projectId)
   if (!project) throw new Error('Projeto não encontrado.')
   if (project.projectFolderPath && folderExists(project.projectFolderPath)) {

@@ -16,6 +16,7 @@ import { useToast } from '../components/Toast'
 import type { CodexAuth } from '../hooks/useCodexAuth'
 import { notifySettingsChanged } from '../lib/settingsEvents'
 import { AgentIntegrationModels } from '../components/settings/AgentIntegrationModels'
+import { ComfySettingsCard } from '../components/settings/ComfySettingsCard'
 import { useAgentModels } from '../hooks/useAgentModels'
 import { cn } from '../lib/utils'
 import { requestProductTourReplay } from '../lib/productTourEvents'
@@ -615,6 +616,8 @@ export function SettingsPage({
             }
           />
         </SettingsCard>
+
+        <ComfySettingsCard />
       </div>
 
       <div className="mt-5">

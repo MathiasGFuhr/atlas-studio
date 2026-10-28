@@ -172,6 +172,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyLipSyncRefsAudio,
   },
+  {
+    version: 23,
+    name: 'comfy-queue',
+    backup: false,
+    up: applyComfyQueue,
+  },
 ]
 
 /** Versão lógica do schema: sempre o último passo de SCHEMA_STEPS. */
@@ -361,6 +367,44 @@ function applyLipSyncRefsAudio(database: AppDatabase): SchemaStepResult {
   }
   ensureColumn(database, 'lipsync_refs', 'audio_path', "TEXT NOT NULL DEFAULT ''")
   ensureColumn(database, 'lipsync_refs', 'audio_duration', 'REAL')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyComfyQueue(database: AppDatabase): SchemaStepResult {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS comfy_batches (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      output_dir TEXT NOT NULL,
+      status TEXT NOT NULL,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS comfy_jobs (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      ref_id TEXT NOT NULL,
+      scene_number INTEGER NOT NULL,
+      image_path TEXT NOT NULL,
+      audio_path TEXT NOT NULL,
+      prompt TEXT NOT NULL DEFAULT '',
+      duration INTEGER NOT NULL,
+      seed INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      prompt_id TEXT,
+      output_json TEXT,
+      output_path TEXT,
+      error TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+  database.exec('CREATE INDEX IF NOT EXISTS idx_comfy_batches_created ON comfy_batches(created_at)')
+  database.exec('CREATE INDEX IF NOT EXISTS idx_comfy_jobs_batch ON comfy_jobs(batch_id, scene_number)')
   return { historyCreated: 0, musicCreated: 0 }
 }
 

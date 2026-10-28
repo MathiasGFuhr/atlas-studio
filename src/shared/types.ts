@@ -776,6 +776,18 @@ export const IPC = {
     archiveByProject: 'lipSyncRefs:archiveByProject',
     scanFolder: 'lipSyncRefs:scanFolder',
   },
+  comfy: {
+    getConfig: 'comfy:getConfig',
+    saveConfig: 'comfy:saveConfig',
+    importWorkflow: 'comfy:importWorkflow',
+    testConnection: 'comfy:testConnection',
+    start: 'comfy:start',
+    latest: 'comfy:latest',
+    pause: 'comfy:pause',
+    resume: 'comfy:resume',
+    cancel: 'comfy:cancel',
+    retryFailed: 'comfy:retryFailed',
+  },
   prompts: {
     list: 'prompts:list',
     get: 'prompts:get',

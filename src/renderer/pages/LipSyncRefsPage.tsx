@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
+  Clapperboard,
   Copy,
   FolderInput,
   FolderPlus,
@@ -25,6 +26,7 @@ import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { ConfirmDialog, Modal } from '../components/Modal'
 import { SavedPromptPicker } from '../components/SavedPromptPicker'
+import { ComfyBatchModal } from '../components/lipsync/ComfyBatchModal'
 import {
   EMPTY_PROJECT_FORM,
   ProjectEditorModal,
@@ -235,6 +237,7 @@ export function LipSyncRefsPage() {
   const [busy, setBusy] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
   const [folderImport, setFolderImport] = useState<LipSyncFolderScan | null>(null)
+  const [comfyOpen, setComfyOpen] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const itemsRef = useRef(items)
   const draftsRef = useRef(drafts)
@@ -989,6 +992,16 @@ export function LipSyncRefsPage() {
               >
                 Nova cena
               </Button>
+              <Button
+                variant="secondary"
+                className={toolbarButtonClass}
+                icon={<Clapperboard className="h-3.5 w-3.5" />}
+                disabled={items.length === 0}
+                title="Envia as cenas ao ComfyUI, 5 por vez na fila, e baixa cada vídeo assim que termina."
+                onClick={() => setComfyOpen(true)}
+              >
+                Gerar no Comfy
+              </Button>
             </div>
           </div>
 
@@ -1360,6 +1373,14 @@ export function LipSyncRefsPage() {
         confirmLabel="Limpar fila"
         onConfirm={() => void clearQueue()}
         onClose={() => setClearOpen(false)}
+      />
+
+      <ComfyBatchModal
+        open={comfyOpen}
+        onClose={() => setComfyOpen(false)}
+        items={items}
+        projectId={currentProjectId() || null}
+        beforeStart={refresh}
       />
 
       <Modal

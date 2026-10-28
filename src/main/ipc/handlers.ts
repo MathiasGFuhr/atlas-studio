@@ -18,6 +18,15 @@ import type {
   VideoListFilters,
 } from '../../shared/types'
 import { projectRepository } from '../repositories/projectRepository'
+import type { ComfyConfig } from '../../shared/comfy'
+import {
+  comfyQueueService,
+  getComfyConfig,
+  importComfyWorkflow,
+  saveComfyConfig,
+  startComfyBatch,
+  testComfyConnection,
+} from '../services/comfy'
 import {
   createProjectFolder,
   folderExists,
@@ -1099,6 +1108,29 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.lipSyncRefs.scanFolder, (_e, folder: string) =>
     lipSyncRefRepository.scanFolder(folder),
   )
+
+  ipcMain.handle(IPC.comfy.getConfig, () => getComfyConfig())
+  ipcMain.handle(
+    IPC.comfy.saveConfig,
+    (_e, patch: Partial<Pick<ComfyConfig, 'baseUrl' | 'queueSize' | 'durationPadding'>>) => saveComfyConfig(patch),
+  )
+  ipcMain.handle(IPC.comfy.importWorkflow, async () => {
+    const win = getMainWindow()
+    const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: 'Workflow do ComfyUI (formato API)',
+      properties: ['openFile'],
+      filters: [{ name: 'Workflow JSON', extensions: ['json'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return importComfyWorkflow(result.filePaths[0])
+  })
+  ipcMain.handle(IPC.comfy.testConnection, (_e, baseUrl?: string) => testComfyConnection(baseUrl))
+  ipcMain.handle(IPC.comfy.start, (_e, projectId: string | null) => startComfyBatch(projectId))
+  ipcMain.handle(IPC.comfy.latest, () => comfyQueueService.latestView())
+  ipcMain.handle(IPC.comfy.pause, (_e, batchId: string) => comfyQueueService.pause(batchId))
+  ipcMain.handle(IPC.comfy.resume, (_e, batchId: string) => comfyQueueService.resume(batchId))
+  ipcMain.handle(IPC.comfy.cancel, (_e, batchId: string) => comfyQueueService.cancel(batchId))
+  ipcMain.handle(IPC.comfy.retryFailed, (_e, batchId: string) => comfyQueueService.retryFailed(batchId))
 
   ipcMain.handle(IPC.dialog.selectFiles, async () => {
     const win = getMainWindow()

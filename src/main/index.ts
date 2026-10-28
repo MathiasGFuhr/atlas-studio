@@ -12,6 +12,7 @@ import {
 } from './boot'
 import { flushDatabasePersist } from './db/database'
 import { killActiveFfmpegProcesses } from './services/audio/ffmpeg'
+import { comfyQueueService } from './services/comfy'
 import {
   registerAtlasMediaScheme,
 } from './services/media/atlasMediaProtocol'
@@ -129,6 +130,7 @@ app.whenReady().then(async () => {
 
     createWindow()
     startAppUpdateService({ getWindow: getMainWindow })
+    comfyQueueService.resumeOnBoot()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -159,6 +161,7 @@ app.on('before-quit', () => {
   }
   splashController?.dispose()
   splashController = null
+  comfyQueueService.stop()
   killActiveFfmpegProcesses()
   void getCodexService()?.disconnect()
   void getRuntimeManager()?.shutdown()

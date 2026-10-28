@@ -78,6 +78,7 @@ import type {
   LipSyncRefUpdateInput,
   LipSyncSubject,
 } from '../src/shared/lipSyncRefs'
+import { DEFAULT_COMFY_CONFIG } from '../src/shared/comfy'
 
 /**
  * Mock API para preview no navegador (sem Electron).
@@ -1404,6 +1405,20 @@ export const mockApi = {
       lipSyncRefs.push(...remaining)
       return archived
     },
+  },
+  comfy: {
+    getConfig: async () => ({ ...DEFAULT_COMFY_CONFIG }),
+    saveConfig: async () => ({ ...DEFAULT_COMFY_CONFIG }),
+    importWorkflow: async () => null,
+    testConnection: async () => ({ ok: false, message: 'Disponível só no app do Atlas.' }),
+    start: async () => {
+      throw new Error('O envio ao ComfyUI só funciona no app do Atlas.')
+    },
+    latest: async () => null,
+    pause: async () => null,
+    resume: async () => null,
+    cancel: async () => null,
+    retryFailed: async () => null,
   },
   system: {
     copyText: async (text: string) => {
