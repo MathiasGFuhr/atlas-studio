@@ -15,10 +15,13 @@ import { localImageThumbUrl, localImageUrl } from '../services/media/localImageU
 import { warmImageThumbnails } from '../services/media/imageThumbnails'
 import {
   archiveLipSyncRefToProjectFolder,
+  importLipSyncAudio,
   importLipSyncImage,
+  removeLipSyncAudio,
   removeLipSyncImage,
 } from '../services/storage/lipSyncMedia'
-import { scanLipSyncFolder } from '../services/storage/lipSyncFolderScan'
+import { scanLipSyncFolderWithDurations } from '../services/storage/lipSyncFolderScan'
+import { probeAudioDuration } from '../services/audio/audioProbe'
 import { createProjectFolder, folderExists } from '../services/storage/projectFolders'
 import { channelRepository } from './channelRepository'
 import { projectRepository } from './projectRepository'
@@ -29,6 +32,8 @@ type Row = {
   prompt: string
   lyrics: string | null
   image_path: string
+  audio_path: string | null
+  audio_duration: number | null
   project_id: string | null
   project_name: string | null
   project_folder_path: string | null
@@ -46,6 +51,8 @@ const SELECT = `
     r.prompt,
     r.lyrics,
     r.image_path,
+    r.audio_path,
+    r.audio_duration,
     r.project_id,
     p.name AS project_name,
     p.folder_path AS project_folder_path,
@@ -76,6 +83,11 @@ function mapRow(row: Row): LipSyncRef {
     imageDataUrl: localImageUrl(row.image_path),
     imageThumbUrl: localImageThumbUrl(row.image_path, 360),
     imagePreviewUrl: localImageThumbUrl(row.image_path, 1080),
+    audioPath: row.audio_path?.trim() ?? '',
+    audioDuration:
+      row.audio_duration != null && Number.isFinite(Number(row.audio_duration))
+        ? Number(row.audio_duration)
+        : null,
     projectId: row.project_id?.trim() || null,
     projectName: row.project_name?.trim() || null,
     subject: mapSubject(row.subject),
@@ -247,7 +259,27 @@ export const lipSyncRefRepository = {
     removeLipSyncImage(row.image_path, {
       projectFolder: row.project_folder_path,
     })
+    removeLipSyncAudio(row.audio_path)
     return true
+  },
+
+  /** Copia o áudio para userData e grava a duração lida pelo FFmpeg. Caminho vazio desvincula. */
+  async setAudio(id: string, sourcePath: string): Promise<LipSyncRef | null> {
+    const current = this.get(id)
+    if (!current) return null
+    const source = sourcePath?.trim() ?? ''
+    let audioPath = ''
+    let duration: number | null = null
+    if (source) {
+      duration = await probeAudioDuration(source)
+      if (duration === null) throw new Error('Não foi possível ler a duração deste áudio.')
+      audioPath = importLipSyncAudio(source, id)
+    }
+    getDb()
+      .prepare('UPDATE lipsync_refs SET audio_path = ?, audio_duration = ?, updated_at = ? WHERE id = ?')
+      .run(audioPath, duration, new Date().toISOString(), id)
+    if (!audioPath) removeLipSyncAudio(current.audioPath)
+    return this.get(id)
   },
 
   removeByProject(projectId: string, subject?: LipSyncSubject): number {
@@ -264,8 +296,8 @@ export const lipSyncRefRepository = {
     return removed
   },
 
-  scanFolder(folder: string): LipSyncFolderScan {
-    return scanLipSyncFolder(folder)
+  scanFolder(folder: string): Promise<LipSyncFolderScan> {
+    return scanLipSyncFolderWithDurations(folder)
   },
 
   archiveByProject(projectId: string, subject?: LipSyncSubject): LipSyncRef[] {
@@ -284,6 +316,7 @@ export const lipSyncRefRepository = {
     for (const item of active) {
       archiveLipSyncRefToProjectFolder({
         sourceImagePath: item.imagePath,
+        sourceAudioPath: item.audioPath,
         projectFolder,
         label: item.label,
         prompt: item.prompt,

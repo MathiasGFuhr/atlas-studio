@@ -531,6 +531,8 @@ const api = {
       >,
     update: (id: string, patch: LipSyncRefUpdateInput) =>
       ipcRenderer.invoke(IPC.lipSyncRefs.update, id, patch) as Promise<LipSyncRef | null>,
+    setAudio: (id: string, audioPath: string) =>
+      ipcRenderer.invoke(IPC.lipSyncRefs.setAudio, id, audioPath) as Promise<LipSyncRef | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.lipSyncRefs.remove, id) as Promise<boolean>,
     removeByProject: (projectId: string, subject?: LipSyncSubject) =>
       ipcRenderer.invoke(IPC.lipSyncRefs.removeByProject, projectId, subject) as Promise<number>,

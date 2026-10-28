@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { matchNumberedImages, sceneNumberFromFileName } from './lipSyncRefs'
+import {
+  comfyDurationSeconds,
+  matchNumberedFiles,
+  matchNumberedImages,
+  sceneNumberFromFileName,
+} from './lipSyncRefs'
 
 function files(...names: string[]) {
   return names.map((fileName) => ({ fileName, path: `C:/musica/${fileName}` }))
@@ -38,5 +43,39 @@ describe('matchNumberedImages', () => {
     expect(matches).toHaveLength(1)
     expect(matches[0]?.fileName).toBe('1.png')
     expect(ignored).toEqual(['01.jpg', 'cena_1.png'])
+  })
+})
+
+describe('matchNumberedFiles', () => {
+  it('aplica a mesma regra aos áudios e preserva campos extras', () => {
+    const { matches, ignored } = matchNumberedFiles(
+      files('2.MP3', '1.wav', '1.mp3', 'faixa.mp3').map((file) => ({ ...file, duration: null })),
+    )
+    expect(matches.map((entry) => [entry.number, entry.fileName])).toEqual([
+      [1, '1.mp3'],
+      [2, '2.MP3'],
+    ])
+    expect(matches[0]).toHaveProperty('duration', null)
+    expect(ignored).toEqual(['1.wav', 'faixa.mp3'])
+  })
+})
+
+describe('comfyDurationSeconds', () => {
+  it('usa a parte inteira do áudio mais 1 segundo', () => {
+    expect(comfyDurationSeconds(21)).toBe(22)
+    expect(comfyDurationSeconds(21.4)).toBe(22)
+    expect(comfyDurationSeconds(21.99)).toBe(22)
+    expect(comfyDurationSeconds(0.6)).toBe(1)
+  })
+
+  it('aceita outra folga', () => {
+    expect(comfyDurationSeconds(14.3, 0)).toBe(14)
+    expect(comfyDurationSeconds(14.3, 2)).toBe(16)
+  })
+
+  it('sem duração válida não há envio', () => {
+    expect(comfyDurationSeconds(null)).toBeNull()
+    expect(comfyDurationSeconds(0)).toBeNull()
+    expect(comfyDurationSeconds(Number.NaN)).toBeNull()
   })
 })

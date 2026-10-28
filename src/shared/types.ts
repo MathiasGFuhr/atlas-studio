@@ -770,6 +770,7 @@ export const IPC = {
     create: 'lipSyncRefs:create',
     createMany: 'lipSyncRefs:createMany',
     update: 'lipSyncRefs:update',
+    setAudio: 'lipSyncRefs:setAudio',
     remove: 'lipSyncRefs:remove',
     removeByProject: 'lipSyncRefs:removeByProject',
     archiveByProject: 'lipSyncRefs:archiveByProject',

@@ -1086,6 +1086,9 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.lipSyncRefs.update, (_e, id: string, patch: LipSyncRefUpdateInput) =>
     lipSyncRefRepository.update(id, patch),
   )
+  ipcMain.handle(IPC.lipSyncRefs.setAudio, (_e, id: string, audioPath: string) =>
+    lipSyncRefRepository.setAudio(id, audioPath),
+  )
   ipcMain.handle(IPC.lipSyncRefs.remove, (_e, id: string) => lipSyncRefRepository.remove(id))
   ipcMain.handle(IPC.lipSyncRefs.removeByProject, (_e, projectId: string, subject?: LipSyncSubject) =>
     lipSyncRefRepository.removeByProject(projectId, subject),

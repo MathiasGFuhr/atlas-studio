@@ -9,6 +9,7 @@ import {
   Library,
   Mic2,
   MoreHorizontal,
+  Music2,
   Plus,
   Replace,
   Search,
@@ -16,7 +17,7 @@ import {
   Users,
 } from 'lucide-react'
 import type { LipSyncFolderScan, LipSyncRef, LipSyncSubject } from '@shared/lipSyncRefs'
-import { LIPSYNC_SUBJECT_LABEL } from '@shared/lipSyncRefs'
+import { LIPSYNC_SUBJECT_LABEL, comfyDurationSeconds } from '@shared/lipSyncRefs'
 import type { CustomPrompt } from '@shared/quickPrompts'
 import type { Channel, Project } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
@@ -77,6 +78,10 @@ type SceneMenuState = {
   top: number
   left: number
   flip: boolean
+}
+
+function formatSeconds(value: number): string {
+  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} s`
 }
 
 function countClass(length: number): string {
@@ -157,6 +162,12 @@ const SceneListRow = memo(function SceneListRow({
                 <Mic2 className="h-3 w-3" aria-hidden />
               )}
               {LIPSYNC_SUBJECT_LABEL[item.subject]}
+              {item.audioDuration !== null ? (
+                <span className="ml-1.5 inline-flex items-center gap-0.5 tabular-nums" title="Áudio da cena">
+                  <Music2 className="h-3 w-3" aria-hidden />
+                  {formatSeconds(item.audioDuration)}
+                </span>
+              ) : null}
             </span>
           </span>
         </button>
@@ -497,8 +508,22 @@ export function LipSyncRefsPage() {
     }
   }
 
+  /** Cenas da pasta que já têm a imagem ou o áudio que seria substituído. */
   function countFolderConflicts(scan: LipSyncFolderScan): number {
-    return scan.matches.filter((match) => items[match.number - 1]?.imagePath.trim()).length
+    const numbers = new Set<number>()
+    for (const match of scan.matches) {
+      if (items[match.number - 1]?.imagePath.trim()) numbers.add(match.number)
+    }
+    for (const audio of scan.audios) {
+      if (items[audio.number - 1]?.audioPath.trim()) numbers.add(audio.number)
+    }
+    return numbers.size
+  }
+
+  function countFolderScenes(scan: LipSyncFolderScan): number {
+    const lastScene = Math.max(items.length, scan.matches[scan.matches.length - 1]?.number ?? 0)
+    const audios = scan.audios.filter((audio) => audio.number <= lastScene)
+    return new Set([...scan.matches, ...audios].map((entry) => entry.number)).size
   }
 
   /** O usuário sempre escolhe a pasta; a do projeto só serve de ponto de partida no diálogo. */
@@ -514,7 +539,7 @@ export function LipSyncRefsPage() {
     setBusy(true)
     try {
       const folder = await api.dialog.selectFolder({
-        title: 'Pasta com as imagens da música',
+        title: 'Pasta com as imagens e áudios da música',
         defaultPath: linked || undefined,
       })
       if (!folder) return
@@ -523,8 +548,11 @@ export function LipSyncRefsPage() {
         await api.projects.update(project.id, { projectFolderPath: scan.folder })
         notifyProjectsChanged()
       }
-      if (scan.matches.length === 0) {
-        push(`Nenhuma imagem com nome só de número (1.png, 2.jpg…) em ${scan.folder}.`, 'error')
+      if (scan.matches.length === 0 && scan.audios.length === 0) {
+        push(
+          `Nenhuma imagem ou áudio com nome só de número (1.png, 1.mp3…) em ${scan.folder}.`,
+          'error',
+        )
         return
       }
       if (countFolderConflicts(scan) > 0) {
@@ -539,15 +567,22 @@ export function LipSyncRefsPage() {
     }
   }
 
-  /** Imagem N vai para a cena N; números além da fila criam cenas, inclusive vazias, para manter a numeração. */
+  /**
+   * Imagem e áudio N vão para a cena N. Imagens além da fila criam cenas, inclusive vazias, para
+   * manter a numeração; áudios nunca criam cena.
+   */
   async function applyFolderImport(scan: LipSyncFolderScan, replaceExisting: boolean) {
     setFolderImport(null)
     const projectId = currentProjectId() || null
     const queue = itemsRef.current
+    const scenes = [...queue]
     const byNumber = new Map(scan.matches.map((match) => [match.number, match]))
     const lastNumber = scan.matches[scan.matches.length - 1]?.number ?? 0
+    const withoutScene: string[] = []
     let applied = 0
+    let audiosApplied = 0
     let kept = 0
+    let keptAudios = 0
     let created = 0
     const failed: string[] = []
     setBusy(true)
@@ -577,7 +612,9 @@ export function LipSyncRefsPage() {
       for (let number = queue.length + 1; number <= lastNumber; number += 1) {
         const match = byNumber.get(number)
         try {
-          await api.lipSyncRefs.create({ projectId, subject: 'singer', imagePath: match?.path })
+          scenes.push(
+            await api.lipSyncRefs.create({ projectId, subject: 'singer', imagePath: match?.path }),
+          )
           if (match) applied += 1
           created += 1
         } catch {
@@ -587,14 +624,43 @@ export function LipSyncRefsPage() {
         }
       }
 
+      for (const audio of scan.audios) {
+        const item = scenes[audio.number - 1]
+        if (!item) {
+          withoutScene.push(audio.fileName)
+          continue
+        }
+        if (item.audioPath.trim() && !replaceExisting) {
+          keptAudios += 1
+          continue
+        }
+        try {
+          await api.lipSyncRefs.setAudio(item.id, audio.path)
+          audiosApplied += 1
+        } catch {
+          failed.push(audio.fileName)
+        }
+      }
+
       await refresh()
 
-      const parts = [applied === 1 ? '1 imagem aplicada' : `${applied} imagens aplicadas`]
+      const parts: string[] = []
+      if (scan.matches.length > 0) {
+        parts.push(applied === 1 ? '1 imagem aplicada' : `${applied} imagens aplicadas`)
+      }
+      if (scan.audios.length > 0) {
+        parts.push(audiosApplied === 1 ? '1 áudio aplicado' : `${audiosApplied} áudios aplicados`)
+      }
       if (created > 0) parts.push(created === 1 ? '1 cena criada' : `${created} cenas criadas`)
       if (kept > 0) parts.push(kept === 1 ? '1 card com imagem mantido' : `${kept} cards com imagem mantidos`)
-      if (scan.ignored.length > 0) {
-        const shown = scan.ignored.slice(0, 5).join(', ')
-        const extra = scan.ignored.length > 5 ? ` e mais ${scan.ignored.length - 5}` : ''
+      if (keptAudios > 0) {
+        parts.push(keptAudios === 1 ? '1 card com áudio mantido' : `${keptAudios} cards com áudio mantidos`)
+      }
+      if (withoutScene.length > 0) parts.push(`sem cena: ${withoutScene.join(', ')}`)
+      const ignored = [...scan.ignored, ...scan.ignoredAudios]
+      if (ignored.length > 0) {
+        const shown = ignored.slice(0, 5).join(', ')
+        const extra = ignored.length > 5 ? ` e mais ${ignored.length - 5}` : ''
         parts.push(`ignorados: ${shown}${extra}`)
       }
       push(`${parts.join(' · ')}.`, 'success')
@@ -602,7 +668,22 @@ export function LipSyncRefsPage() {
         push(`Não foi possível importar: ${failed.join(', ')}.`, 'error')
       }
     } catch (error) {
-      pushError(error, 'Não foi possível puxar as imagens da pasta.')
+      pushError(error, 'Não foi possível puxar as imagens e áudios da pasta.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeAudio(id: string) {
+    setBusy(true)
+    try {
+      const updated = await api.lipSyncRefs.setAudio(id, '')
+      if (updated) {
+        setItems((current) => current.map((item) => (item.id === id ? updated : item)))
+      }
+      push('Áudio removido da cena.', 'success')
+    } catch (error) {
+      pushError(error, 'Não foi possível remover o áudio.')
     } finally {
       setBusy(false)
     }
@@ -894,7 +975,7 @@ export function LipSyncRefsPage() {
                 className={toolbarButtonClass}
                 icon={<FolderInput className="h-3.5 w-3.5" />}
                 disabled={busy || !canCreateScene()}
-                title="Escolha a pasta da música: cada imagem com nome só de número (1.png, 2.jpg…) vai para a cena de mesmo número."
+                title="Escolha a pasta da música: cada imagem e áudio com nome só de número (1.png, 1.mp3…) vai para a cena de mesmo número."
                 onClick={() => void importFromFolder()}
               >
                 Puxar da pasta
@@ -1070,6 +1151,34 @@ export function LipSyncRefsPage() {
                           ))}
                         </select>
                       </label>
+
+                      <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-bg/30 px-3 py-2">
+                        <span className="flex min-w-0 items-center gap-2 text-xs">
+                          <Music2 className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+                          {selectedItem.audioDuration !== null ? (
+                            <span className="truncate text-text">
+                              Áudio {formatSeconds(selectedItem.audioDuration)}
+                              <span className="text-muted">
+                                {' '}
+                                · envio ao Comfy: {comfyDurationSeconds(selectedItem.audioDuration)} s
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-muted">
+                              Sem áudio. Use “Puxar da pasta” com 1.mp3, 2.mp3…
+                            </span>
+                          )}
+                        </span>
+                        {selectedItem.audioPath ? (
+                          <button
+                            type="button"
+                            className="shrink-0 text-xs font-medium text-muted transition-colors hover:text-text"
+                            onClick={() => void removeAudio(selectedItem.id)}
+                          >
+                            Remover
+                          </button>
+                        ) : null}
+                      </div>
 
                       <div className="flex flex-col">
                         <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -1255,7 +1364,7 @@ export function LipSyncRefsPage() {
 
       <Modal
         open={folderImport !== null}
-        title="Substituir imagens das cenas?"
+        title="Substituir imagens e áudios das cenas?"
         onClose={() => setFolderImport(null)}
         footer={
           folderImport ? (
@@ -1275,10 +1384,10 @@ export function LipSyncRefsPage() {
           <p className="text-sm leading-relaxed text-muted">
             {(() => {
               const conflicts = countFolderConflicts(folderImport)
-              const total = folderImport.matches.length
+              const total = countFolderScenes(folderImport)
               return conflicts === 1
-                ? `1 das ${total} cenas encontradas já tem imagem.`
-                : `${conflicts} das ${total} cenas encontradas já têm imagem.`
+                ? `1 das ${total} cenas encontradas já tem imagem ou áudio.`
+                : `${conflicts} das ${total} cenas encontradas já têm imagem ou áudio.`
             })()}{' '}
             Prompt e trecho de cada cena não mudam.
             <span className="mt-2 block truncate text-xs text-muted-2" title={folderImport.folder}>

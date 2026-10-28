@@ -166,6 +166,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyLipSyncRefsLyrics,
   },
+  {
+    version: 22,
+    name: 'lipsync-refs-audio',
+    backup: false,
+    up: applyLipSyncRefsAudio,
+  },
 ]
 
 /** Versão lógica do schema: sempre o último passo de SCHEMA_STEPS. */
@@ -343,6 +349,18 @@ function applyLipSyncRefsLyrics(database: AppDatabase): SchemaStepResult {
     return { historyCreated: 0, musicCreated: 0 }
   }
   ensureColumn(database, 'lipsync_refs', 'lyrics', "TEXT NOT NULL DEFAULT ''")
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyLipSyncRefsAudio(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'lipsync_refs')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'lipsync_refs', 'audio_path', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(database, 'lipsync_refs', 'audio_duration', 'REAL')
   return { historyCreated: 0, musicCreated: 0 }
 }
 

@@ -26,6 +26,10 @@ export type LipSyncRef = {
   imageThumbUrl?: string | null
   /** Versão reduzida (lado menor ~1080px) para o preview grande; null em imagens legadas. */
   imagePreviewUrl?: string | null
+  /** Trecho de áudio da cena (cópia em userData); vazio quando ainda não vinculado. */
+  audioPath: string
+  /** Duração real do áudio em segundos, lida pelo FFmpeg. */
+  audioDuration: number | null
   projectId: string | null
   projectName: string | null
   subject: LipSyncSubject
@@ -72,11 +76,21 @@ export const LIPSYNC_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp
 /** Acima disso o número do arquivo não é tratado como número de cena (ex.: `foto_2026.png`). */
 export const LIPSYNC_MAX_SCENE_NUMBER = 500
 
+export const LIPSYNC_AUDIO_EXTENSIONS = ['.wav', '.mp3', '.m4a', '.aac', '.ogg', '.flac']
+
+/** Segundos somados à parte inteira do áudio ao preencher o "Duration" do workflow do Comfy. */
+export const COMFY_DURATION_PADDING_SECONDS = 1
+
 export type LipSyncNumberedImage = {
   /** Número da cena, começando em 1. */
   number: number
   fileName: string
   path: string
+}
+
+export type LipSyncNumberedAudio = LipSyncNumberedImage & {
+  /** null quando o FFmpeg não conseguiu ler o arquivo. */
+  duration: number | null
 }
 
 export type LipSyncFolderScan = {
@@ -85,6 +99,23 @@ export type LipSyncFolderScan = {
   matches: LipSyncNumberedImage[]
   /** Imagens sem número válido ou com número repetido. */
   ignored: string[]
+  /** Áudios numerados, ordenados pelo número da cena. */
+  audios: LipSyncNumberedAudio[]
+  /** Áudios sem número válido ou com número repetido. */
+  ignoredAudios: string[]
+}
+
+/**
+ * Duração inteira enviada ao Comfy: parte inteira do áudio + folga (21,4 s → 22).
+ * Segundos inteiros mantêm `duração × 24 + 1` no formato 8n+1 que o LTX exige.
+ */
+export function comfyDurationSeconds(
+  audioDuration: number | null | undefined,
+  paddingSeconds = COMFY_DURATION_PADDING_SECONDS,
+): number | null {
+  if (audioDuration == null || !Number.isFinite(audioDuration) || audioDuration <= 0) return null
+  const padding = Math.max(0, Math.floor(paddingSeconds))
+  return Math.max(1, Math.floor(audioDuration) + padding)
 }
 
 function fileStem(fileName: string): string {
@@ -108,8 +139,15 @@ export function sceneNumberFromFileName(fileName: string): number | null {
 export function matchNumberedImages(
   files: { fileName: string; path: string }[],
 ): Pick<LipSyncFolderScan, 'matches' | 'ignored'> {
+  return matchNumberedFiles(files)
+}
+
+/** Mesma regra de `matchNumberedImages`, para qualquer tipo de arquivo (ex.: áudios). */
+export function matchNumberedFiles<T extends { fileName: string; path: string }>(
+  files: T[],
+): { matches: Array<T & { number: number }>; ignored: string[] } {
   const ignored: string[] = []
-  const byNumber = new Map<number, LipSyncNumberedImage[]>()
+  const byNumber = new Map<number, Array<T & { number: number }>>()
 
   for (const file of files) {
     const number = sceneNumberFromFileName(file.fileName)
@@ -118,11 +156,11 @@ export function matchNumberedImages(
       continue
     }
     const group = byNumber.get(number) ?? []
-    group.push({ number, fileName: file.fileName, path: file.path })
+    group.push({ ...file, number })
     byNumber.set(number, group)
   }
 
-  const matches: LipSyncNumberedImage[] = []
+  const matches: Array<T & { number: number }> = []
   for (const group of byNumber.values()) {
     group.sort(
       (a, b) =>

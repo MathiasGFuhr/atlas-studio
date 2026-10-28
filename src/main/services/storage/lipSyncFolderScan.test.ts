@@ -33,6 +33,23 @@ describe('scanLipSyncFolder', () => {
     ])
     expect(scan.matches[0]?.path).toBe(path.join(root, '1.jpg'))
     expect(scan.ignored).toEqual(['capa.png', 'cena_4.png'])
+    expect(scan.audios.map((entry) => [entry.number, entry.fileName, entry.duration])).toEqual([
+      [5, '5.mp3', null],
+    ])
+  })
+
+  it('pega áudios numerados ao lado das imagens', () => {
+    touch('1.png', '1.MP3', '2.wav', '3.flac', 'musica-inteira.mp3', 'notas.txt')
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.matches.map((entry) => entry.number)).toEqual([1])
+    expect(scan.audios.map((entry) => [entry.number, entry.fileName])).toEqual([
+      [1, '1.MP3'],
+      [2, '2.wav'],
+      [3, '3.flac'],
+    ])
+    expect(scan.ignoredAudios).toEqual(['musica-inteira.mp3'])
   })
 
   it('falha quando a pasta não existe', () => {

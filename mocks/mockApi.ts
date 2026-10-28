@@ -1318,6 +1318,8 @@ export const mockApi = {
         imageDataUrl: imagePath
           ? 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="400"><rect width="100%" height="100%" fill="%231a1a1a"/><text x="50%" y="50%" fill="%2388ff99" font-size="18" text-anchor="middle" dy=".3em">Lipsync</text></svg>'
           : null,
+        audioPath: '',
+        audioDuration: null,
         projectId,
         projectName: project?.name ?? null,
         subject: input.subject === 'band' ? 'band' : 'singer',
@@ -1355,6 +1357,19 @@ export const mockApi = {
         projectId,
         projectName: project?.name ?? null,
         subject: patch.subject === 'band' ? 'band' : patch.subject === 'singer' ? 'singer' : current.subject,
+        updatedAt: new Date().toISOString(),
+      }
+      lipSyncRefs[index] = next
+      return next
+    },
+    setAudio: async (id: string, audioPath: string) => {
+      const index = lipSyncRefs.findIndex((item) => item.id === id)
+      if (index < 0) return null
+      const path = audioPath.trim()
+      const next: LipSyncRef = {
+        ...lipSyncRefs[index],
+        audioPath: path,
+        audioDuration: path ? 12.5 : null,
         updatedAt: new Date().toISOString(),
       }
       lipSyncRefs[index] = next
