@@ -18,6 +18,7 @@ import {
 } from '../components/ProjectEditorModal'
 import { MusicPublicationCard } from '../components/MusicPublicationCard'
 import { ProjectFolderPanel } from '../components/ProjectFolderPanel'
+import { SongLyricsPanel } from '../components/SongLyricsPanel'
 import { getAtlasApi } from '../lib/api'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { notifyVideosChanged, onVideosChanged } from '../lib/videoEvents'
@@ -246,6 +247,17 @@ export function ProjectDetailPage({ projectType }: { projectType: ProjectType })
               />
             </div>
           ) : null}
+
+          <SongLyricsPanel
+            lyrics={project.songLyrics ?? ''}
+            onSave={async (lyrics) => {
+              const updated = await api.projects.update(project.id, { songLyrics: lyrics })
+              if (!updated) throw new Error('Projeto não encontrado.')
+              setProject(updated)
+              notifyProjectsChanged()
+              push('Letra da música salva.', 'success')
+            }}
+          />
 
           <div data-tour="page-actions" className="flex items-center justify-between">
             <h2 className="text-base font-semibold text-text">Faixas do projeto</h2>

@@ -8,6 +8,7 @@ function project(id: string): Project {
     id,
     name: id,
     description: '',
+    songLyrics: '',
     projectType: 'music',
     channelId: null,
     projectFolderPath: null,

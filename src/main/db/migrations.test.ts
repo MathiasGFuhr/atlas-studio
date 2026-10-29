@@ -897,4 +897,13 @@ describe('migração de prompts públicos', () => {
     const cols = db.prepare('PRAGMA table_info(quick_prompts)').all() as Array<{ name: string }>
     expect(cols.some((col) => col.name === 'is_public')).toBe(true)
   })
+
+  it('adiciona letra da música no projeto', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    const result = migrateSchema(db)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    const cols = db.prepare('PRAGMA table_info(projects)').all() as Array<{ name: string }>
+    expect(cols.some((col) => col.name === 'song_lyrics')).toBe(true)
+  })
 })

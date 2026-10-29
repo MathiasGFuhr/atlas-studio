@@ -22,6 +22,7 @@ import type {
   GenerationResult,
   Niche,
   Project,
+  ProjectPatch,
   ProjectType,
   RemoveProjectOptions,
   ScriptRecord,
@@ -104,10 +105,8 @@ const api = {
       channelId?: string | null
       projectFolderPath?: string | null
     }) => ipcRenderer.invoke(IPC.projects.create, input) as Promise<Project>,
-    update: (
-      id: string,
-      patch: Partial<Pick<Project, 'name' | 'description' | 'projectFolderPath' | 'channelId'>>,
-    ) => ipcRenderer.invoke(IPC.projects.update, id, patch) as Promise<Project | null>,
+    update: (id: string, patch: ProjectPatch) =>
+      ipcRenderer.invoke(IPC.projects.update, id, patch) as Promise<Project | null>,
     remove: (id: string, options?: RemoveProjectOptions) =>
       ipcRenderer.invoke(IPC.projects.remove, id, options) as Promise<boolean>,
     /** Cria a pasta física do projeto na raiz configurada. */

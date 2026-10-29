@@ -1,4 +1,4 @@
-import { useEffect, useRef, type TextareaHTMLAttributes } from 'react'
+import { forwardRef, useEffect, useRef, type Ref, type TextareaHTMLAttributes } from 'react'
 import { cn } from '../lib/utils'
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -6,12 +6,21 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   autoGrow?: boolean
 }
 
-export function Textarea({ className, label, id, autoGrow, value, onChange, ...props }: TextareaProps) {
-  const ref = useRef<HTMLTextAreaElement>(null)
+function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
+  if (!ref) return
+  if (typeof ref === 'function') ref(value)
+  else ref.current = value
+}
+
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
+  { className, label, id, autoGrow, value, onChange, ...props },
+  forwardedRef,
+) {
+  const localRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    if (!autoGrow || !ref.current) return
-    const el = ref.current
+    if (!autoGrow || !localRef.current) return
+    const el = localRef.current
     el.style.height = 'auto'
     const minHeight = Number.parseFloat(getComputedStyle(el).minHeight) || 88
     el.style.height = `${Math.min(Math.max(el.scrollHeight, minHeight), 360)}px`
@@ -22,7 +31,10 @@ export function Textarea({ className, label, id, autoGrow, value, onChange, ...p
       {label ? <span className="text-sm font-medium text-muted">{label}</span> : null}
       <textarea
         id={id}
-        ref={ref}
+        ref={(node) => {
+          localRef.current = node
+          assignRef(forwardedRef, node)
+        }}
         value={value}
         onChange={onChange}
         className={cn(
@@ -35,4 +47,4 @@ export function Textarea({ className, label, id, autoGrow, value, onChange, ...p
       />
     </label>
   )
-}
+})

@@ -13,7 +13,6 @@ import {
   Music2,
   Plus,
   Replace,
-  Search,
   Trash2,
   Users,
 } from 'lucide-react'
@@ -39,6 +38,7 @@ import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { environmentBreadcrumb } from '../lib/environments'
 import { notifyProjectsChanged } from '../lib/projectEvents'
+import { SongLyricsPanel } from '../components/SongLyricsPanel'
 import { cn } from '../lib/utils'
 
 type Draft = {
@@ -85,6 +85,7 @@ function sceneNumber(index: number): string {
 }
 
 const TEXT_SOFT_LIMIT = 2000
+const STORYBOARD_THUMB_SIZE = 72
 
 type SceneMenuState = {
   id: string
@@ -151,6 +152,7 @@ const SceneListRow = memo(function SceneListRow({
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
           aria-current={selected ? 'true' : undefined}
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => onSelect(item.id)}
         >
           <div className="h-14 w-11 shrink-0 overflow-hidden rounded-md bg-bg/40">
@@ -212,6 +214,7 @@ const StoryboardItem = memo(function StoryboardItem({
       type="button"
       className="shrink-0 text-left"
       style={{ width }}
+      onMouseDown={(event) => event.preventDefault()}
       onClick={() => onSelect(item.id)}
     >
       <div
@@ -240,7 +243,6 @@ export function LipSyncRefsPage() {
   const [channels, setChannels] = useState<Channel[]>([])
   const [attachProjectId, setAttachProjectId] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [thumbSize, setThumbSize] = useState(96)
   const [menu, setMenu] = useState<SceneMenuState | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const storyboardRef = useRef<HTMLDivElement>(null)
@@ -266,6 +268,7 @@ export function LipSyncRefsPage() {
 
   const refreshSeq = useRef(0)
   const pullSeq = useRef(0)
+  const skipSceneScrollRef = useRef(false)
   const pushErrorRef = useRef(pushError)
   pushErrorRef.current = pushError
 
@@ -838,6 +841,16 @@ export function LipSyncRefsPage() {
     }
   }
 
+  async function saveSongLyrics(lyrics: string) {
+    const projectId = currentProjectId()
+    if (!projectId) throw new Error('Escolha um projeto.')
+    const updated = await api.projects.update(projectId, { songLyrics: lyrics })
+    if (!updated) throw new Error('Projeto não encontrado.')
+    setProjects((current) => current.map((project) => (project.id === updated.id ? updated : project)))
+    notifyProjectsChanged()
+    push('Letra da música salva.', 'success')
+  }
+
   async function copyPrompt(id: string) {
     const draft = drafts[id]
     const item = items.find((entry) => entry.id === id)
@@ -913,6 +926,10 @@ export function LipSyncRefsPage() {
 
   useEffect(() => {
     if (!selectedId) return
+    if (skipSceneScrollRef.current) {
+      skipSceneScrollRef.current = false
+      return
+    }
     document.getElementById(`lipsync-board-${selectedId}`)?.scrollIntoView({
       inline: 'nearest',
       block: 'nearest',
@@ -1064,6 +1081,57 @@ export function LipSyncRefsPage() {
     })
   }
 
+  async function assignExcerptToSelectedScene(excerpt: string, remaining: string): Promise<boolean> {
+    const text = excerpt.replace(/\r\n/g, '\n').trim()
+    if (!text) {
+      push('Selecione um trecho da letra.')
+      return false
+    }
+    const item = visibleItems.find((entry) => entry.id === selectedId) ?? null
+    if (!item) {
+      push('Escolha a cena na lista à esquerda.')
+      return false
+    }
+    const number = sceneNumber(indexById.get(item.id) ?? 0)
+    const draft = draftsRef.current[item.id] ?? toDraft(item)
+    const nextDraft = { ...draft, lyrics: text }
+    setDrafts((current) => ({ ...current, [item.id]: nextDraft }))
+    try {
+      const updated = await api.lipSyncRefs.update(item.id, {
+        label: nextDraft.label,
+        prompt: nextDraft.prompt,
+        lyrics: nextDraft.lyrics,
+        projectId: nextDraft.projectId || null,
+      })
+      if (!updated) return false
+      setItems((current) => current.map((entry) => (entry.id === item.id ? updated : entry)))
+      setDrafts((current) => ({ ...current, [item.id]: toDraft(updated) }))
+
+      const projectId = currentProjectId()
+      if (projectId) {
+        const project = await api.projects.update(projectId, { songLyrics: remaining })
+        if (project) {
+          setProjects((current) =>
+            current.map((entry) => (entry.id === project.id ? project : entry)),
+          )
+        }
+      }
+
+      const next = visibleItems[(indexById.get(item.id) ?? -1) + 1]
+      if (next) {
+        skipSceneScrollRef.current = true
+        setSelectedId(next.id)
+        push(`Trecho na cena ${number}. Próxima: ${sceneNumber(indexById.get(next.id) ?? 0)}.`, 'success')
+      } else {
+        push(`Trecho enviado para a cena ${number}.`, 'success')
+      }
+      return true
+    } catch (error) {
+      pushError(error, 'Não foi possível enviar o trecho.')
+      return false
+    }
+  }
+
   const toolbarButtonClass = 'h-9 px-3 py-0 text-xs'
   const editsDisabled = busy || projectLocked
 
@@ -1179,6 +1247,20 @@ export function LipSyncRefsPage() {
               </Button>
             </div>
           </div>
+
+          {selectedProject ? (
+            <div className="mb-3 shrink-0">
+              <SongLyricsPanel
+                key={selectedProject.id}
+                lyrics={selectedProject.songLyrics ?? ''}
+                disabled={editsDisabled}
+                collapsible
+                assignTarget={selectedItem ? { number: selectedNumber } : null}
+                onSave={saveSongLyrics}
+                onAssign={assignExcerptToSelectedScene}
+              />
+            </div>
+          ) : null}
 
           <div className="flex min-h-[560px] flex-1 gap-3">
             <aside className="flex w-[272px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
@@ -1421,9 +1503,18 @@ export function LipSyncRefsPage() {
                           spellCheck={false}
                           className="h-32 w-full resize-none overflow-y-auto rounded-xl border border-border bg-bg/50 px-3 py-2 text-sm leading-relaxed text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
                         />
-                        <p className={cn('mt-1 text-right text-[10px] tabular-nums', countClass(selectedDraft.lyrics.length))}>
-                          {selectedDraft.lyrics.length}/{TEXT_SOFT_LIMIT}
-                        </p>
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          {selectedProject?.songLyrics?.trim() ? (
+                            <p className="text-[10px] text-muted-2">
+                              O trecho selecionado na letra acima vem para esta cena e some de lá.
+                            </p>
+                          ) : (
+                            <span />
+                          )}
+                          <p className={cn('text-right text-[10px] tabular-nums', countClass(selectedDraft.lyrics.length))}>
+                            {selectedDraft.lyrics.length}/{TEXT_SOFT_LIMIT}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1485,28 +1576,14 @@ export function LipSyncRefsPage() {
           <section className="mt-3 shrink-0 rounded-2xl border border-border bg-card px-3 py-3">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-text">Storyboard da música</h2>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-muted-2">
-                  <span className="sr-only">Tamanho das miniaturas</span>
-                  <Search className="h-3.5 w-3.5" aria-hidden />
-                  <input
-                    type="range"
-                    min={72}
-                    max={120}
-                    value={thumbSize}
-                    onChange={(event) => setThumbSize(Number(event.target.value))}
-                    className="w-24 accent-accent"
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-hover hover:text-text"
-                  onClick={showAllScenes}
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  Visualizar todas
-                </button>
-              </div>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-hover hover:text-text"
+                onClick={showAllScenes}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Visualizar todas
+              </button>
             </div>
             <div ref={storyboardRef} className="flex items-start gap-2 overflow-x-auto pb-1">
               {visibleItems.map((item) => (
@@ -1516,14 +1593,14 @@ export function LipSyncRefsPage() {
                   number={sceneNumber(indexById.get(item.id) ?? 0)}
                   name={(drafts[item.id]?.label ?? item.label).trim() || 'Sem nome'}
                   selected={item.id === selectedId}
-                  width={thumbSize}
+                  width={STORYBOARD_THUMB_SIZE}
                   onSelect={handleSelectScene}
                 />
               ))}
               <button
                 type="button"
                 className="flex shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-[10px] font-medium text-muted transition-colors hover:border-accent/40 hover:text-text disabled:opacity-50"
-                style={{ width: thumbSize, height: Math.round(thumbSize * (4 / 3)) }}
+                style={{ width: STORYBOARD_THUMB_SIZE, height: Math.round(STORYBOARD_THUMB_SIZE * (4 / 3)) }}
                 disabled={editsDisabled || !canCreateScene()}
                 onClick={() => void addScene()}
               >

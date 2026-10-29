@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db/database'
-import type { ChannelVideoStatus, Project, ProjectType } from '../../shared/types'
+import type { ChannelVideoStatus, Project, ProjectPatch, ProjectType } from '../../shared/types'
 import { isProjectType, MUSIC_PROJECT_HAS_PUBLICATION_ERROR } from '../../shared/types'
 import { folderExists } from '../services/storage/projectFolders'
 import { localImageUrl } from '../services/media/localImageUrl'
@@ -10,6 +10,7 @@ type ProjectRow = {
   id: string
   name: string
   description: string | null
+  song_lyrics: string | null
   project_type: string
   folder_path: string | null
   channel_id: string | null
@@ -35,6 +36,7 @@ function mapProject(row: ProjectRow): Project {
     id: row.id,
     name: row.name,
     description: row.description ?? '',
+    songLyrics: row.song_lyrics ?? '',
     projectType: 'music',
     channelId,
     channelName: row.channel_name ?? null,
@@ -170,10 +172,7 @@ export const projectRepository = {
     return this.get(id)!
   },
 
-  update(
-    id: string,
-    patch: Partial<Pick<Project, 'name' | 'description' | 'projectFolderPath' | 'channelId'>>,
-  ): Project | null {
+  update(id: string, patch: ProjectPatch): Project | null {
     const current = this.get(id)
     if (!current) return null
 
@@ -182,6 +181,8 @@ export const projectRepository = {
 
     const description =
       patch.description !== undefined ? patch.description.trim() : current.description
+    const songLyrics =
+      patch.songLyrics !== undefined ? patch.songLyrics.replace(/\r\n/g, '\n') : current.songLyrics
     const folderPath =
       patch.projectFolderPath !== undefined
         ? patch.projectFolderPath?.trim() || null
@@ -194,9 +195,9 @@ export const projectRepository = {
 
     getDb()
       .prepare(
-        'UPDATE projects SET name = ?, description = ?, folder_path = ?, channel_id = ?, updated_at = ? WHERE id = ?',
+        'UPDATE projects SET name = ?, description = ?, song_lyrics = ?, folder_path = ?, channel_id = ?, updated_at = ? WHERE id = ?',
       )
-      .run(name, description, folderPath, channelId, updatedAt, id)
+      .run(name, description, songLyrics, folderPath, channelId, updatedAt, id)
     return this.get(id)
   },
 

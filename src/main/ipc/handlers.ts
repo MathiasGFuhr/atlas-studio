@@ -10,6 +10,7 @@ import type {
   ChannelVideo,
   ChannelVideoWriteInput,
   Project,
+  ProjectPatch,
   ProjectType,
   AppSettings,
   RemoveProjectOptions,
@@ -194,13 +195,8 @@ export function registerIpcHandlers(deps: {
       },
     ) => projectRepository.create(input),
   )
-  ipcMain.handle(
-    IPC.projects.update,
-    (
-      _e,
-      id: string,
-      patch: Partial<Pick<Project, 'name' | 'description' | 'projectFolderPath' | 'channelId'>>,
-    ) => projectRepository.update(id, patch),
+  ipcMain.handle(IPC.projects.update, (_e, id: string, patch: ProjectPatch) =>
+    projectRepository.update(id, patch),
   )
   ipcMain.handle(IPC.projects.remove, (_e, id: string, options?: RemoveProjectOptions) =>
     removeProject(id, options),

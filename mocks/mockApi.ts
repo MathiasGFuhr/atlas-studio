@@ -290,6 +290,7 @@ export const mockApi = {
         id: crypto.randomUUID(),
         name: input.name.trim(),
         description: input.description?.trim() ?? '',
+        songLyrics: '',
         projectType: input.projectType,
         channelId: channel?.id ?? null,
         channelName: channel?.name ?? null,
@@ -315,6 +316,7 @@ export const mockApi = {
       }
       if (patch.name !== undefined) next.name = patch.name.trim()
       if (patch.description !== undefined) next.description = patch.description.trim()
+      if (patch.songLyrics !== undefined) next.songLyrics = patch.songLyrics.replace(/\r\n/g, '\n')
       projects[idx] = next
       return projects[idx]
     },

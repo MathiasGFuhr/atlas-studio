@@ -178,6 +178,12 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyComfyQueue,
   },
+  {
+    version: 24,
+    name: 'projects-song-lyrics',
+    backup: false,
+    up: applyProjectsSongLyrics,
+  },
 ]
 
 /** Versão lógica do schema: sempre o último passo de SCHEMA_STEPS. */
@@ -405,6 +411,17 @@ function applyComfyQueue(database: AppDatabase): SchemaStepResult {
   `)
   database.exec('CREATE INDEX IF NOT EXISTS idx_comfy_batches_created ON comfy_batches(created_at)')
   database.exec('CREATE INDEX IF NOT EXISTS idx_comfy_jobs_batch ON comfy_jobs(batch_id, scene_number)')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyProjectsSongLyrics(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'projects')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'projects', 'song_lyrics', "TEXT NOT NULL DEFAULT ''")
   return { historyCreated: 0, musicCreated: 0 }
 }
 

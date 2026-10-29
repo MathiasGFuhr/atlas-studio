@@ -33,6 +33,7 @@ function channel(partial: Partial<Channel> & Pick<Channel, 'id' | 'name'>): Chan
 function project(partial: Partial<Project> & Pick<Project, 'id' | 'name'>): Project {
   return {
     description: '',
+    songLyrics: '',
     projectType: 'music',
     channelId: 'ch-falk',
     projectFolderPath: null,

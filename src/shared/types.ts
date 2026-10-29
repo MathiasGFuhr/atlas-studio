@@ -34,6 +34,8 @@ export interface Project {
   id: string
   name: string
   description: string
+  /** Letra completa da música (Suno), colada uma vez no projeto. */
+  songLyrics: string
   projectType: ProjectType
   /** Canal opcional vinculado ao projeto. `null` quando o usuário cria sem canal. */
   channelId: string | null
@@ -61,6 +63,10 @@ export interface Project {
   createdAt: string
   updatedAt: string
 }
+
+export type ProjectPatch = Partial<
+  Pick<Project, 'name' | 'description' | 'projectFolderPath' | 'channelId' | 'songLyrics'>
+>
 
 export interface Niche {
   id: string
