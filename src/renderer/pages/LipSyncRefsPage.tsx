@@ -18,7 +18,8 @@ import {
   Users,
 } from 'lucide-react'
 import type { LipSyncFolderScan, LipSyncRef, LipSyncSubject } from '@shared/lipSyncRefs'
-import { LIPSYNC_SUBJECT_LABEL, comfyDurationSeconds } from '@shared/lipSyncRefs'
+import { LIPSYNC_SUBJECT_LABEL, comfyDurationSeconds, lastLipSyncFolderSceneNumber } from '@shared/lipSyncRefs'
+import { planComfyScenes } from '@shared/comfy'
 import type { CustomPrompt } from '@shared/quickPrompts'
 import type { Channel, Project } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
@@ -26,17 +27,18 @@ import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 import { ConfirmDialog, Modal } from '../components/Modal'
 import { SavedPromptPicker } from '../components/SavedPromptPicker'
-import { ComfyBatchModal } from '../components/lipsync/ComfyBatchModal'
+import { useComfyQueue } from '../hooks/useComfyQueue'
+import { ComfyRunpodBar } from '../components/lipsync/ComfyRunpodBar'
 import {
   EMPTY_PROJECT_FORM,
   ProjectEditorModal,
+  folderNameFromPath,
   type ProjectFormValues,
 } from '../components/ProjectEditorModal'
 import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { environmentBreadcrumb } from '../lib/environments'
 import { notifyProjectsChanged } from '../lib/projectEvents'
-import { notifyVideosChanged } from '../lib/videoEvents'
 import { cn } from '../lib/utils'
 
 type Draft = {
@@ -237,12 +239,14 @@ export function LipSyncRefsPage() {
   const [busy, setBusy] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
   const [folderImport, setFolderImport] = useState<LipSyncFolderScan | null>(null)
-  const [comfyOpen, setComfyOpen] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const itemsRef = useRef(items)
   const draftsRef = useRef(drafts)
+  const projectsRef = useRef(projects)
   itemsRef.current = items
   draftsRef.current = drafts
+  projectsRef.current = projects
+  const comfyQueue = useComfyQueue()
   const [editorOpen, setEditorOpen] = useState(false)
   const [projectForm, setProjectForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
   const [projectSaving, setProjectSaving] = useState(false)
@@ -250,6 +254,7 @@ export function LipSyncRefsPage() {
   const [focusSceneId, setFocusSceneId] = useState<string | null>(null)
 
   const refreshSeq = useRef(0)
+  const pullSeq = useRef(0)
   const pushErrorRef = useRef(pushError)
   pushErrorRef.current = pushError
 
@@ -344,64 +349,72 @@ export function LipSyncRefsPage() {
     setFocusSceneId(null)
   }, [focusSceneId, items])
 
-  /** Nova cena entra no projeto da cena aberta; senão no projeto da fila; senão no primeiro projeto. */
   function currentProjectId() {
-    const selected = selectedId ? items.find((item) => item.id === selectedId) : undefined
-    const fromSelected = selected ? (drafts[selected.id]?.projectId ?? selected.projectId ?? '') : ''
-    return fromSelected || items.find((item) => item.projectId)?.projectId || attachProjectId
+    return attachProjectId
   }
+
+  const visibleItems = useMemo(
+    () => (attachProjectId ? items.filter((item) => item.projectId === attachProjectId) : items),
+    [items, attachProjectId],
+  )
+  const visibleItemsRef = useRef(visibleItems)
+  visibleItemsRef.current = visibleItems
+  const projectLocked = Boolean(attachProjectId && comfyQueue.activeProjectIds.includes(attachProjectId))
 
   function canCreateScene() {
     return Boolean(currentProjectId())
   }
 
   function openCreateProject() {
-    setProjectForm({ ...EMPTY_PROJECT_FORM, publicationTitle: '' })
+    const current = projects.find((project) => project.id === attachProjectId)
+    setProjectForm({
+      ...EMPTY_PROJECT_FORM,
+      channelId: current?.channelId ?? '',
+    })
     setEditorOpen(true)
+    void pickCreateFolder()
+  }
+
+  async function pickCreateFolder() {
+    const folder = await api.dialog.selectFolder({
+      title: 'Pasta do projeto (imagens e áudios da música)',
+    })
+    if (!folder) return
+    setProjectForm((current) => ({
+      ...current,
+      projectFolderPath: folder,
+      name: current.name.trim() && current.projectFolderPath ? current.name : folderNameFromPath(folder),
+    }))
   }
 
   async function saveNewProject() {
-    if (!projectForm.name.trim()) {
+    const folder = projectForm.projectFolderPath.trim()
+    const name = projectForm.name.trim() || folderNameFromPath(folder)
+    if (!folder) {
+      push('Escolha a pasta do projeto.', 'error')
+      return
+    }
+    if (!name) {
       push('Informe o nome do projeto.', 'error')
       return
     }
-    if (projectForm.scheduledDate && !projectForm.channelId) {
-      push('Escolha um canal para agendar a publicação.', 'error')
-      return
-    }
     setProjectSaving(true)
+    let created: Project | null = null
     try {
-      const created = await api.projects.create({
-        name: projectForm.name.trim(),
-        description: projectForm.description.trim(),
+      created = await api.projects.create({
+        name,
+        description: '',
         projectType: 'music',
         channelId: projectForm.channelId || null,
+        projectFolderPath: folder,
       })
-
-      if (projectForm.channelId && projectForm.scheduledDate) {
-        await api.videos.create({
-          channelId: projectForm.channelId,
-          title: (projectForm.publicationTitle.trim() || projectForm.name).trim(),
-          description: projectForm.publicationDescription,
-          thumbnailPath: '',
-          scheduledDate: projectForm.scheduledDate,
-          status: projectForm.publicationStatus,
-          projectId: created.id,
-        })
-        notifyVideosChanged()
-      }
 
       notifyProjectsChanged()
       setEditorOpen(false)
       setProjectForm(EMPTY_PROJECT_FORM)
-      setAttachProjectId(created.id)
       await refresh()
-      push(
-        projectForm.channelId && projectForm.scheduledDate
-          ? 'Projeto criado e publicação agendada.'
-          : 'Projeto criado.',
-        'success',
-      )
+      setAttachProjectId(created.id)
+      push('Projeto criado.', 'success')
     } catch (error) {
       pushError(error, 'Não foi possível criar o projeto.')
     } finally {
@@ -515,25 +528,23 @@ export function LipSyncRefsPage() {
   function countFolderConflicts(scan: LipSyncFolderScan): number {
     const numbers = new Set<number>()
     for (const match of scan.matches) {
-      if (items[match.number - 1]?.imagePath.trim()) numbers.add(match.number)
+      if (visibleItems[match.number - 1]?.imagePath.trim()) numbers.add(match.number)
     }
     for (const audio of scan.audios) {
-      if (items[audio.number - 1]?.audioPath.trim()) numbers.add(audio.number)
+      if (visibleItems[audio.number - 1]?.audioPath.trim()) numbers.add(audio.number)
     }
     return numbers.size
   }
 
   function countFolderScenes(scan: LipSyncFolderScan): number {
-    const lastScene = Math.max(items.length, scan.matches[scan.matches.length - 1]?.number ?? 0)
-    const audios = scan.audios.filter((audio) => audio.number <= lastScene)
-    return new Set([...scan.matches, ...audios].map((entry) => entry.number)).size
+    return new Set([...scan.matches, ...scan.audios].map((entry) => entry.number)).size
   }
 
   /** O usuário sempre escolhe a pasta; a do projeto só serve de ponto de partida no diálogo. */
   async function importFromFolder() {
     const projectId = currentProjectId()
     if (!projectId) {
-      push('Crie um projeto de música para puxar as imagens.')
+      push('Crie um projeto de música para puxar as cenas.')
       return
     }
     const project = projects.find((entry) => entry.id === projectId)
@@ -571,16 +582,20 @@ export function LipSyncRefsPage() {
   }
 
   /**
-   * Imagem e áudio N vão para a cena N. Imagens além da fila criam cenas, inclusive vazias, para
-   * manter a numeração; áudios nunca criam cena.
+   * Imagem e áudio N vão para a cena N. Arquivos além da fila criam cenas, inclusive vazias no
+   * meio, para manter a numeração (15 áudios `1.mp3`…`15.mp3` abrem 15 cenas).
    */
-  async function applyFolderImport(scan: LipSyncFolderScan, replaceExisting: boolean) {
+  async function applyFolderImport(
+    scan: LipSyncFolderScan,
+    replaceExisting: boolean,
+    options?: { projectId?: string | null; queue?: LipSyncRef[]; quiet?: boolean },
+  ) {
     setFolderImport(null)
-    const projectId = currentProjectId() || null
-    const queue = itemsRef.current
+    const projectId = options?.projectId !== undefined ? options.projectId : currentProjectId() || null
+    const queue = options?.queue ?? visibleItemsRef.current
     const scenes = [...queue]
     const byNumber = new Map(scan.matches.map((match) => [match.number, match]))
-    const lastNumber = scan.matches[scan.matches.length - 1]?.number ?? 0
+    const lastNumber = lastLipSyncFolderSceneNumber(scan)
     const withoutScene: string[] = []
     let applied = 0
     let audiosApplied = 0
@@ -616,7 +631,12 @@ export function LipSyncRefsPage() {
         const match = byNumber.get(number)
         try {
           scenes.push(
-            await api.lipSyncRefs.create({ projectId, subject: 'singer', imagePath: match?.path }),
+            await api.lipSyncRefs.create({
+              projectId,
+              subject: 'singer',
+              imagePath: match?.path,
+              label: match ? undefined : String(number),
+            }),
           )
           if (match) applied += 1
           created += 1
@@ -647,6 +667,9 @@ export function LipSyncRefsPage() {
 
       await refresh()
 
+      const changed = applied + audiosApplied + created
+      if (options?.quiet && changed === 0) return
+
       const parts: string[] = []
       if (scan.matches.length > 0) {
         parts.push(applied === 1 ? '1 imagem aplicada' : `${applied} imagens aplicadas`)
@@ -676,6 +699,32 @@ export function LipSyncRefsPage() {
       setBusy(false)
     }
   }
+
+  async function pullLinkedFolder(projectId: string) {
+    const project = projectsRef.current.find((entry) => entry.id === projectId)
+    const folder =
+      project?.projectFolderPath && project.folderExists !== false ? project.projectFolderPath.trim() : ''
+    if (!folder) return
+    if (comfyQueue.activeProjectIds.includes(projectId)) return
+    const seq = ++pullSeq.current
+    const queue = itemsRef.current.filter((item) => item.projectId === projectId)
+    try {
+      const scan = await api.lipSyncRefs.scanFolder(folder)
+      if (seq !== pullSeq.current) return
+      if (scan.matches.length === 0 && scan.audios.length === 0) return
+      await applyFolderImport(scan, false, { projectId, queue, quiet: true })
+    } catch (error) {
+      if (seq !== pullSeq.current) return
+      pushError(error, 'Não foi possível puxar a pasta deste projeto.')
+    }
+  }
+
+  useEffect(() => {
+    if (loading || !attachProjectId) return
+    void pullLinkedFolder(attachProjectId)
+    // A troca de projeto é o gatilho; a pasta vinculada entra sozinha na fila.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attachProjectId, loading])
 
   async function removeAudio(id: string) {
     setBusy(true)
@@ -770,22 +819,25 @@ export function LipSyncRefsPage() {
     }
   }
 
-  const indexById = useMemo(() => new Map(items.map((item, index) => [item.id, index])), [items])
+  const indexById = useMemo(
+    () => new Map(visibleItems.map((item, index) => [item.id, index])),
+    [visibleItems],
+  )
 
-  const selectedItem = items.find((item) => item.id === selectedId) ?? null
+  const selectedItem = visibleItems.find((item) => item.id === selectedId) ?? null
   const selectedDraft = selectedItem ? (drafts[selectedItem.id] ?? toDraft(selectedItem)) : null
   const selectedDirty = Boolean(selectedItem && selectedDraft && isDirty(selectedItem, selectedDraft))
   const selectedNumber =
     selectedItem === null ? '' : sceneNumber(indexById.get(selectedItem.id) ?? 0)
-  const menuItem = menu ? (items.find((item) => item.id === menu.id) ?? null) : null
+  const menuItem = menu ? (visibleItems.find((item) => item.id === menu.id) ?? null) : null
 
   useEffect(() => {
     setSelectedId((current) => {
-      if (items.length === 0) return null
-      if (current && items.some((item) => item.id === current)) return current
-      return items[0]?.id ?? null
+      if (visibleItems.length === 0) return null
+      if (current && visibleItems.some((item) => item.id === current)) return current
+      return visibleItems[0]?.id ?? null
     })
-  }, [items])
+  }, [visibleItems])
 
   useEffect(() => {
     if (!menu) return
@@ -840,7 +892,7 @@ export function LipSyncRefsPage() {
 
   /** Apaga de vez as cenas da fila (imagem, prompt e trecho). Nada é salvo no projeto. */
   async function clearQueue() {
-    const ids = itemsRef.current.map((item) => item.id)
+    const ids = visibleItemsRef.current.map((item) => item.id)
     setClearOpen(false)
     if (ids.length === 0) return
     setBusy(true)
@@ -929,7 +981,35 @@ export function LipSyncRefsPage() {
     storyboardRef.current?.scrollTo({ left: 0, behavior: 'smooth' })
   }
 
+  async function openComfyPanel() {
+    const projectId = currentProjectId()
+    if (!projectId) {
+      push('Crie ou selecione um projeto para gerar.')
+      return
+    }
+    if (projectLocked) {
+      comfyQueue.expand()
+      return
+    }
+    try {
+      await refresh()
+    } catch (error) {
+      pushError(error, 'Não foi possível salvar as cenas antes de enviar.')
+      return
+    }
+    const project = projects.find((entry) => entry.id === projectId)
+    const plan = planComfyScenes(visibleItemsRef.current, comfyQueue.config?.durationPadding ?? 1)
+    comfyQueue.openComposer({
+      projectId,
+      projectName: project?.name ?? 'Projeto',
+      sceneCount: plan.scenes.length,
+      totalCount: visibleItemsRef.current.length,
+      problems: plan.problems,
+    })
+  }
+
   const toolbarButtonClass = 'h-9 px-3 py-0 text-xs'
+  const editsDisabled = busy || projectLocked
 
   return (
     <PageShell className="flex flex-col">
@@ -959,14 +1039,49 @@ export function LipSyncRefsPage() {
         </div>
       ) : (
         <div className="flex flex-1 flex-col">
-          <div className="mb-3 flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <ComfyRunpodBar />
+          {projectLocked ? (
+            <p className="mb-3 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2 text-xs text-text">
+              Este projeto está gerando e não pode ser editado. Use <strong>Novo projeto</strong> ao
+              lado do seletor (ou escolha outro já existente), puxe a pasta e monte o próximo vídeo —
+              o RunPod continua.
+            </p>
+          ) : null}
+          <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-[16rem] flex-1 items-center gap-2">
+              <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted">
+                Projeto
+                <select
+                  value={attachProjectId}
+                  onChange={(event) => setAttachProjectId(event.target.value)}
+                  className="h-9 min-w-0 flex-1 rounded-xl border border-border bg-bg/50 px-2 text-sm text-text focus:border-accent/60 focus:outline-none"
+                >
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                      {comfyQueue.activeProjectIds.includes(project.id) ? ' (gerando)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                type="button"
+                variant="secondary"
+                className={toolbarButtonClass}
+                icon={<FolderPlus className="h-3.5 w-3.5" />}
+                title="Cria outro projeto de música nesta aba, sem interromper o que está gerando no RunPod."
+                onClick={openCreateProject}
+              >
+                Novo projeto
+              </Button>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="secondary"
                 className={toolbarButtonClass}
                 icon={<Trash2 className="h-3.5 w-3.5" />}
-                disabled={busy || items.length === 0}
+                disabled={editsDisabled || visibleItems.length === 0}
                 title="Apaga todas as cenas da fila. Nada é salvo."
                 onClick={() => setClearOpen(true)}
               >
@@ -977,8 +1092,8 @@ export function LipSyncRefsPage() {
                 variant="secondary"
                 className={toolbarButtonClass}
                 icon={<FolderInput className="h-3.5 w-3.5" />}
-                disabled={busy || !canCreateScene()}
-                title="Escolha a pasta da música: cada imagem e áudio com nome só de número (1.png, 1.mp3…) vai para a cena de mesmo número."
+                disabled={editsDisabled || !canCreateScene()}
+                title="Escolha a pasta da música: 1.png e 1.mp3 viram a cena 1; 15 áudios numerados já abrem 15 cenas."
                 onClick={() => void importFromFolder()}
               >
                 Puxar da pasta
@@ -987,7 +1102,7 @@ export function LipSyncRefsPage() {
                 type="button"
                 className={toolbarButtonClass}
                 icon={<Plus className="h-3.5 w-3.5" />}
-                disabled={busy || !canCreateScene()}
+                disabled={editsDisabled || !canCreateScene()}
                 onClick={() => void addScene()}
               >
                 Nova cena
@@ -996,9 +1111,9 @@ export function LipSyncRefsPage() {
                 variant="secondary"
                 className={toolbarButtonClass}
                 icon={<Clapperboard className="h-3.5 w-3.5" />}
-                disabled={items.length === 0}
-                title="Envia as cenas ao ComfyUI, 5 por vez na fila, e baixa cada vídeo assim que termina."
-                onClick={() => setComfyOpen(true)}
+                disabled={!attachProjectId}
+                title="Envia as cenas ao ComfyUI. Os vídeos são gravados na pasta das imagens e dos áudios."
+                onClick={() => void openComfyPanel()}
               >
                 Gerar no Comfy
               </Button>
@@ -1010,13 +1125,13 @@ export function LipSyncRefsPage() {
               <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2.5">
                 <h2 className="text-sm font-semibold text-text">
                   Cenas{' '}
-                  <span className="font-medium text-muted">({items.length})</span>
+                  <span className="font-medium text-muted">({visibleItems.length})</span>
                 </h2>
                 <button
                   type="button"
                   title="Anexar imagens"
                   className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-text disabled:opacity-50"
-                  disabled={busy || !canCreateScene()}
+                  disabled={editsDisabled || !canCreateScene()}
                   onClick={() => void addImages()}
                 >
                   <ImagePlus className="h-4 w-4" />
@@ -1028,13 +1143,13 @@ export function LipSyncRefsPage() {
                   className="absolute inset-0 overflow-y-auto p-2"
                   onScroll={() => setMenu(null)}
                 >
-                  {items.length === 0 ? (
+                  {visibleItems.length === 0 ? (
                     <p className="px-2 py-8 text-center text-xs leading-relaxed text-muted">
-                      Nenhuma cena nesta fila. Crie a primeira pela imagem, pelo prompt ou pelo trecho.
+                      Nenhuma cena nesta fila. Puxe a pasta com 1.mp3, 2.mp3… ou crie a primeira à mão.
                     </p>
                   ) : (
                     <ul className="space-y-1">
-                      {items.map((item) => (
+                      {visibleItems.map((item) => (
                         <SceneListRow
                           key={item.id}
                           item={item}
@@ -1053,7 +1168,7 @@ export function LipSyncRefsPage() {
                 <button
                   type="button"
                   className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-accent/40 py-2 text-xs font-semibold text-accent transition-colors hover:bg-accent/10 disabled:opacity-50"
-                  disabled={busy || !canCreateScene()}
+                  disabled={editsDisabled || !canCreateScene()}
                   onClick={() => void addScene()}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -1071,7 +1186,12 @@ export function LipSyncRefsPage() {
                       #{selectedNumber}
                     </span>
                   </div>
-                  <div className="grid flex-1 grid-cols-1 gap-5 p-5 xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,1.2fr)]">
+                  <div
+                    className={cn(
+                      'grid flex-1 grid-cols-1 gap-5 p-5 xl:grid-cols-[minmax(240px,0.8fr)_minmax(0,1.2fr)]',
+                      projectLocked && 'pointer-events-none opacity-60',
+                    )}
+                  >
                     <div className="flex flex-col xl:sticky xl:top-0 xl:self-start">
                       <p className="mb-2 text-xs font-medium text-muted">Imagem da cena</p>
                       <div className="relative h-[360px] overflow-hidden rounded-xl bg-bg/40 xl:h-[460px]">
@@ -1174,6 +1294,7 @@ export function LipSyncRefsPage() {
                               <span className="text-muted">
                                 {' '}
                                 · envio ao Comfy: {comfyDurationSeconds(selectedItem.audioDuration)} s
+                                {comfyQueue.config?.trimToAudio ? ' · baixa no tempo do áudio' : ''}
                               </span>
                             </span>
                           ) : (
@@ -1279,7 +1400,7 @@ export function LipSyncRefsPage() {
                     type="button"
                     className="mt-5"
                     icon={<Plus className="h-4 w-4" />}
-                    disabled={busy || !canCreateScene()}
+                    disabled={editsDisabled || !canCreateScene()}
                     onClick={() => void addScene()}
                   >
                     Nova cena
@@ -1316,7 +1437,7 @@ export function LipSyncRefsPage() {
               </div>
             </div>
             <div ref={storyboardRef} className="flex items-start gap-2 overflow-x-auto pb-1">
-              {items.map((item) => (
+              {visibleItems.map((item) => (
                 <StoryboardItem
                   key={item.id}
                   item={item}
@@ -1331,7 +1452,7 @@ export function LipSyncRefsPage() {
                 type="button"
                 className="flex shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-[10px] font-medium text-muted transition-colors hover:border-accent/40 hover:text-text disabled:opacity-50"
                 style={{ width: thumbSize, height: Math.round(thumbSize * (4 / 3)) }}
-                disabled={busy || !canCreateScene()}
+                disabled={editsDisabled || !canCreateScene()}
                 onClick={() => void addScene()}
               >
                 <Plus className="h-4 w-4" />
@@ -1349,8 +1470,9 @@ export function LipSyncRefsPage() {
         editing={null}
         form={projectForm}
         saving={projectSaving}
-        allowScheduleOnCreate
+        folderFirst
         onChange={(patch) => setProjectForm((current) => ({ ...current, ...patch }))}
+        onPickFolder={() => void pickCreateFolder()}
         onClose={() => {
           setEditorOpen(false)
           setProjectForm(EMPTY_PROJECT_FORM)
@@ -1368,19 +1490,11 @@ export function LipSyncRefsPage() {
         open={clearOpen}
         title="Limpar fila de lipsync?"
         message={`${
-          items.length === 1 ? 'A cena da fila será apagada' : `As ${items.length} cenas da fila serão apagadas`
+          visibleItems.length === 1 ? 'A cena da fila será apagada' : `As ${visibleItems.length} cenas da fila serão apagadas`
         } de vez, com imagem, prompt e trecho. Nada é salvo. Os projetos de música continuam.`}
         confirmLabel="Limpar fila"
         onConfirm={() => void clearQueue()}
         onClose={() => setClearOpen(false)}
-      />
-
-      <ComfyBatchModal
-        open={comfyOpen}
-        onClose={() => setComfyOpen(false)}
-        items={items}
-        projectId={currentProjectId() || null}
-        beforeStart={refresh}
       />
 
       <Modal
@@ -1432,7 +1546,8 @@ export function LipSyncRefsPage() {
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-text hover:bg-hover"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-text hover:bg-hover disabled:opacity-40"
+            disabled={projectLocked}
             onClick={() => {
               const next = menuItem.subject === 'singer' ? 'band' : 'singer'
               setMenu(null)
@@ -1446,7 +1561,7 @@ export function LipSyncRefsPage() {
             type="button"
             role="menuitem"
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-danger hover:bg-danger/10"
-            disabled={busy}
+            disabled={busy || projectLocked}
             onClick={() => {
               const id = menuItem.id
               setMenu(null)

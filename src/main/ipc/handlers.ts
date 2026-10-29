@@ -18,11 +18,14 @@ import type {
   VideoListFilters,
 } from '../../shared/types'
 import { projectRepository } from '../repositories/projectRepository'
-import type { ComfyConfig } from '../../shared/comfy'
+import type { ComfyConfigPatch } from '../../shared/comfy'
 import {
   comfyQueueService,
+  discoverComfyUrl,
   getComfyConfig,
   importComfyWorkflow,
+  latestComfyView,
+  listComfyViews,
   saveComfyConfig,
   startComfyBatch,
   testComfyConnection,
@@ -187,6 +190,7 @@ export function registerIpcHandlers(deps: {
         description?: string
         projectType: ProjectType
         channelId?: string | null
+        projectFolderPath?: string | null
       },
     ) => projectRepository.create(input),
   )
@@ -1110,10 +1114,7 @@ export function registerIpcHandlers(deps: {
   )
 
   ipcMain.handle(IPC.comfy.getConfig, () => getComfyConfig())
-  ipcMain.handle(
-    IPC.comfy.saveConfig,
-    (_e, patch: Partial<Pick<ComfyConfig, 'baseUrl' | 'queueSize' | 'durationPadding'>>) => saveComfyConfig(patch),
-  )
+  ipcMain.handle(IPC.comfy.saveConfig, (_e, patch: ComfyConfigPatch) => saveComfyConfig(patch))
   ipcMain.handle(IPC.comfy.importWorkflow, async () => {
     const win = getMainWindow()
     const result = await dialog.showOpenDialog(win ?? undefined!, {
@@ -1125,8 +1126,10 @@ export function registerIpcHandlers(deps: {
     return importComfyWorkflow(result.filePaths[0])
   })
   ipcMain.handle(IPC.comfy.testConnection, (_e, baseUrl?: string) => testComfyConnection(baseUrl))
+  ipcMain.handle(IPC.comfy.discoverUrl, () => discoverComfyUrl())
   ipcMain.handle(IPC.comfy.start, (_e, projectId: string | null) => startComfyBatch(projectId))
-  ipcMain.handle(IPC.comfy.latest, () => comfyQueueService.latestView())
+  ipcMain.handle(IPC.comfy.list, () => listComfyViews())
+  ipcMain.handle(IPC.comfy.latest, () => latestComfyView())
   ipcMain.handle(IPC.comfy.pause, (_e, batchId: string) => comfyQueueService.pause(batchId))
   ipcMain.handle(IPC.comfy.resume, (_e, batchId: string) => comfyQueueService.resume(batchId))
   ipcMain.handle(IPC.comfy.cancel, (_e, batchId: string) => comfyQueueService.cancel(batchId))

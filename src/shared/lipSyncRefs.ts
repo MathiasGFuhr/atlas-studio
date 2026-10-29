@@ -176,3 +176,12 @@ export function matchNumberedFiles<T extends { fileName: string; path: string }>
   ignored.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
   return { matches, ignored }
 }
+
+/** Último número de cena definido pela pasta (imagem ou áudio). `1.mp3`…`15.mp3` → 15. */
+export function lastLipSyncFolderSceneNumber(
+  scan: Pick<LipSyncFolderScan, 'matches' | 'audios'>,
+): number {
+  const lastImage = scan.matches[scan.matches.length - 1]?.number ?? 0
+  const lastAudio = scan.audios[scan.audios.length - 1]?.number ?? 0
+  return Math.max(lastImage, lastAudio)
+}

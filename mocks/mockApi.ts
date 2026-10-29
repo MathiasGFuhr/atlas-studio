@@ -281,6 +281,7 @@ export const mockApi = {
       description?: string
       projectType: ProjectType
       channelId?: string | null
+      projectFolderPath?: string | null
     }) => {
       const channel = input.channelId
         ? channels.find((c) => c.id === input.channelId) ?? null
@@ -292,8 +293,8 @@ export const mockApi = {
         projectType: input.projectType,
         channelId: channel?.id ?? null,
         channelName: channel?.name ?? null,
-        projectFolderPath: null,
-        folderExists: false,
+        projectFolderPath: input.projectFolderPath?.trim() || null,
+        folderExists: Boolean(input.projectFolderPath?.trim()),
         scriptCount: 0,
         trackCount: 0,
         ...emptyPublicationFields(),
@@ -1411,9 +1412,19 @@ export const mockApi = {
     saveConfig: async () => ({ ...DEFAULT_COMFY_CONFIG }),
     importWorkflow: async () => null,
     testConnection: async () => ({ ok: false, message: 'Disponível só no app do Atlas.' }),
+    discoverUrl: async () => ({
+      ok: false,
+      changed: false,
+      baseUrl: '',
+      podId: '',
+      podName: '',
+      message: 'Disponível só no app do Atlas.',
+      connection: null,
+    }),
     start: async () => {
       throw new Error('O envio ao ComfyUI só funciona no app do Atlas.')
     },
+    list: async () => [],
     latest: async () => null,
     pause: async () => null,
     resume: async () => null,

@@ -1,4 +1,4 @@
-import { ImagePlus, Tv } from 'lucide-react'
+import { FolderSearch, ImagePlus, Tv } from 'lucide-react'
 import type { Channel, ChannelVideoStatus, Project, ProjectType } from '@shared/types'
 import { Button } from './Button'
 import { Input } from './Input'
@@ -12,6 +12,7 @@ export type ProjectFormValues = {
   name: string
   description: string
   channelId: string
+  projectFolderPath: string
   /** Título da publicação no YouTube (quando há vídeo vinculado). */
   publicationTitle: string
   /** Descrição do vídeo (quando há vídeo vinculado). */
@@ -24,6 +25,7 @@ export const EMPTY_PROJECT_FORM: ProjectFormValues = {
   name: '',
   description: '',
   channelId: '',
+  projectFolderPath: '',
   publicationTitle: '',
   publicationDescription: '',
   scheduledDate: '',
@@ -35,6 +37,7 @@ export function projectToFormValues(project: Project): ProjectFormValues {
     name: project.name,
     description: project.description,
     channelId: project.channelId ?? '',
+    projectFolderPath: project.projectFolderPath ?? '',
     publicationTitle: project.scheduledVideoTitle || project.name,
     publicationDescription: project.scheduledVideoDescription ?? '',
     scheduledDate: project.scheduledDate ?? '',
@@ -43,6 +46,10 @@ export function projectToFormValues(project: Project): ProjectFormValues {
         ? 'editando'
         : project.scheduledVideoStatus,
   }
+}
+
+export function folderNameFromPath(folderPath: string): string {
+  return folderPath.split(/[/\\]/).filter(Boolean).pop() || folderPath
 }
 
 function ChannelPicker({
@@ -205,8 +212,10 @@ export function ProjectEditorModal({
   saving,
   thumbPreviewSrc,
   allowScheduleOnCreate = false,
+  folderFirst = false,
   onChange,
   onPickThumbnail,
+  onPickFolder,
   onClose,
   onSubmit,
 }: {
@@ -219,15 +228,20 @@ export function ProjectEditorModal({
   thumbPreviewSrc?: string | null
   /** No create, mostra título/descrição/data/status para agendar no canal. */
   allowScheduleOnCreate?: boolean
+  /** Create pela pasta: sem título/descrição do YouTube. */
+  folderFirst?: boolean
   onChange: (patch: Partial<ProjectFormValues>) => void
   onPickThumbnail?: () => void
+  onPickFolder?: () => void
   onClose: () => void
   onSubmit: () => void
 }) {
   const env = ENVIRONMENTS[projectType]
   const hasPublication = Boolean(editing?.scheduledVideoId)
-  const scheduleOnCreate = allowScheduleOnCreate && !editing
+  const scheduleOnCreate = allowScheduleOnCreate && !editing && !folderFirst
   const showScheduleFields = hasPublication || (scheduleOnCreate && Boolean(form.channelId))
+  const canSubmit =
+    Boolean(form.name.trim()) && (!folderFirst || Boolean(form.projectFolderPath.trim()))
 
   const channelPicker = (
     <ChannelPicker
@@ -254,21 +268,59 @@ export function ProjectEditorModal({
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button disabled={saving} onClick={onSubmit}>
+          <Button disabled={saving || !canSubmit} onClick={onSubmit}>
             {saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Criar projeto'}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
+        {folderFirst ? (
+          <div>
+            <p className="mb-2 text-sm font-medium text-muted">Pasta do projeto</p>
+            {form.projectFolderPath ? (
+              <>
+                <p className="mb-2 break-all rounded-xl border border-border-soft bg-elevated px-3 py-2.5 font-mono text-xs text-muted">
+                  {form.projectFolderPath}
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-9 px-3 text-xs"
+                  icon={<FolderSearch className="h-3.5 w-3.5" />}
+                  onClick={onPickFolder}
+                >
+                  Alterar pasta
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                icon={<FolderSearch className="h-3.5 w-3.5" />}
+                onClick={onPickFolder}
+              >
+                Escolher pasta
+              </Button>
+            )}
+            <p className="mt-2 text-xs leading-relaxed text-muted-2">
+              Nesta etapa só a pasta importa. Título, descrição e agendamento do YouTube ficam para
+              depois.
+            </p>
+          </div>
+        ) : null}
+
         <Input
           label="Nome do projeto"
           value={form.name}
           onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="Ex.: Trilha do canal"
+          placeholder={folderFirst ? 'Preenchido pelo nome da pasta' : 'Ex.: Trilha do canal'}
         />
 
-        {scheduleOnCreate ? (
+        {folderFirst ? (
+          channelPicker
+        ) : scheduleOnCreate ? (
           <>
             {channelPicker}
             {form.channelId ? (

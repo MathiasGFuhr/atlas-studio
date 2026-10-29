@@ -12,7 +12,7 @@ import {
 } from './boot'
 import { flushDatabasePersist } from './db/database'
 import { killActiveFfmpegProcesses } from './services/audio/ffmpeg'
-import { comfyQueueService } from './services/comfy'
+import { comfyQueueService, remapActiveComfyOutputDirs } from './services/comfy'
 import {
   registerAtlasMediaScheme,
 } from './services/media/atlasMediaProtocol'
@@ -130,6 +130,7 @@ app.whenReady().then(async () => {
 
     createWindow()
     startAppUpdateService({ getWindow: getMainWindow })
+    remapActiveComfyOutputDirs()
     comfyQueueService.resumeOnBoot()
 
     app.on('activate', () => {

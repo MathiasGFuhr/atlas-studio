@@ -23,13 +23,14 @@ export interface ComfyStore {
   getBatch(id: string): ComfyBatch | null
   latestBatch(): ComfyBatch | null
   activeBatches(): ComfyBatch[]
-  updateBatch(id: string, patch: Partial<Pick<ComfyBatch, 'status' | 'lastError'>>): void
+  updateBatch(id: string, patch: Partial<Pick<ComfyBatch, 'status' | 'lastError' | 'outputDir'>>): void
   listJobs(batchId: string): StoredComfyJob[]
   updateJob(id: string, patch: ComfyJobPatch): void
 }
 
 const CONFIG_KEY = 'comfyConfig'
 const WORKFLOW_KEY = 'comfyWorkflowJson'
+const RUNPOD_API_KEY = 'comfyRunpodApiKey'
 
 type BatchRow = {
   id: string
@@ -118,21 +119,47 @@ function mapJob(row: JobRow): StoredComfyJob {
 export const sqliteComfyStore: ComfyStore & {
   saveConfig(config: ComfyConfig): ComfyConfig
   saveWorkflow(workflow: ComfyApiWorkflow): void
+  getRunpodApiKey(): string
+  saveRunpodApiKey(apiKey: string): void
 } = {
   getConfig() {
     const raw = readSetting(CONFIG_KEY)
-    if (!raw) return normalizeComfyConfig(null)
+    const hasRunpodApiKey = Boolean(readSetting(RUNPOD_API_KEY)?.trim())
+    if (!raw) return normalizeComfyConfig({ hasRunpodApiKey })
     try {
-      return normalizeComfyConfig(JSON.parse(raw) as Partial<ComfyConfig>)
+      return normalizeComfyConfig({ ...(JSON.parse(raw) as Partial<ComfyConfig>), hasRunpodApiKey })
     } catch {
-      return normalizeComfyConfig(null)
+      return normalizeComfyConfig({ hasRunpodApiKey })
     }
   },
 
   saveConfig(config) {
-    const next = normalizeComfyConfig(config)
-    writeSetting(CONFIG_KEY, JSON.stringify(next))
+    const next = normalizeComfyConfig({ ...config, hasRunpodApiKey: Boolean(this.getRunpodApiKey()) })
+    writeSetting(
+      CONFIG_KEY,
+      JSON.stringify({
+        baseUrl: next.baseUrl,
+        queueSize: next.queueSize,
+        durationPadding: next.durationPadding,
+        trimToAudio: next.trimToAudio,
+        workflowName: next.workflowName,
+        workflowMapping: next.workflowMapping,
+      }),
+    )
     return next
+  },
+
+  getRunpodApiKey() {
+    return readSetting(RUNPOD_API_KEY)?.trim() ?? ''
+  },
+
+  saveRunpodApiKey(apiKey) {
+    const value = apiKey.trim()
+    if (!value) {
+      getDb().prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_API_KEY)
+      return
+    }
+    writeSetting(RUNPOD_API_KEY, value)
   },
 
   getWorkflow() {
@@ -202,10 +229,11 @@ export const sqliteComfyStore: ComfyStore & {
     const current = this.getBatch(id)
     if (!current) return
     getDb()
-      .prepare('UPDATE comfy_batches SET status = ?, last_error = ?, updated_at = ? WHERE id = ?')
+      .prepare('UPDATE comfy_batches SET status = ?, last_error = ?, output_dir = ?, updated_at = ? WHERE id = ?')
       .run(
         patch.status ?? current.status,
         patch.lastError !== undefined ? patch.lastError : current.lastError,
+        patch.outputDir ?? current.outputDir,
         new Date().toISOString(),
         id,
       )

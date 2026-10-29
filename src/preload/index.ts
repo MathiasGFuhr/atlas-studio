@@ -81,7 +81,14 @@ import type {
   LipSyncRefUpdateInput,
   LipSyncSubject,
 } from '../shared/lipSyncRefs'
-import type { ComfyBatchView, ComfyConfig, ComfyConnectionInfo, ComfyStartResult } from '../shared/comfy'
+import type {
+  ComfyBatchView,
+  ComfyConfig,
+  ComfyConfigPatch,
+  ComfyConnectionInfo,
+  ComfyDiscoverResult,
+  ComfyStartResult,
+} from '../shared/comfy'
 import type { WorkspaceCapabilities } from '../shared/workspaceCapabilities'
 import type { AgentModelSnapshot, AgentModelsBundle, AgentProviderId } from '../shared/agents/types'
 
@@ -95,6 +102,7 @@ const api = {
       description?: string
       projectType: ProjectType
       channelId?: string | null
+      projectFolderPath?: string | null
     }) => ipcRenderer.invoke(IPC.projects.create, input) as Promise<Project>,
     update: (
       id: string,
@@ -546,13 +554,15 @@ const api = {
   },
   comfy: {
     getConfig: () => ipcRenderer.invoke(IPC.comfy.getConfig) as Promise<ComfyConfig>,
-    saveConfig: (patch: Partial<Pick<ComfyConfig, 'baseUrl' | 'queueSize' | 'durationPadding'>>) =>
+    saveConfig: (patch: ComfyConfigPatch) =>
       ipcRenderer.invoke(IPC.comfy.saveConfig, patch) as Promise<ComfyConfig>,
     importWorkflow: () => ipcRenderer.invoke(IPC.comfy.importWorkflow) as Promise<ComfyConfig | null>,
     testConnection: (baseUrl?: string) =>
       ipcRenderer.invoke(IPC.comfy.testConnection, baseUrl) as Promise<ComfyConnectionInfo>,
+    discoverUrl: () => ipcRenderer.invoke(IPC.comfy.discoverUrl) as Promise<ComfyDiscoverResult>,
     start: (projectId: string | null) =>
       ipcRenderer.invoke(IPC.comfy.start, projectId) as Promise<ComfyStartResult>,
+    list: () => ipcRenderer.invoke(IPC.comfy.list) as Promise<ComfyBatchView[]>,
     latest: () => ipcRenderer.invoke(IPC.comfy.latest) as Promise<ComfyBatchView | null>,
     pause: (batchId: string) => ipcRenderer.invoke(IPC.comfy.pause, batchId) as Promise<ComfyBatchView | null>,
     resume: (batchId: string) => ipcRenderer.invoke(IPC.comfy.resume, batchId) as Promise<ComfyBatchView | null>,

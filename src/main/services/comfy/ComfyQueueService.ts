@@ -9,15 +9,17 @@ import type {
   ComfyWorkflowMapping,
 } from '../../../shared/comfy'
 import {
+  COMFY_ACTIVE_STATUSES,
   COMFY_TERMINAL_STATUSES,
   buildComfySceneWorkflow,
   comfyOutputPrefix,
   comfyUploadName,
   countComfyJobs,
+  estimateComfyTiming,
   jobsToSubmit,
   pickComfyVideoOutput,
   randomComfySeed,
-  sceneStem,
+  sceneOutputFileName,
 } from '../../../shared/comfy'
 import { ComfyUnreachableError, comfyExecutionError, type ComfyApi, type ComfyQueueState } from './ComfyClient'
 import type { ComfyStore, StoredComfyJob } from './comfyStore'
@@ -28,6 +30,8 @@ export type ComfyQueueDeps = {
   store: ComfyStore
   createClient: (baseUrl: string) => ComfyApi
   log?: (event: string, data?: Record<string, unknown>) => void
+  /** Corta o vídeo baixado no tempo do áudio da cena. Falha aqui não perde o arquivo. */
+  trimOutput?: (videoPath: string, audioPath: string) => Promise<unknown>
 }
 
 function errorMessage(error: unknown): string {
@@ -43,6 +47,7 @@ export class ComfyQueueService {
   private readonly store: ComfyStore
   private readonly createClient: (baseUrl: string) => ComfyApi
   private readonly log: NonNullable<ComfyQueueDeps['log']>
+  private readonly trimOutput: NonNullable<ComfyQueueDeps['trimOutput']>
   private readonly clientId = randomUUID()
   private readonly downloads = new Map<string, Promise<void>>()
   private timer: ReturnType<typeof setInterval> | null = null
@@ -52,6 +57,7 @@ export class ComfyQueueService {
     this.store = deps.store
     this.createClient = deps.createClient
     this.log = deps.log ?? (() => {})
+    this.trimOutput = deps.trimOutput ?? (async () => undefined)
   }
 
   /** Ao abrir o Atlas: envios interrompidos no meio voltam para a fila e o lote continua. */
@@ -71,8 +77,9 @@ export class ComfyQueueService {
 
   startBatch(input: { projectId: string | null; outputDir: string; scenes: ComfyScenePlan[] }): ComfyBatchView {
     if (input.scenes.length === 0) throw new Error('Nenhuma cena pronta para enviar.')
-    if (this.store.activeBatches().length > 0) {
-      throw new Error('Já existe um envio em andamento. Pause ou cancele antes de começar outro.')
+    const active = this.store.activeBatches()
+    if (active.some((batch) => batch.projectId === input.projectId)) {
+      throw new Error('Este projeto já está gerando. Minimize o painel e abra outro projeto para o próximo vídeo.')
     }
     this.requireSetup()
 
@@ -115,12 +122,29 @@ export class ComfyQueueService {
     const batch = this.store.getBatch(batchId)
     if (!batch) return null
     const jobs: ComfyJob[] = this.store.listJobs(batchId)
-    return { batch, jobs, counts: countComfyJobs(jobs) }
+    return {
+      batch,
+      jobs,
+      counts: countComfyJobs(jobs),
+      projectName: null,
+      timing: estimateComfyTiming(batch, jobs),
+    }
   }
 
   latestView(): ComfyBatchView | null {
     const batch = this.store.latestBatch()
     return batch ? this.view(batch.id) : null
+  }
+
+  listViews(): ComfyBatchView[] {
+    const active = this.store.activeBatches()
+    const latest = this.store.latestBatch()
+    const views = active.map((batch) => this.view(batch.id)).filter((view): view is ComfyBatchView => Boolean(view))
+    if (latest && !views.some((view) => view.batch.id === latest.id)) {
+      const extra = this.view(latest.id)
+      if (extra) views.push(extra)
+    }
+    return views
   }
 
   pause(batchId: string): ComfyBatchView | null {
@@ -248,7 +272,15 @@ export class ComfyQueueService {
 
     const current = this.store.getBatch(batch.id)
     if (current?.status === 'running') {
-      const reachable = await this.submitNext(client, batch, workflow, mapping, config.queueSize)
+      const occupiedElsewhere = this.occupiedSlots(batch.id)
+      const reachable = await this.submitNext(
+        client,
+        batch,
+        workflow,
+        mapping,
+        config.queueSize,
+        occupiedElsewhere,
+      )
       if (reachable && current.lastError) this.store.updateBatch(batch.id, { lastError: null })
     }
 
@@ -300,8 +332,9 @@ export class ComfyQueueService {
     workflow: ComfyApiWorkflow,
     mapping: ComfyWorkflowMapping,
     queueSize: number,
+    occupiedElsewhere = 0,
   ): Promise<boolean> {
-    for (const job of jobsToSubmit(this.store.listJobs(batch.id), queueSize)) {
+    for (const job of jobsToSubmit(this.store.listJobs(batch.id), queueSize, occupiedElsewhere)) {
       this.store.updateJob(job.id, { status: 'uploading' })
       try {
         const imageName = await client.upload(
@@ -339,13 +372,37 @@ export class ComfyQueueService {
     return true
   }
 
+  private occupiedSlots(exceptBatchId?: string): number {
+    let count = 0
+    for (const batch of this.store.activeBatches()) {
+      if (exceptBatchId && batch.id === exceptBatchId) continue
+      for (const job of this.store.listJobs(batch.id)) {
+        if (COMFY_ACTIVE_STATUSES.includes(job.status)) count += 1
+      }
+    }
+    return count
+  }
+
   private startDownload(client: ComfyApi, batch: ComfyBatch, job: StoredComfyJob) {
     const output = job.output!
     const ext = path.extname(output.filename) || '.mp4'
-    const dest = path.join(batch.outputDir, `${sceneStem(job.sceneNumber)}${ext.toLowerCase()}`)
+    const dest = path.join(batch.outputDir, sceneOutputFileName(job.sceneNumber, ext))
     const task = client
       .download(output, dest)
-      .then(() => {
+      .then(async () => {
+        if (this.store.getConfig().trimToAudio) {
+          try {
+            const trimmed = await this.trimOutput(dest, job.audioPath)
+            if (trimmed) this.log('comfy.job.trimmed', { batchId: batch.id, scene: job.sceneNumber, dest })
+          } catch (error) {
+            this.log('comfy.job.trim_failed', {
+              batchId: batch.id,
+              scene: job.sceneNumber,
+              dest,
+              message: errorMessage(error),
+            })
+          }
+        }
         this.store.updateJob(job.id, { status: 'done', outputPath: dest, error: null })
         this.log('comfy.job.downloaded', { batchId: batch.id, scene: job.sceneNumber, dest })
       })

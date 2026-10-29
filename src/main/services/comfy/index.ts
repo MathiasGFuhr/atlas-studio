@@ -1,18 +1,29 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { ComfyConfig, ComfyConnectionInfo, ComfyStartResult } from '../../../shared/comfy'
+import type {
+  ComfyBatchView,
+  ComfyConfig,
+  ComfyConfigPatch,
+  ComfyConnectionInfo,
+  ComfyDiscoverResult,
+  ComfyStartResult,
+} from '../../../shared/comfy'
 import { detectComfyWorkflowMapping, normalizeComfyConfig, parseComfyWorkflow, planComfyScenes } from '../../../shared/comfy'
-import { getUserDataPath } from '../../paths'
-import { ensureProjectFolder, lipSyncRefRepository } from '../../repositories/lipSyncRefRepository'
+import { lipSyncRefRepository } from '../../repositories/lipSyncRefRepository'
+import { projectRepository } from '../../repositories/projectRepository'
+import { folderExists } from '../storage/projectFolders'
 import { logger } from '../logging/logger'
 import { ComfyClient } from './ComfyClient'
 import { ComfyQueueService } from './ComfyQueueService'
 import { sqliteComfyStore } from './comfyStore'
+import { resolveRunpodComfyUrl } from './runpod'
+import { trimComfyVideoToAudio } from './trimComfyVideo'
 
 export const comfyQueueService = new ComfyQueueService({
   store: sqliteComfyStore,
   createClient: (baseUrl) => new ComfyClient(baseUrl),
   log: (event, data) => logger.info(event, data),
+  trimOutput: trimComfyVideoToAudio,
 })
 
 export function getComfyConfig(): ComfyConfig {
@@ -20,7 +31,8 @@ export function getComfyConfig(): ComfyConfig {
 }
 
 /** O mapeamento do workflow só muda pela importação, nunca pelo formulário. */
-export function saveComfyConfig(patch: Partial<Pick<ComfyConfig, 'baseUrl' | 'queueSize' | 'durationPadding'>>) {
+export function saveComfyConfig(patch: ComfyConfigPatch) {
+  if (patch.runpodApiKey !== undefined) sqliteComfyStore.saveRunpodApiKey(patch.runpodApiKey)
   const current = sqliteComfyStore.getConfig()
   return sqliteComfyStore.saveConfig(
     normalizeComfyConfig({
@@ -28,6 +40,7 @@ export function saveComfyConfig(patch: Partial<Pick<ComfyConfig, 'baseUrl' | 'qu
       baseUrl: patch.baseUrl ?? current.baseUrl,
       queueSize: patch.queueSize ?? current.queueSize,
       durationPadding: patch.durationPadding ?? current.durationPadding,
+      trimToAudio: patch.trimToAudio ?? current.trimToAudio,
     }),
   )
 }
@@ -53,18 +66,89 @@ export async function testComfyConnection(baseUrl?: string): Promise<ComfyConnec
   }
 }
 
-function batchFolderName(date = new Date()): string {
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`
+export async function discoverComfyUrl(): Promise<ComfyDiscoverResult> {
+  const apiKey = sqliteComfyStore.getRunpodApiKey()
+  if (!apiKey) {
+    throw new Error(
+      'Cole a chave da API do RunPod nas Configurações (uma vez). Depois o Atlas puxa a URL sozinho.',
+    )
+  }
+  const current = sqliteComfyStore.getConfig()
+  if (current.baseUrl) {
+    const connection = await testComfyConnection(current.baseUrl)
+    if (connection.ok) {
+      return {
+        ok: true,
+        changed: false,
+        baseUrl: current.baseUrl,
+        podId: '',
+        podName: '',
+        message: connection.message,
+        connection,
+      }
+    }
+  }
+
+  const resolved = await resolveRunpodComfyUrl(apiKey, current.baseUrl)
+  const saved = saveComfyConfig({ baseUrl: resolved.baseUrl })
+  const connection = await testComfyConnection(saved.baseUrl)
+  return {
+    ok: connection.ok,
+    changed: saved.baseUrl !== current.baseUrl,
+    baseUrl: saved.baseUrl,
+    podId: resolved.podId,
+    podName: resolved.podName,
+    message: connection.ok
+      ? `URL do pod ${resolved.podName}`
+      : `Pod ${resolved.podName} encontrado, mas o ComfyUI ainda não respondeu. Espere uns segundos e teste.`,
+    connection,
+  }
 }
 
-/** Envia as cenas ativas, na ordem da fila de lipsync. Cenas incompletas ficam de fora e são listadas. */
+function withProjectName(view: ComfyBatchView | null): ComfyBatchView | null {
+  if (!view) return null
+  const name = view.batch.projectId ? projectRepository.get(view.batch.projectId)?.name ?? null : null
+  return { ...view, projectName: name }
+}
+
+export function listComfyViews(): ComfyBatchView[] {
+  return comfyQueueService.listViews().map((view) => withProjectName(view)!)
+}
+
+export function latestComfyView(): ComfyBatchView | null {
+  return withProjectName(comfyQueueService.latestView())
+}
+
+/** Envios antigos iam para uma subpasta Comfy/; os que ainda estão rodando passam a gravar na pasta da música. */
+export function remapActiveComfyOutputDirs() {
+  for (const batch of sqliteComfyStore.activeBatches()) {
+    if (!batch.projectId) continue
+    const folder = projectRepository.get(batch.projectId)?.projectFolderPath?.trim() ?? ''
+    if (!folder || !folderExists(folder)) continue
+    const resolved = path.resolve(folder)
+    if (path.resolve(batch.outputDir) === resolved) continue
+    sqliteComfyStore.updateBatch(batch.id, { outputDir: resolved })
+  }
+}
+
+/**
+ * Envia as cenas ativas do projeto. Os vídeos vão para a mesma pasta das imagens e dos áudios
+ * (`1.mp4` ao lado de `1.png` e `1.mp3`).
+ */
 export function startComfyBatch(projectId: string | null): ComfyStartResult {
+  if (!projectId?.trim()) throw new Error('Selecione um projeto para gerar.')
+  const project = projectRepository.get(projectId)
+  if (!project) throw new Error('Projeto não encontrado.')
+  const folder = project.projectFolderPath?.trim() ?? ''
+  if (!folder || !folderExists(folder)) {
+    throw new Error(
+      'Vincule a pasta das imagens e áudios neste projeto (Puxar da pasta). Os vídeos são gravados nessa mesma pasta.',
+    )
+  }
+  const outputDir = path.resolve(folder)
   const config = sqliteComfyStore.getConfig()
-  const refs = lipSyncRefRepository.list({ status: 'active' })
+  const refs = lipSyncRefRepository.list({ status: 'active', projectId })
   const { scenes, problems } = planComfyScenes(refs, config.durationPadding)
-  const root = projectId ? path.join(ensureProjectFolder(projectId), 'Comfy') : path.join(getUserDataPath(), 'comfy')
-  const outputDir = path.join(root, batchFolderName())
-  const view = comfyQueueService.startBatch({ projectId, outputDir, scenes })
+  const view = withProjectName(comfyQueueService.startBatch({ projectId, outputDir, scenes }))!
   return { view, skipped: problems }
 }

@@ -202,7 +202,7 @@ describe('ComfyQueueService', () => {
 
     expect(comfy.submitted).toHaveLength(6)
     expect(comfy.submitted[5].workflow['340:319'].inputs.value).toBe('Cena 6')
-    expect(fs.readdirSync(outputDir)).toEqual(['cena-01.mp4'])
+    expect(fs.readdirSync(outputDir)).toEqual(['1.mp4'])
     expect(statuses(batch.id).slice(0, 7)).toEqual(['done', 'queued', 'queued', 'queued', 'queued', 'queued', 'pending'])
   })
 
@@ -216,8 +216,8 @@ describe('ComfyQueueService', () => {
     expect(store.getBatch(batch.id)?.status).toBe('running')
     await cycle()
     expect(store.getBatch(batch.id)?.status).toBe('done')
-    expect(fs.readdirSync(outputDir).sort()).toEqual(
-      ['cena-01', 'cena-02', 'cena-03', 'cena-04', 'cena-05', 'cena-06', 'cena-07'].map((stem) => `${stem}.mp4`),
+    expect(fs.readdirSync(outputDir).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))).toEqual(
+      ['1', '2', '3', '4', '5', '6', '7'].map((stem) => `${stem}.mp4`),
     )
   })
 
@@ -289,8 +289,72 @@ describe('ComfyQueueService', () => {
     expect(new Set(statuses(batch.id))).toEqual(new Set(['canceled']))
   })
 
-  it('só um envio por vez', () => {
-    service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(2) })
-    expect(() => service.startBatch({ projectId: 'p2', outputDir, scenes: scenes(2) })).toThrow('em andamento')
+  it('depois de baixar, corta o vídeo no tempo do áudio quando a opção está ligada', async () => {
+    store.config = { ...store.config, trimToAudio: true }
+    const trimmed: Array<{ video: string; audio: string }> = []
+    service.stop()
+    service = new ComfyQueueService({
+      store,
+      createClient: () => comfy,
+      trimOutput: async (videoPath, audioPath) => {
+        trimmed.push({ video: videoPath, audio: audioPath })
+        return true
+      },
+    })
+    const { batch } = service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(1) })
+    await cycle()
+    comfy.finishRunning()
+    await cycle()
+    expect(trimmed).toEqual([{ video: path.join(outputDir, '1.mp4'), audio: 'C:/cenas/1.MP3' }])
+    expect(statuses(batch.id)).toEqual(['done'])
+  })
+
+  it('com a opção desligada, baixa o vídeo sem cortar', async () => {
+    const trimmed: string[] = []
+    service.stop()
+    service = new ComfyQueueService({
+      store,
+      createClient: () => comfy,
+      trimOutput: async (videoPath) => {
+        trimmed.push(videoPath)
+        return true
+      },
+    })
+    const { batch } = service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(1) })
+    await cycle()
+    comfy.finishRunning()
+    await cycle()
+    expect(trimmed).toEqual([])
+    expect(statuses(batch.id)).toEqual(['done'])
+  })
+
+  it('se o corte falhar, o vídeo baixado continua válido', async () => {
+    store.config = { ...store.config, trimToAudio: true }
+    service.stop()
+    service = new ComfyQueueService({
+      store,
+      createClient: () => comfy,
+      trimOutput: async () => {
+        throw new Error('ffmpeg caiu')
+      },
+    })
+    const { batch } = service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(1) })
+    await cycle()
+    comfy.finishRunning()
+    await cycle()
+    expect(statuses(batch.id)).toEqual(['done'])
+    expect(fs.existsSync(path.join(outputDir, '1.mp4'))).toBe(true)
+  })
+
+  it('o mesmo projeto não entra duas vezes; outro projeto entra na mesma fila de 5', async () => {
+    const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-comfy-b-'))
+    service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(3) })
+    expect(() => service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(2) })).toThrow('já está gerando')
+    const second = service.startBatch({ projectId: 'p2', outputDir: otherDir, scenes: scenes(3) })
+    await cycle()
+    await cycle()
+    expect(comfy.submitted).toHaveLength(5)
+    expect(store.listJobs(second.batch.id).filter((job) => job.status === 'queued')).toHaveLength(2)
+    fs.rmSync(otherDir, { recursive: true, force: true })
   })
 })

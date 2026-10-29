@@ -21,6 +21,8 @@ import { useCodexAuth } from './hooks/useCodexAuth'
 import { WorkspaceCapabilitiesProvider } from './hooks/useWorkspaceCapabilities'
 import { AppUpdateProvider } from './hooks/useAppUpdate'
 import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
+import { ComfyQueueProvider } from './hooks/useComfyQueue'
+import { ComfyQueueDock } from './components/lipsync/ComfyQueueDock'
 import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { version as appVersion } from '../../package.json'
 import { AtlasLogo } from './components/AtlasLogo'
@@ -213,6 +215,7 @@ export default function App() {
         <WorkspaceCapabilitiesProvider>
         <CreateActionsProvider>
         <ShortsGenerationProvider>
+        <ComfyQueueProvider>
         <div className="atlas-shell flex h-full w-full overflow-hidden text-text">
           <AppSidebar codexStatus={codexAuth.status} accountId={session.user.id} />
           <div className="flex min-w-0 flex-1 flex-col bg-transparent">
@@ -278,6 +281,7 @@ export default function App() {
           </div>
         </div>
         <ChatDock />
+        <ComfyQueueDock />
         <TeamChatIncoming accountId={session.user.id} />
         <div
           role="status"
@@ -324,6 +328,7 @@ export default function App() {
           codexAuth={codexAuth}
           onClose={() => setLinkModalOpen(false)}
         />
+        </ComfyQueueProvider>
         </ShortsGenerationProvider>
         </CreateActionsProvider>
         </WorkspaceCapabilitiesProvider>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   comfyDurationSeconds,
+  lastLipSyncFolderSceneNumber,
   matchNumberedFiles,
   matchNumberedImages,
   sceneNumberFromFileName,
@@ -57,6 +58,29 @@ describe('matchNumberedFiles', () => {
     ])
     expect(matches[0]).toHaveProperty('duration', null)
     expect(ignored).toEqual(['1.wav', 'faixa.mp3'])
+  })
+})
+
+describe('lastLipSyncFolderSceneNumber', () => {
+  it('só os áudios numerados já abrem as cenas', () => {
+    expect(
+      lastLipSyncFolderSceneNumber({
+        matches: [],
+        audios: [
+          { number: 1, fileName: '1.mp3', path: 'C:/1.mp3', duration: 12 },
+          { number: 15, fileName: '15.mp3', path: 'C:/15.mp3', duration: 8 },
+        ],
+      }),
+    ).toBe(15)
+  })
+
+  it('usa o maior número entre imagens e áudios', () => {
+    expect(
+      lastLipSyncFolderSceneNumber({
+        matches: [{ number: 3, fileName: '3.png', path: 'C:/3.png' }],
+        audios: [{ number: 1, fileName: '1.mp3', path: 'C:/1.mp3', duration: 4 }],
+      }),
+    ).toBe(3)
   })
 })
 

@@ -28,9 +28,28 @@ export type ComfyConfig = {
   queueSize: number
   /** Segundos somados à parte inteira do áudio no campo Duration. */
   durationPadding: number
+  /** Se true, o download corta o vídeo no tempo real do áudio. */
+  trimToAudio: boolean
   workflowName: string
   workflowMapping: ComfyWorkflowMapping | null
+  /** A chave em si nunca vai para o renderer. */
+  hasRunpodApiKey: boolean
 }
+
+export type ComfyConfigPatch = Partial<Pick<ComfyConfig, 'baseUrl' | 'queueSize' | 'durationPadding' | 'trimToAudio'>> & {
+  /** Vazio remove a chave salva. `undefined` não mexe. */
+  runpodApiKey?: string
+}
+
+export const COMFY_RUNPOD_PORT = 8188
+
+export type RunpodPodCandidate = {
+  id: string
+  name: string
+  desiredStatus?: string | null
+  runtime?: { ports?: Array<{ privatePort?: number; type?: string | null }> | null } | null
+}
+
 
 export const COMFY_QUEUE_SIZE_DEFAULT = 5
 export const COMFY_QUEUE_SIZE_MAX = 10
@@ -40,8 +59,10 @@ export const DEFAULT_COMFY_CONFIG: ComfyConfig = {
   baseUrl: '',
   queueSize: COMFY_QUEUE_SIZE_DEFAULT,
   durationPadding: 1,
+  trimToAudio: false,
   workflowName: '',
   workflowMapping: null,
+  hasRunpodApiKey: false,
 }
 
 export type ComfyJobStatus =
@@ -84,10 +105,19 @@ export type ComfyBatch = {
   updatedAt: string
 }
 
+export type ComfyTiming = {
+  elapsedMs: number
+  /** null enquanto nenhuma cena terminou (ainda não há média). */
+  remainingMs: number | null
+  finished: boolean
+}
+
 export type ComfyBatchView = {
   batch: ComfyBatch
   jobs: ComfyJob[]
   counts: Record<ComfyJobStatus, number>
+  projectName: string | null
+  timing: ComfyTiming
 }
 
 export type ComfyStartResult = {
@@ -102,6 +132,16 @@ export type ComfyConnectionInfo = {
   gpu?: string
   vramTotalGb?: number
   comfyVersion?: string
+}
+
+export type ComfyDiscoverResult = {
+  ok: boolean
+  changed: boolean
+  baseUrl: string
+  podId: string
+  podName: string
+  message: string
+  connection: ComfyConnectionInfo | null
 }
 
 /** Arquivo de saída como aparece no `/history` do ComfyUI. */
@@ -132,9 +172,52 @@ export function normalizeComfyConfig(input: Partial<ComfyConfig> | null | undefi
     durationPadding: Number.isFinite(padding)
       ? Math.min(COMFY_DURATION_PADDING_MAX, Math.max(0, padding))
       : DEFAULT_COMFY_CONFIG.durationPadding,
+    trimToAudio: Boolean(input?.trimToAudio),
     workflowName: String(input?.workflowName ?? ''),
     workflowMapping: input?.workflowMapping ?? null,
+    hasRunpodApiKey: Boolean(input?.hasRunpodApiKey),
   }
+}
+
+export function comfyRunpodProxyUrl(podId: string, port = COMFY_RUNPOD_PORT): string {
+  return `https://${podId.trim()}-${port}.proxy.runpod.net`
+}
+
+export function podIdFromComfyUrl(url: string): string | null {
+  const match = normalizeComfyBaseUrl(url).match(/^https?:\/\/([a-z0-9]+)-(\d+)\.proxy\.runpod\.net$/i)
+  return match?.[1] ?? null
+}
+
+function runpodHttpPorts(pod: RunpodPodCandidate): number[] {
+  return (pod.runtime?.ports ?? [])
+    .filter((port) => !port.type || port.type.toLowerCase() === 'http')
+    .map((port) => Number(port.privatePort))
+    .filter((port) => Number.isFinite(port) && port > 0)
+}
+
+function isRunpodPodRunning(pod: RunpodPodCandidate): boolean {
+  if (pod.desiredStatus) return pod.desiredStatus.toUpperCase() === 'RUNNING'
+  return Boolean(pod.runtime)
+}
+
+/** Escolhe o pod do ComfyUI (porta 8188) entre os que estão ligados. */
+export function pickRunpodComfyPod(
+  pods: RunpodPodCandidate[],
+  preferredId?: string | null,
+): { id: string; name: string; port: number } | null {
+  const running = pods.filter((pod) => pod.id.trim() && isRunpodPodRunning(pod))
+  if (running.length === 0) return null
+
+  const withComfyPort = running.filter((pod) => runpodHttpPorts(pod).includes(COMFY_RUNPOD_PORT))
+  const withHttp = running.filter((pod) => runpodHttpPorts(pod).length > 0)
+  const pool = withComfyPort.length > 0 ? withComfyPort : withHttp.length > 0 ? withHttp : running
+
+  const preferred = preferredId ? pool.find((pod) => pod.id === preferredId) : undefined
+  const named = pool.find((pod) => /comfy/i.test(pod.name))
+  const picked = preferred ?? (pool.length === 1 ? pool[0] : named) ?? pool[0]
+  const ports = runpodHttpPorts(picked)
+  const port = ports.includes(COMFY_RUNPOD_PORT) ? COMFY_RUNPOD_PORT : (ports[0] ?? COMFY_RUNPOD_PORT)
+  return { id: picked.id, name: picked.name || picked.id, port }
 }
 
 function title(node: ComfyApiNode): string {
@@ -275,6 +358,12 @@ export function sceneStem(sceneNumber: number): string {
   return `cena-${String(sceneNumber).padStart(2, '0')}`
 }
 
+/** Nome do arquivo na pasta da música, ao lado de `1.png` e `1.mp3`. */
+export function sceneOutputFileName(sceneNumber: number, ext = '.mp4'): string {
+  const safeExt = ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`
+  return `${sceneNumber}${safeExt}`
+}
+
 export function comfyUploadName(batchId: string, sceneNumber: number, ext: string): string {
   return `atlas_${batchId.slice(0, 8)}_${sceneStem(sceneNumber)}${ext.toLowerCase()}`
 }
@@ -283,18 +372,53 @@ export function comfyOutputPrefix(batchId: string, sceneNumber: number): string 
   return `atlas/${batchId.slice(0, 8)}/${sceneStem(sceneNumber)}`
 }
 
-/** Quantos e quais trabalhos pendentes entram na fila agora, em ordem de cena. */
+/**
+ * Quantos e quais trabalhos pendentes entram na fila agora, em ordem de cena.
+ * `occupiedElsewhere` conta cenas de outros projetos que já estão no ComfyUI (a janela é global).
+ */
 export function jobsToSubmit<T extends Pick<ComfyJob, 'status' | 'sceneNumber'>>(
   jobs: T[],
   queueSize: number,
+  occupiedElsewhere = 0,
 ): T[] {
   const active = jobs.filter((job) => COMFY_ACTIVE_STATUSES.includes(job.status)).length
-  const free = Math.max(0, queueSize - active)
+  const free = Math.max(0, queueSize - active - Math.max(0, occupiedElsewhere))
   if (free === 0) return []
   return jobs
     .filter((job) => job.status === 'pending')
     .sort((a, b) => a.sceneNumber - b.sceneNumber)
     .slice(0, free)
+}
+
+export function formatComfyDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  if (hours > 0) return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`
+  if (minutes > 0) return seconds > 0 && minutes < 10 ? `${minutes} min ${seconds} s` : `${minutes} min`
+  return `${seconds} s`
+}
+
+export function estimateComfyTiming(
+  batch: Pick<ComfyBatch, 'createdAt' | 'updatedAt' | 'status'>,
+  jobs: Array<Pick<ComfyJob, 'status' | 'updatedAt'>>,
+  now = Date.now(),
+): ComfyTiming {
+  const created = Date.parse(batch.createdAt) || now
+  const finished = batch.status === 'done' || batch.status === 'canceled'
+  const elapsedMs = Math.max(0, (finished ? Date.parse(batch.updatedAt) || now : now) - created)
+  if (finished) return { elapsedMs, remainingMs: 0, finished: true }
+  const done = jobs.filter((job) => job.status === 'done').length
+  const remainingJobs = jobs.filter((job) => !COMFY_TERMINAL_STATUSES.includes(job.status)).length
+  if (done === 0 || remainingJobs === 0) {
+    return { elapsedMs, remainingMs: remainingJobs === 0 ? 0 : null, finished: false }
+  }
+  return { elapsedMs, remainingMs: Math.round((elapsedMs / done) * remainingJobs), finished: false }
+}
+
+export function isComfyBatchInProgress(status: ComfyBatchStatus): boolean {
+  return status === 'running' || status === 'paused'
 }
 
 const VIDEO_EXT = /\.(mp4|webm|mov|mkv|gif)$/i
@@ -366,6 +490,27 @@ export function planComfyScenes(
     })
   })
   return { scenes, problems }
+}
+
+/**
+ * O Comfy gera com folga (segundos inteiros) para nada ficar de fora. No download, corta no
+ * tempo real do áudio. `null` = o arquivo já está no tamanho certo (ou não dá para cortar).
+ */
+export function comfyOutputTrimSeconds(
+  videoDuration: number | null | undefined,
+  audioDuration: number | null | undefined,
+  epsilonSeconds = 0.05,
+): number | null {
+  if (audioDuration == null || !Number.isFinite(audioDuration) || audioDuration <= 0) return null
+  if (
+    videoDuration != null &&
+    Number.isFinite(videoDuration) &&
+    videoDuration > 0 &&
+    videoDuration <= audioDuration + epsilonSeconds
+  ) {
+    return null
+  }
+  return audioDuration
 }
 
 export function emptyComfyCounts(): Record<ComfyJobStatus, number> {

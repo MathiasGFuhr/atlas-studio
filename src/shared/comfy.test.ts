@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildComfySceneWorkflow,
+  comfyOutputTrimSeconds,
+  comfyRunpodProxyUrl,
   detectComfyWorkflowMapping,
+  estimateComfyTiming,
+  formatComfyDuration,
   jobsToSubmit,
   normalizeComfyBaseUrl,
+  sceneOutputFileName,
   normalizeComfyConfig,
   parseComfyWorkflow,
   pickComfyVideoOutput,
+  pickRunpodComfyPod,
   planComfyScenes,
+  podIdFromComfyUrl,
   type ComfyApiWorkflow,
   type ComfyJobStatus,
 } from './comfy'
@@ -129,6 +136,12 @@ describe('jobsToSubmit', () => {
     expect(jobsToSubmit(jobs, 5).map((entry) => entry.sceneNumber)).toEqual([6])
     expect(jobsToSubmit(jobs, 4)).toEqual([])
   })
+
+  it('desconta cenas de outros projetos que já estão no ComfyUI', () => {
+    const jobs = [job(1, 'pending'), job(2, 'pending'), job(3, 'pending')]
+    expect(jobsToSubmit(jobs, 5, 4).map((entry) => entry.sceneNumber)).toEqual([1])
+    expect(jobsToSubmit(jobs, 5, 5)).toEqual([])
+  })
 })
 
 describe('pickComfyVideoOutput', () => {
@@ -179,6 +192,59 @@ describe('planComfyScenes', () => {
   })
 })
 
+describe('comfyOutputTrimSeconds', () => {
+  it('corta a folga do Comfy no tempo real do áudio', () => {
+    expect(comfyOutputTrimSeconds(22, 21.4)).toBe(21.4)
+    expect(comfyOutputTrimSeconds(29, 28.9)).toBe(28.9)
+  })
+
+  it('não mexe quando o vídeo já está no tamanho do áudio', () => {
+    expect(comfyOutputTrimSeconds(21.4, 21.4)).toBeNull()
+    expect(comfyOutputTrimSeconds(21.42, 21.4)).toBeNull()
+    expect(comfyOutputTrimSeconds(20.8, 21.4)).toBeNull()
+  })
+
+  it('sem duração de áudio não corta', () => {
+    expect(comfyOutputTrimSeconds(22, null)).toBeNull()
+    expect(comfyOutputTrimSeconds(22, 0)).toBeNull()
+  })
+
+  it('sem duração do vídeo ainda tenta cortar no áudio', () => {
+    expect(comfyOutputTrimSeconds(null, 17.2)).toBe(17.2)
+  })
+})
+
+describe('pickRunpodComfyPod', () => {
+  it('escolhe o pod ligado na porta 8188', () => {
+    const picked = pickRunpodComfyPod(
+      [
+        { id: 'old', name: 'Parado', desiredStatus: 'EXITED' },
+        {
+          id: 'cdde0r2vynph2r',
+          name: 'ComfyUI',
+          desiredStatus: 'RUNNING',
+          runtime: { ports: [{ privatePort: 8188, type: 'http' }, { privatePort: 22, type: 'tcp' }] },
+        },
+      ],
+      'old',
+    )
+    expect(picked).toEqual({ id: 'cdde0r2vynph2r', name: 'ComfyUI', port: 8188 })
+    expect(comfyRunpodProxyUrl(picked!.id, picked!.port)).toBe(
+      'https://cdde0r2vynph2r-8188.proxy.runpod.net',
+    )
+  })
+
+  it('assume 8188 quando o pod já está RUNNING mas as portas ainda não vieram', () => {
+    expect(
+      pickRunpodComfyPod([{ id: 'abc123xyz', name: 'GPU', desiredStatus: 'RUNNING', runtime: null }]),
+    ).toEqual({ id: 'abc123xyz', name: 'GPU', port: 8188 })
+  })
+
+  it('lê o id da URL antiga do proxy', () => {
+    expect(podIdFromComfyUrl('https://cdde0r2vynph2r-8188.proxy.runpod.net/')).toBe('cdde0r2vynph2r')
+  })
+})
+
 describe('normalizeComfyConfig', () => {
   it('limita a fila e a folga e corrige a URL', () => {
     expect(normalizeComfyConfig({ baseUrl: 'abc-8188.proxy.runpod.net/', queueSize: 50, durationPadding: -2 })).toMatchObject({
@@ -186,7 +252,47 @@ describe('normalizeComfyConfig', () => {
       queueSize: 10,
       durationPadding: 0,
     })
-    expect(normalizeComfyConfig(null)).toMatchObject({ queueSize: 5, durationPadding: 1 })
+    expect(normalizeComfyConfig(null)).toMatchObject({ queueSize: 5, durationPadding: 1, trimToAudio: false })
+    expect(normalizeComfyConfig({ trimToAudio: true }).trimToAudio).toBe(true)
     expect(normalizeComfyBaseUrl('http://localhost:8188//')).toBe('http://localhost:8188')
+  })
+})
+
+describe('sceneOutputFileName', () => {
+  it('grava o vídeo com o mesmo número da imagem e do áudio', () => {
+    expect(sceneOutputFileName(1, '.mp4')).toBe('1.mp4')
+    expect(sceneOutputFileName(15, '.MP4')).toBe('15.mp4')
+  })
+})
+
+describe('estimateComfyTiming', () => {
+  const job = (status: ComfyJobStatus, updatedAt: string) => ({ status, updatedAt })
+
+  it('estima o restante pela média das cenas prontas', () => {
+    const createdAt = '2026-10-28T12:00:00.000Z'
+    const timing = estimateComfyTiming(
+      { createdAt, updatedAt: createdAt, status: 'running' },
+      [
+        job('done', '2026-10-28T12:02:00.000Z'),
+        job('done', '2026-10-28T12:04:00.000Z'),
+        job('queued', createdAt),
+        job('pending', createdAt),
+      ],
+      Date.parse('2026-10-28T12:04:00.000Z'),
+    )
+    expect(timing.elapsedMs).toBe(4 * 60_000)
+    expect(timing.remainingMs).toBe(4 * 60_000)
+    expect(formatComfyDuration(timing.elapsedMs)).toBe('4 min')
+  })
+
+  it('mostra só o decorrido antes da primeira cena pronta', () => {
+    const createdAt = '2026-10-28T12:00:00.000Z'
+    const timing = estimateComfyTiming(
+      { createdAt, updatedAt: createdAt, status: 'running' },
+      [job('queued', createdAt)],
+      Date.parse('2026-10-28T12:03:00.000Z'),
+    )
+    expect(timing.remainingMs).toBeNull()
+    expect(formatComfyDuration(timing.elapsedMs)).toBe('3 min')
   })
 })

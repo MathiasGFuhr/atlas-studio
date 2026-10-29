@@ -157,6 +157,7 @@ export class ComfyClient implements ComfyApi {
         Readable.fromWeb(response.body as unknown as WebReadableStream<Uint8Array>),
         fs.createWriteStream(partial),
       )
+      if (fs.existsSync(destPath)) fs.unlinkSync(destPath)
       fs.renameSync(partial, destPath)
     } catch (error) {
       fs.rmSync(partial, { force: true })

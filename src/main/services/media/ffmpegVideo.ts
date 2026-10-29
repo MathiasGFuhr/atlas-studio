@@ -347,6 +347,65 @@ export async function createClipProxy(input: {
   return input.outputPath
 }
 
+/**
+ * Corta do início até `durationSeconds`. Tenta remux (`-c copy`) para não reencodar; se o
+ * container não aceitar, cai no H.264. Substitui o arquivo original.
+ */
+export async function trimVideoToDuration(inputPath: string, durationSeconds: number): Promise<void> {
+  const resolved = path.resolve(inputPath)
+  if (!fs.existsSync(resolved)) throw new Error('Arquivo de vídeo não encontrado.')
+  const duration = Math.max(0.05, durationSeconds)
+  const ext = path.extname(resolved) || '.mp4'
+  const temp = path.join(path.dirname(resolved), `${path.basename(resolved, ext)}.trim${ext}`)
+  const timeoutMs = Math.min(6 * 60_000, Math.max(30_000, Math.round(duration * 4000)))
+  const common = ['-y', '-i', resolved, '-t', duration.toFixed(3)]
+  fs.rmSync(temp, { force: true })
+  try {
+    try {
+      await runFfmpegResult(
+        [...common, '-c', 'copy', '-avoid_negative_ts', 'make_zero', '-movflags', '+faststart', temp],
+        {
+          timeoutMs,
+          timeoutMessage: 'O FFmpeg demorou demais para ajustar a duração do vídeo.',
+          failMessage: 'Falha ao ajustar a duração do vídeo.',
+        },
+      )
+    } catch {
+      await runFfmpegResult(
+        [
+          ...common,
+          '-c:v',
+          'libx264',
+          '-preset',
+          'veryfast',
+          '-crf',
+          '18',
+          '-pix_fmt',
+          'yuv420p',
+          '-c:a',
+          'copy',
+          '-movflags',
+          '+faststart',
+          temp,
+        ],
+        {
+          timeoutMs: timeoutMs * 2,
+          timeoutMessage: 'O FFmpeg demorou demais para ajustar a duração do vídeo.',
+          failMessage: 'Falha ao ajustar a duração do vídeo.',
+        },
+      )
+    }
+    if (!fs.existsSync(temp) || fs.statSync(temp).size < 64) {
+      throw new Error('O vídeo cortado ficou vazio.')
+    }
+    if (fs.existsSync(resolved)) fs.unlinkSync(resolved)
+    fs.renameSync(temp, resolved)
+  } catch (error) {
+    fs.rmSync(temp, { force: true })
+    throw error
+  }
+}
+
 export async function extractKeyframe(input: {
   sourcePath: string
   outputPath: string
