@@ -62,6 +62,15 @@ function toDraft(source: {
   }
 }
 
+/** Nome da pasta vira nome do projeto na primeira vinculação, ou se o nome ainda era o da pasta antiga. */
+function projectNameFromLinkedFolder(project: Project, folder: string): string | undefined {
+  const folderName = folderNameFromPath(folder)
+  if (!folderName) return undefined
+  const oldFolderName = project.projectFolderPath ? folderNameFromPath(project.projectFolderPath) : ''
+  if (!project.name.trim() || project.name === oldFolderName) return folderName
+  return undefined
+}
+
 function isDirty(item: LipSyncRef, draft: Draft): boolean {
   return (
     draft.label !== item.label ||
@@ -243,9 +252,11 @@ export function LipSyncRefsPage() {
   const itemsRef = useRef(items)
   const draftsRef = useRef(drafts)
   const projectsRef = useRef(projects)
+  const attachProjectIdRef = useRef(attachProjectId)
   itemsRef.current = items
   draftsRef.current = drafts
   projectsRef.current = projects
+  attachProjectIdRef.current = attachProjectId
   const comfyQueue = useComfyQueue()
   const [editorOpen, setEditorOpen] = useState(false)
   const [projectForm, setProjectForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
@@ -291,7 +302,12 @@ export function LipSyncRefsPage() {
         Object.fromEntries(
           list.map((item) => {
             const previous = current[item.id]
-            if (previous && isDirty(item, previous)) return [item.id, previous]
+            if (previous && isDirty(item, previous)) {
+              if (!previous.projectId && item.projectId) {
+                return [item.id, { ...previous, projectId: item.projectId }]
+              }
+              return [item.id, previous]
+            }
             return [item.id, toDraft(item)]
           }),
         ),
@@ -352,7 +368,7 @@ export function LipSyncRefsPage() {
   }, [focusSceneId, items])
 
   function currentProjectId() {
-    return attachProjectId
+    return attachProjectIdRef.current || attachProjectId
   }
 
   const visibleItems = useMemo(
@@ -542,14 +558,38 @@ export function LipSyncRefsPage() {
     return new Set([...scan.matches, ...scan.audios].map((entry) => entry.number)).size
   }
 
+  async function bindFolderToProject(folder: string, project: Project | undefined): Promise<Project> {
+    const folderName = folderNameFromPath(folder)
+    if (!project) {
+      const created = await api.projects.create({
+        name: folderName,
+        description: '',
+        projectType: 'music',
+        channelId: null,
+        projectFolderPath: folder,
+      })
+      notifyProjectsChanged()
+      setProjects((current) =>
+        current.some((entry) => entry.id === created.id) ? current : [...current, created],
+      )
+      attachProjectIdRef.current = created.id
+      setAttachProjectId(created.id)
+      return created
+    }
+    const nextName = projectNameFromLinkedFolder(project, folder)
+    const updated = await api.projects.update(project.id, {
+      projectFolderPath: folder,
+      ...(nextName ? { name: nextName } : {}),
+    })
+    const next = updated ?? { ...project, projectFolderPath: folder, name: nextName ?? project.name }
+    setProjects((current) => current.map((entry) => (entry.id === next.id ? next : entry)))
+    notifyProjectsChanged()
+    return next
+  }
+
   /** O usuário sempre escolhe a pasta; a do projeto só serve de ponto de partida no diálogo. */
   async function importFromFolder() {
-    const projectId = currentProjectId()
-    if (!projectId) {
-      push('Crie um projeto de música para puxar as cenas.')
-      return
-    }
-    const project = projects.find((entry) => entry.id === projectId)
+    const project = projects.find((entry) => entry.id === currentProjectId())
     const linked =
       project?.projectFolderPath && project.folderExists !== false ? project.projectFolderPath : ''
     setBusy(true)
@@ -560,16 +600,10 @@ export function LipSyncRefsPage() {
       })
       if (!folder) return
       const scan = await api.lipSyncRefs.scanFolder(folder)
-      if (project) {
-        const updated = await api.projects.update(project.id, { projectFolderPath: scan.folder })
-        if (updated) {
-          setProjects((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)))
-        }
-        notifyProjectsChanged()
-      }
+      const target = await bindFolderToProject(scan.folder, project)
       if (scan.matches.length === 0 && scan.audios.length === 0) {
         push(
-          `Nenhuma imagem ou áudio com nome só de número (1.png, 1.mp3…) em ${scan.folder}.`,
+          `${target.name} vinculado à pasta, mas não há imagem ou áudio com nome só de número (1.png, 1.mp3…).`,
           'error',
         )
         return
@@ -578,7 +612,7 @@ export function LipSyncRefsPage() {
         setFolderImport(scan)
         return
       }
-      await applyFolderImport(scan, true)
+      await applyFolderImport(scan, true, { projectId: target.id })
     } catch (error) {
       pushError(error, 'Não foi possível ler a pasta.')
     } finally {
@@ -624,7 +658,7 @@ export function LipSyncRefsPage() {
             label: draft?.label ?? item.label,
             prompt: draft?.prompt ?? item.prompt,
             lyrics: draft?.lyrics ?? item.lyrics,
-            projectId: (draft?.projectId ?? item.projectId) || null,
+            projectId: projectId || (draft?.projectId ?? item.projectId) || null,
           })
           applied += 1
         } catch {
@@ -834,7 +868,20 @@ export function LipSyncRefsPage() {
   const selectedDirty = Boolean(selectedItem && selectedDraft && isDirty(selectedItem, selectedDraft))
   const selectedNumber =
     selectedItem === null ? '' : sceneNumber(indexById.get(selectedItem.id) ?? 0)
+  const selectedProjectId = selectedDraft?.projectId || attachProjectId
+  const selectedProject = projects.find((entry) => entry.id === selectedProjectId) ?? null
+  const selectedProjectFolder = selectedProject?.projectFolderPath?.trim() ?? ''
   const menuItem = menu ? (visibleItems.find((item) => item.id === menu.id) ?? null) : null
+
+  useEffect(() => {
+    if (!selectedId || !attachProjectId) return
+    setDrafts((current) => {
+      const item = itemsRef.current.find((entry) => entry.id === selectedId)
+      const draft = current[selectedId] ?? (item ? toDraft(item) : null)
+      if (!draft || draft.projectId) return current
+      return { ...current, [selectedId]: { ...draft, projectId: attachProjectId } }
+    })
+  }, [selectedId, attachProjectId])
 
   useEffect(() => {
     setSelectedId((current) => {
@@ -1063,6 +1110,10 @@ export function LipSyncRefsPage() {
                 <select
                   value={attachProjectId}
                   onChange={(event) => setAttachProjectId(event.target.value)}
+                  title={
+                    projects.find((entry) => entry.id === attachProjectId)?.projectFolderPath ??
+                    undefined
+                  }
                   className="h-9 min-w-0 flex-1 rounded-xl border border-border bg-bg/50 px-2 text-sm text-text focus:border-accent/60 focus:outline-none"
                 >
                   {projects.map((project) => (
@@ -1101,8 +1152,8 @@ export function LipSyncRefsPage() {
                 variant="secondary"
                 className={toolbarButtonClass}
                 icon={<FolderInput className="h-3.5 w-3.5" />}
-                disabled={editsDisabled || !canCreateScene()}
-                title="Escolha a pasta da música: 1.png e 1.mp3 viram a cena 1; 15 áudios numerados já abrem 15 cenas."
+                disabled={editsDisabled}
+                title="Escolha a pasta da música: o nome e o vínculo do projeto ficam nessa pasta. 1.png e 1.mp3 viram a cena 1."
                 onClick={() => void importFromFolder()}
               >
                 Puxar da pasta
@@ -1279,19 +1330,31 @@ export function LipSyncRefsPage() {
                       <label className="block">
                         <span className="mb-1.5 block text-xs font-medium text-muted">Projeto</span>
                         <select
-                          value={selectedDraft.projectId}
+                          value={selectedProjectId}
                           onChange={(event) =>
                             patchDraft(selectedItem.id, { projectId: event.target.value })
                           }
                           className="h-10 w-full rounded-xl border border-border bg-bg/50 px-3 text-sm text-text focus:border-accent/60 focus:outline-none"
                         >
-                          <option value="">Sem projeto</option>
+                          {selectedProjectId ? null : <option value="">Sem projeto</option>}
                           {projects.map((project) => (
                             <option key={project.id} value={project.id}>
                               {project.name}
                             </option>
                           ))}
                         </select>
+                        {selectedProjectFolder ? (
+                          <p
+                            className="mt-1.5 truncate text-[11px] text-muted"
+                            title={selectedProjectFolder}
+                          >
+                            {selectedProjectFolder}
+                          </p>
+                        ) : (
+                          <p className="mt-1.5 text-[11px] text-muted">
+                            Vincule a pasta com “Puxar da pasta”.
+                          </p>
+                        )}
                       </label>
 
                       <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-bg/30 px-3 py-2">
