@@ -1046,7 +1046,6 @@ export function LipSyncRefsPage() {
   )
 
   function showAllScenes() {
-    setThumbSize(72)
     storyboardRef.current?.scrollTo({ left: 0, behavior: 'smooth' })
   }
 
