@@ -32,6 +32,8 @@ export type ComfyQueueDeps = {
   log?: (event: string, data?: Record<string, unknown>) => void
   /** Corta o vídeo baixado no tempo do áudio da cena. Falha aqui não perde o arquivo. */
   trimOutput?: (videoPath: string, audioPath: string) => Promise<unknown>
+  /** Destino ao vivo: a pasta lipsync vinculada ao projeto, nunca um caminho antigo. */
+  resolveOutputDir?: (batch: ComfyBatch) => string
 }
 
 function errorMessage(error: unknown): string {
@@ -48,6 +50,7 @@ export class ComfyQueueService {
   private readonly createClient: (baseUrl: string) => ComfyApi
   private readonly log: NonNullable<ComfyQueueDeps['log']>
   private readonly trimOutput: NonNullable<ComfyQueueDeps['trimOutput']>
+  private readonly resolveOutputDir: (batch: ComfyBatch) => string
   private readonly clientId = randomUUID()
   private readonly downloads = new Map<string, Promise<void>>()
   private timer: ReturnType<typeof setInterval> | null = null
@@ -58,6 +61,7 @@ export class ComfyQueueService {
     this.createClient = deps.createClient
     this.log = deps.log ?? (() => {})
     this.trimOutput = deps.trimOutput ?? (async () => undefined)
+    this.resolveOutputDir = deps.resolveOutputDir ?? ((batch) => batch.outputDir)
   }
 
   /** Ao abrir o Atlas: envios interrompidos no meio voltam para a fila e o lote continua. */
@@ -386,7 +390,11 @@ export class ComfyQueueService {
   private startDownload(client: ComfyApi, batch: ComfyBatch, job: StoredComfyJob) {
     const output = job.output!
     const ext = path.extname(output.filename) || '.mp4'
-    const dest = path.join(batch.outputDir, sceneOutputFileName(job.sceneNumber, ext))
+    const outputDir = this.resolveOutputDir(batch)
+    if (path.resolve(outputDir) !== path.resolve(batch.outputDir)) {
+      this.store.updateBatch(batch.id, { outputDir })
+    }
+    const dest = path.join(outputDir, sceneOutputFileName(job.sceneNumber, ext))
     const task = client
       .download(output, dest)
       .then(async () => {

@@ -358,7 +358,10 @@ export function sceneStem(sceneNumber: number): string {
   return `cena-${String(sceneNumber).padStart(2, '0')}`
 }
 
-/** Nome do arquivo na pasta da música, ao lado de `1.png` e `1.mp3`. */
+/** Subpasta dos vídeos gerados, dentro da pasta vinculada do projeto (Puxar da pasta). */
+export const COMFY_DOWNLOAD_SUBDIR = 'lipsync'
+
+/** Nome do arquivo na pasta lipsync: `1.mp4` para a cena 1. */
 export function sceneOutputFileName(sceneNumber: number, ext = '.mp4'): string {
   const safeExt = ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`
   return `${sceneNumber}${safeExt}`

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import type { LipSyncFolderScan, LipSyncRef, LipSyncSubject } from '@shared/lipSyncRefs'
 import { LIPSYNC_SUBJECT_LABEL, comfyDurationSeconds, lastLipSyncFolderSceneNumber } from '@shared/lipSyncRefs'
-import { planComfyScenes } from '@shared/comfy'
+import { COMFY_DOWNLOAD_SUBDIR, planComfyScenes } from '@shared/comfy'
 import type { CustomPrompt } from '@shared/quickPrompts'
 import type { Channel, Project } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
@@ -282,25 +282,27 @@ export function LipSyncRefsPage() {
       api.channels.list({ channelType: 'music' }),
     ])
     // Recargas concorrentes: só a resposta mais recente pode aplicar estado.
-    if (seq !== refreshSeq.current) return
-    setProjects(projectList)
-    setChannels(channelList)
+    if (seq === refreshSeq.current) {
+      setProjects(projectList)
+      setChannels(channelList)
 
-    setItems(list)
-    setDrafts((current) =>
-      Object.fromEntries(
-        list.map((item) => {
-          const previous = current[item.id]
-          if (previous && isDirty(item, previous)) return [item.id, previous]
-          return [item.id, toDraft(item)]
-        }),
-      ),
-    )
+      setItems(list)
+      setDrafts((current) =>
+        Object.fromEntries(
+          list.map((item) => {
+            const previous = current[item.id]
+            if (previous && isDirty(item, previous)) return [item.id, previous]
+            return [item.id, toDraft(item)]
+          }),
+        ),
+      )
 
-    setAttachProjectId((current) => {
-      if (current && projectList.some((project) => project.id === current)) return current
-      return projectList[0]?.id ?? ''
-    })
+      setAttachProjectId((current) => {
+        if (current && projectList.some((project) => project.id === current)) return current
+        return projectList[0]?.id ?? ''
+      })
+    }
+    return { list, projectList, channelList }
   }, [api])
 
   useEffect(() => {
@@ -558,8 +560,11 @@ export function LipSyncRefsPage() {
       })
       if (!folder) return
       const scan = await api.lipSyncRefs.scanFolder(folder)
-      if (!linked && project) {
-        await api.projects.update(project.id, { projectFolderPath: scan.folder })
+      if (project) {
+        const updated = await api.projects.update(project.id, { projectFolderPath: scan.folder })
+        if (updated) {
+          setProjects((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)))
+        }
         notifyProjectsChanged()
       }
       if (scan.matches.length === 0 && scan.audios.length === 0) {
@@ -991,20 +996,24 @@ export function LipSyncRefsPage() {
       comfyQueue.expand()
       return
     }
+    let projectList = projects
     try {
-      await refresh()
+      const refreshed = await refresh()
+      if (refreshed) projectList = refreshed.projectList
     } catch (error) {
       pushError(error, 'Não foi possível salvar as cenas antes de enviar.')
       return
     }
-    const project = projects.find((entry) => entry.id === projectId)
+    const project = projectList.find((entry) => entry.id === projectId)
     const plan = planComfyScenes(visibleItemsRef.current, comfyQueue.config?.durationPadding ?? 1)
+    const linked = project?.projectFolderPath?.trim() ?? ''
     comfyQueue.openComposer({
       projectId,
       projectName: project?.name ?? 'Projeto',
       sceneCount: plan.scenes.length,
       totalCount: visibleItemsRef.current.length,
       problems: plan.problems,
+      outputDir: linked ? `${linked.replace(/[\\/]+$/, '')}\\${COMFY_DOWNLOAD_SUBDIR}` : null,
     })
   }
 
@@ -1112,7 +1121,7 @@ export function LipSyncRefsPage() {
                 className={toolbarButtonClass}
                 icon={<Clapperboard className="h-3.5 w-3.5" />}
                 disabled={!attachProjectId}
-                title="Envia as cenas ao ComfyUI. Os vídeos são gravados na pasta das imagens e dos áudios."
+                title="Envia as cenas ao ComfyUI. Os vídeos são gravados na pasta lipsync, dentro da pasta vinculada."
                 onClick={() => void openComfyPanel()}
               >
                 Gerar no Comfy

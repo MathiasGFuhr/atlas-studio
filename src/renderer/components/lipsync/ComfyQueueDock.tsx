@@ -206,7 +206,12 @@ export function ComfyQueueDock() {
           <div className="space-y-1.5">
             <p className="text-text">
               {queue.pending.projectName}: {queue.pending.sceneCount} de {queue.pending.totalCount} cenas
-              prontas. Os vídeos entram na pasta das imagens e dos áudios (1.mp4, 2.mp4…).
+              prontas.
+            </p>
+            <p className="truncate text-xs text-muted" title={queue.pending.outputDir ?? undefined}>
+              {queue.pending.outputDir
+                ? `Vídeos em ${queue.pending.outputDir}`
+                : 'Vincule a pasta com “Puxar da pasta”. Os vídeos só são gravados em lipsync, dentro dela.'}
             </p>
             {queue.pending.problems.length > 0 ? (
               <ul className="max-h-24 space-y-0.5 overflow-y-auto text-xs text-warning">
@@ -235,12 +240,17 @@ export function ComfyQueueDock() {
         {selected ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-muted">
+              <p className="min-w-0 flex-1 text-xs text-muted">
                 {selected.projectName ? `${selected.projectName} · ` : ''}
                 {timingLabel(selected, now)}
                 {counts
                   ? ` · ${counts.done} prontas · ${counts.queued + counts.uploading} no ComfyUI · ${counts.pending} aguardando${counts.error ? ` · ${counts.error} com erro` : ''}`
                   : ''}
+                {selected.batch.outputDir ? (
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-2" title={selected.batch.outputDir}>
+                    {selected.batch.outputDir}
+                  </span>
+                ) : null}
               </p>
               <div className="flex gap-2">
                 {counts && (counts.error > 0 || counts.canceled > 0) ? (
@@ -258,7 +268,8 @@ export function ComfyQueueDock() {
                   variant="secondary"
                   className="h-8 px-3 py-0 text-xs"
                   icon={<FolderOpen className="h-3.5 w-3.5" />}
-                  disabled={!counts?.done}
+                  disabled={!selected.batch.outputDir}
+                  title={selected.batch.outputDir}
                   onClick={() => void api.system.openPath(selected.batch.outputDir)}
                 >
                   Pasta
@@ -342,7 +353,7 @@ export function ComfyQueueDock() {
           <Button
             className="h-9 px-3 py-0 text-xs"
             icon={<Send className="h-3.5 w-3.5" />}
-            disabled={queue.busy || missingSetup || queue.pending.sceneCount === 0}
+            disabled={queue.busy || missingSetup || queue.pending.sceneCount === 0 || !queue.pending.outputDir}
             onClick={() => void queue.startPending()}
           >
             {queue.pending.sceneCount === 1

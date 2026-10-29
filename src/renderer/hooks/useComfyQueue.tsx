@@ -18,6 +18,7 @@ export type ComfyPendingStart = {
   sceneCount: number
   totalCount: number
   problems: string[]
+  outputDir: string | null
 }
 
 type ComfyQueueValue = {
@@ -125,7 +126,7 @@ export function ComfyQueueProvider({ children }: { children: ReactNode }) {
       push(
         result.skipped.length > 0
           ? `${result.view.jobs.length} cenas enviadas; ${result.skipped.length} ficaram de fora.`
-          : `${result.view.jobs.length} cenas enviadas para o ComfyUI.`,
+          : `${result.view.jobs.length} cenas enviadas. Vídeos em ${result.view.batch.outputDir}.`,
         'success',
       )
     } catch (error) {

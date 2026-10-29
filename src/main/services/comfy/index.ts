@@ -16,14 +16,23 @@ import { logger } from '../logging/logger'
 import { ComfyClient } from './ComfyClient'
 import { ComfyQueueService } from './ComfyQueueService'
 import { sqliteComfyStore } from './comfyStore'
+import { coerceComfyDownloadDir, ensureComfyDownloadDir } from './outputDir'
 import { resolveRunpodComfyUrl } from './runpod'
 import { trimComfyVideoToAudio } from './trimComfyVideo'
+
+function liveComfyDownloadDir(projectId: string | null): string | null {
+  if (!projectId) return null
+  const folder = projectRepository.get(projectId)?.projectFolderPath ?? null
+  return ensureComfyDownloadDir(folder)
+}
 
 export const comfyQueueService = new ComfyQueueService({
   store: sqliteComfyStore,
   createClient: (baseUrl) => new ComfyClient(baseUrl),
   log: (event, data) => logger.info(event, data),
   trimOutput: trimComfyVideoToAudio,
+  resolveOutputDir: (batch) =>
+    liveComfyDownloadDir(batch.projectId) ?? coerceComfyDownloadDir(batch.outputDir, null),
 })
 
 export function getComfyConfig(): ComfyConfig {
@@ -119,21 +128,19 @@ export function latestComfyView(): ComfyBatchView | null {
   return withProjectName(comfyQueueService.latestView())
 }
 
-/** Envios antigos iam para uma subpasta Comfy/; os que ainda estão rodando passam a gravar na pasta da música. */
+/** Lotes em andamento passam a gravar em `{pasta vinculada}/lipsync`. */
 export function remapActiveComfyOutputDirs() {
   for (const batch of sqliteComfyStore.activeBatches()) {
-    if (!batch.projectId) continue
-    const folder = projectRepository.get(batch.projectId)?.projectFolderPath?.trim() ?? ''
-    if (!folder || !folderExists(folder)) continue
-    const resolved = path.resolve(folder)
+    const resolved = liveComfyDownloadDir(batch.projectId)
+    if (!resolved) continue
     if (path.resolve(batch.outputDir) === resolved) continue
     sqliteComfyStore.updateBatch(batch.id, { outputDir: resolved })
   }
 }
 
 /**
- * Envia as cenas ativas do projeto. Os vídeos vão para a mesma pasta das imagens e dos áudios
- * (`1.mp4` ao lado de `1.png` e `1.mp3`).
+ * Envia as cenas ativas do projeto. Os vídeos vão para `{pasta vinculada}/lipsync`
+ * (`1.mp4`, `2.mp4`…). Nunca para outro lugar.
  */
 export function startComfyBatch(projectId: string | null): ComfyStartResult {
   if (!projectId?.trim()) throw new Error('Selecione um projeto para gerar.')
@@ -142,10 +149,15 @@ export function startComfyBatch(projectId: string | null): ComfyStartResult {
   const folder = project.projectFolderPath?.trim() ?? ''
   if (!folder || !folderExists(folder)) {
     throw new Error(
-      'Vincule a pasta das imagens e áudios neste projeto (Puxar da pasta). Os vídeos são gravados nessa mesma pasta.',
+      'Vincule a pasta das imagens e áudios neste projeto (Puxar da pasta). Os vídeos são gravados em lipsync, dentro dessa pasta.',
     )
   }
-  const outputDir = path.resolve(folder)
+  const outputDir = ensureComfyDownloadDir(folder)
+  if (!outputDir) {
+    throw new Error(
+      'Vincule a pasta das imagens e áudios neste projeto (Puxar da pasta). Os vídeos são gravados em lipsync, dentro dessa pasta.',
+    )
+  }
   const config = sqliteComfyStore.getConfig()
   const refs = lipSyncRefRepository.list({ status: 'active', projectId })
   const { scenes, problems } = planComfyScenes(refs, config.durationPadding)

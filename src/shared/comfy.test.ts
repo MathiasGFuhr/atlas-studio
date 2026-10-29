@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildComfySceneWorkflow,
+  COMFY_DOWNLOAD_SUBDIR,
   comfyOutputTrimSeconds,
   comfyRunpodProxyUrl,
   detectComfyWorkflowMapping,
@@ -262,6 +263,12 @@ describe('sceneOutputFileName', () => {
   it('grava o vídeo com o mesmo número da imagem e do áudio', () => {
     expect(sceneOutputFileName(1, '.mp4')).toBe('1.mp4')
     expect(sceneOutputFileName(15, '.MP4')).toBe('15.mp4')
+  })
+})
+
+describe('COMFY_DOWNLOAD_SUBDIR', () => {
+  it('é a pasta lipsync dentro do projeto vinculado', () => {
+    expect(COMFY_DOWNLOAD_SUBDIR).toBe('lipsync')
   })
 })
 

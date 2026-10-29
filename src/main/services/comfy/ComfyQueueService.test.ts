@@ -55,7 +55,7 @@ class MemoryStore implements ComfyStore {
   activeBatches() {
     return [...this.batches.values()].filter((batch) => batch.status === 'running' || batch.status === 'paused')
   }
-  updateBatch(id: string, patch: Partial<Pick<ComfyBatch, 'status' | 'lastError'>>) {
+  updateBatch(id: string, patch: Partial<Pick<ComfyBatch, 'status' | 'lastError' | 'outputDir'>>) {
     const batch = this.batches.get(id)
     if (batch) this.batches.set(id, { ...batch, ...patch })
   }
@@ -356,5 +356,23 @@ describe('ComfyQueueService', () => {
     expect(comfy.submitted).toHaveLength(5)
     expect(store.listJobs(second.batch.id).filter((job) => job.status === 'queued')).toHaveLength(2)
     fs.rmSync(otherDir, { recursive: true, force: true })
+  })
+
+  it('baixa na pasta lipsync atual, mesmo se o lote tiver sido iniciado em outro destino', async () => {
+    const lipsyncDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-comfy-lipsync-'))
+    service.stop()
+    service = new ComfyQueueService({
+      store,
+      createClient: () => comfy,
+      resolveOutputDir: () => lipsyncDir,
+    })
+    const { batch } = service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(1) })
+    await cycle()
+    comfy.finishRunning()
+    await cycle()
+    expect(fs.existsSync(path.join(lipsyncDir, '1.mp4'))).toBe(true)
+    expect(fs.existsSync(path.join(outputDir, '1.mp4'))).toBe(false)
+    expect(store.getBatch(batch.id)?.outputDir).toBe(lipsyncDir)
+    fs.rmSync(lipsyncDir, { recursive: true, force: true })
   })
 })
