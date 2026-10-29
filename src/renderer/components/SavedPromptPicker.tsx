@@ -29,10 +29,12 @@ export function SavedPromptPicker({
   open,
   onClose,
   onPick,
+  hint,
 }: {
   open: boolean
   onClose: () => void
   onPick: (prompts: CustomPrompt[]) => void
+  hint?: string
 }) {
   const api = getAtlasApi()
   const { pushError } = useToast()
@@ -140,8 +142,8 @@ export function SavedPromptPicker({
     >
       <div className="space-y-3">
         <p className="text-sm text-muted">
-          Marque um ou mais textos, de qualquer aba. Eles entram nesta imagem, um embaixo do outro,
-          na ordem em que você marcou. Depois você ainda pode editar.
+          {hint ??
+            'Marque um ou mais textos, de qualquer aba. Eles entram nesta imagem, um embaixo do outro, na ordem em que você marcou. Depois você ainda pode editar.'}
         </p>
         {selectedPrompts.length > 0 ? (
           <p className="text-xs leading-relaxed text-text">

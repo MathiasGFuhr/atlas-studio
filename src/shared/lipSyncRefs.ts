@@ -177,6 +177,11 @@ export function matchNumberedFiles<T extends { fileName: string; path: string }>
   return { matches, ignored }
 }
 
+/** Junta textos de prompts salvos na ordem marcada, um embaixo do outro. */
+export function joinPromptTexts(texts: string[]): string {
+  return texts.map((text) => text.trim()).filter(Boolean).join('\n\n')
+}
+
 /** Último número de cena definido pela pasta (imagem ou áudio). `1.mp3`…`15.mp3` → 15. */
 export function lastLipSyncFolderSceneNumber(
   scan: Pick<LipSyncFolderScan, 'matches' | 'audios'>,

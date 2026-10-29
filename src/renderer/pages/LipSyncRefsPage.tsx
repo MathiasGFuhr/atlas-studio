@@ -17,7 +17,12 @@ import {
   Users,
 } from 'lucide-react'
 import type { LipSyncFolderScan, LipSyncRef, LipSyncSubject } from '@shared/lipSyncRefs'
-import { LIPSYNC_SUBJECT_LABEL, comfyDurationSeconds, lastLipSyncFolderSceneNumber } from '@shared/lipSyncRefs'
+import {
+  LIPSYNC_SUBJECT_LABEL,
+  comfyDurationSeconds,
+  joinPromptTexts,
+  lastLipSyncFolderSceneNumber,
+} from '@shared/lipSyncRefs'
 import { COMFY_DOWNLOAD_SUBDIR, planComfyScenes } from '@shared/comfy'
 import type { CustomPrompt } from '@shared/quickPrompts'
 import type { Channel, Project } from '@shared/types'
@@ -39,7 +44,10 @@ import { useToast } from '../components/Toast'
 import { environmentBreadcrumb } from '../lib/environments'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { SongLyricsPanel } from '../components/SongLyricsPanel'
+import { ApplyAllScenesPromptModal } from '../components/lipsync/ApplyAllScenesPromptModal'
 import { cn } from '../lib/utils'
+
+type SavedPromptTarget = { kind: 'scene'; id: string } | { kind: 'all' }
 
 type Draft = {
   label: string
@@ -263,7 +271,9 @@ export function LipSyncRefsPage() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [projectForm, setProjectForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM)
   const [projectSaving, setProjectSaving] = useState(false)
-  const [pickerItemId, setPickerItemId] = useState<string | null>(null)
+  const [savedPromptTarget, setSavedPromptTarget] = useState<SavedPromptTarget | null>(null)
+  const [allScenesPromptOpen, setAllScenesPromptOpen] = useState(false)
+  const [allScenesPrompt, setAllScenesPrompt] = useState('')
   const [focusSceneId, setFocusSceneId] = useState<string | null>(null)
 
   const refreshSeq = useRef(0)
@@ -800,22 +810,18 @@ export function LipSyncRefsPage() {
     }
   }
 
-  async function applySavedPrompt(prompts: CustomPrompt[]) {
-    const id = pickerItemId
-    if (!id || prompts.length === 0) return
+  async function applySavedPrompt(id: string, prompts: CustomPrompt[]) {
+    if (prompts.length === 0) return
     const draft = drafts[id]
     const item = items.find((entry) => entry.id === id)
     if (!draft && !item) return
     const next: Draft = {
       label: draft?.label ?? item?.label ?? '',
-      prompt: prompts
-        .map((prompt) => prompt.text.trim())
-        .filter(Boolean)
-        .join('\n\n'),
+      prompt: joinPromptTexts(prompts.map((prompt) => prompt.text)),
       lyrics: draft?.lyrics ?? item?.lyrics ?? '',
       projectId: draft?.projectId ?? item?.projectId ?? '',
     }
-    setPickerItemId(null)
+    setSavedPromptTarget(null)
     setDrafts((current) => ({ ...current, [id]: next }))
     try {
       const updated = await api.lipSyncRefs.update(id, {
@@ -838,6 +844,69 @@ export function LipSyncRefsPage() {
       )
     } catch (error) {
       pushError(error, 'Não foi possível aplicar o prompt salvo.')
+    }
+  }
+
+  function handleSavedPromptPick(prompts: CustomPrompt[]) {
+    if (savedPromptTarget?.kind === 'all') {
+      setAllScenesPrompt(joinPromptTexts(prompts.map((prompt) => prompt.text)))
+      setSavedPromptTarget(null)
+      return
+    }
+    if (savedPromptTarget?.kind === 'scene') {
+      void applySavedPrompt(savedPromptTarget.id, prompts)
+    }
+  }
+
+  function openAllScenesPrompt() {
+    const current = selectedId
+      ? (drafts[selectedId]?.prompt ?? items.find((item) => item.id === selectedId)?.prompt ?? '')
+      : ''
+    setAllScenesPrompt(current)
+    setAllScenesPromptOpen(true)
+  }
+
+  async function applyPromptToAllScenes() {
+    const prompt = allScenesPrompt.trim()
+    const targets = visibleItemsRef.current
+    if (!prompt || targets.length === 0 || projectLocked) return
+    setSavedPromptTarget(null)
+    setBusy(true)
+    try {
+      const updatedList = await Promise.all(
+        targets.map((item) => {
+          const draft = draftsRef.current[item.id]
+          return api.lipSyncRefs.update(item.id, {
+            label: draft?.label ?? item.label,
+            prompt,
+            lyrics: draft?.lyrics ?? item.lyrics,
+            projectId: (draft?.projectId ?? item.projectId) || null,
+          })
+        }),
+      )
+      const byId = new Map(
+        updatedList.filter((entry): entry is LipSyncRef => Boolean(entry)).map((entry) => [entry.id, entry]),
+      )
+      setItems((current) => current.map((item) => byId.get(item.id) ?? item))
+      setDrafts((current) => {
+        const next = { ...current }
+        for (const updated of byId.values()) {
+          next[updated.id] = toDraft(updated)
+        }
+        return next
+      })
+      setAllScenesPromptOpen(false)
+      setAllScenesPrompt('')
+      push(
+        targets.length === 1
+          ? 'Prompt padrão aplicado na cena.'
+          : `Prompt padrão aplicado nas ${targets.length} cenas.`,
+        'success',
+      )
+    } catch (error) {
+      pushError(error, 'Não foi possível aplicar o prompt em todas as cenas.')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -1470,14 +1539,27 @@ export function LipSyncRefsPage() {
                       <div className="flex flex-col">
                         <div className="mb-1.5 flex items-center justify-between gap-2">
                           <span className="text-xs font-medium text-muted">Prompt de lipsync desta cena</span>
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition-colors hover:text-accent-hover"
-                            onClick={() => setPickerItemId(selectedItem.id)}
-                          >
-                            <Library className="h-3.5 w-3.5" />
-                            Usar salvo
-                          </button>
+                          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition-colors hover:text-accent-hover disabled:opacity-40"
+                              disabled={editsDisabled}
+                              onClick={() => setSavedPromptTarget({ kind: 'scene', id: selectedItem.id })}
+                            >
+                              <Library className="h-3.5 w-3.5" />
+                              Usar salvo
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition-colors hover:text-accent-hover disabled:opacity-40"
+                              disabled={editsDisabled || visibleItems.length === 0}
+                              title="Aplica o mesmo prompt em todas as cenas deste projeto"
+                              onClick={openAllScenesPrompt}
+                            >
+                              <Replace className="h-3.5 w-3.5" />
+                              Usar em todas
+                            </button>
+                          </div>
                         </div>
                         <textarea
                           value={selectedDraft.prompt}
@@ -1628,10 +1710,33 @@ export function LipSyncRefsPage() {
         onSubmit={() => void saveNewProject()}
       />
 
+      <ApplyAllScenesPromptModal
+        open={allScenesPromptOpen}
+        sceneCount={visibleItems.length}
+        scenesWithPrompt={visibleItems.filter((item) =>
+          (drafts[item.id]?.prompt ?? item.prompt).trim(),
+        ).length}
+        text={allScenesPrompt}
+        applying={busy}
+        onChange={setAllScenesPrompt}
+        onClose={() => {
+          if (busy) return
+          setAllScenesPromptOpen(false)
+          setSavedPromptTarget(null)
+        }}
+        onOpenSaved={() => setSavedPromptTarget({ kind: 'all' })}
+        onApply={() => void applyPromptToAllScenes()}
+      />
+
       <SavedPromptPicker
-        open={pickerItemId !== null}
-        onClose={() => setPickerItemId(null)}
-        onPick={(prompts) => void applySavedPrompt(prompts)}
+        open={savedPromptTarget !== null}
+        hint={
+          savedPromptTarget?.kind === 'all'
+            ? 'Marque um ou mais textos. Eles preenchem o prompt padrão, um embaixo do outro. Depois você ainda pode editar e aplicar em todas as cenas.'
+            : undefined
+        }
+        onClose={() => setSavedPromptTarget(null)}
+        onPick={handleSavedPromptPick}
       />
 
       <ConfirmDialog

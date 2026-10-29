@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   comfyDurationSeconds,
+  joinPromptTexts,
   lastLipSyncFolderSceneNumber,
   matchNumberedFiles,
   matchNumberedImages,
@@ -101,5 +102,15 @@ describe('comfyDurationSeconds', () => {
     expect(comfyDurationSeconds(null)).toBeNull()
     expect(comfyDurationSeconds(0)).toBeNull()
     expect(comfyDurationSeconds(Number.NaN)).toBeNull()
+  })
+})
+
+describe('joinPromptTexts', () => {
+  it('junta na ordem e ignora vazios', () => {
+    expect(joinPromptTexts(['  canto  ', '', 'luz quente'])).toBe('canto\n\nluz quente')
+  })
+
+  it('sem texto útil fica vazio', () => {
+    expect(joinPromptTexts(['  ', ''])).toBe('')
   })
 })
