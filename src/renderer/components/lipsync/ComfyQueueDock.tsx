@@ -24,6 +24,7 @@ import { useToast } from '../Toast'
 import { useComfyQueue } from '../../hooks/useComfyQueue'
 import { getAtlasApi } from '../../lib/api'
 import { cn } from '../../lib/utils'
+import { ComfyDoneModal } from './ComfyDoneModal'
 
 const STATUS_LABEL: Record<ComfyJobStatus, string> = {
   pending: 'Aguardando no Atlas',
@@ -109,8 +110,9 @@ export function ComfyQueueDock() {
     () => queue.views.filter((view) => isComfyBatchInProgress(view.batch.status)),
     [queue.views],
   )
+  const doneModal = <ComfyDoneModal notice={queue.finished} onOk={queue.acknowledgeFinished} />
 
-  if (!queue.visible) return null
+  if (!queue.visible) return doneModal
 
   if (queue.minimized) {
     const headline =
@@ -120,15 +122,18 @@ export function ComfyQueueDock() {
           ? `${activeViews[0].projectName ?? 'ComfyUI'} · ${summary(activeViews[0])} prontas · ${timingLabel(activeViews[0], now)}`
           : `${activeViews.length} vídeos no RunPod · ${activeViews.map((view) => summary(view)).join(' + ')}`
     return (
-      <button
-        type="button"
-        className="fixed bottom-3 right-3 z-[46] flex max-w-[min(28rem,calc(100vw-6rem))] items-center gap-2 rounded-2xl border border-border-soft bg-card px-3 py-2 text-left shadow-modal"
-        onClick={() => queue.expand(selected?.batch.id)}
-      >
-        <Clapperboard className="h-4 w-4 shrink-0 text-accent" />
-        <span className="min-w-0 truncate text-xs text-text">{headline}</span>
-        <ChevronUp className="h-4 w-4 shrink-0 text-muted" />
-      </button>
+      <>
+        <button
+          type="button"
+          className="fixed bottom-3 right-3 z-[46] flex max-w-[min(28rem,calc(100vw-6rem))] items-center gap-2 rounded-2xl border border-border-soft bg-card px-3 py-2 text-left shadow-modal"
+          onClick={() => queue.expand(selected?.batch.id)}
+        >
+          <Clapperboard className="h-4 w-4 shrink-0 text-accent" />
+          <span className="min-w-0 truncate text-xs text-text">{headline}</span>
+          <ChevronUp className="h-4 w-4 shrink-0 text-muted" />
+        </button>
+        {doneModal}
+      </>
     )
   }
 
@@ -136,6 +141,7 @@ export function ComfyQueueDock() {
   const showingComposer = Boolean(queue.pending) && !inProgress
 
   return (
+    <>
     <div className="fixed bottom-3 right-3 z-[46] flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <Clapperboard className="h-4 w-4 shrink-0 text-accent" />
@@ -205,8 +211,11 @@ export function ComfyQueueDock() {
         {showingComposer && queue.pending ? (
           <div className="space-y-1.5">
             <p className="text-text">
-              {queue.pending.projectName}: {queue.pending.sceneCount} de {queue.pending.totalCount} cenas
-              prontas.
+              {queue.pending.refIds?.length === 1
+                ? `${queue.pending.projectName}: ${
+                    queue.pending.sceneCount === 1 ? 'cena selecionada pronta.' : 'a cena selecionada não está pronta.'
+                  }`
+                : `${queue.pending.projectName}: ${queue.pending.sceneCount} de ${queue.pending.totalCount} cenas prontas.`}
             </p>
             <p className="truncate text-xs text-muted" title={queue.pending.outputDir ?? undefined}>
               {queue.pending.outputDir
@@ -367,5 +376,7 @@ export function ComfyQueueDock() {
         )}
       </div>
     </div>
+    {doneModal}
+    </>
   )
 }

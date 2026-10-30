@@ -31,6 +31,8 @@ export function SongLyricsPanel({
   assignTarget,
   onSave,
   onAssign,
+  onCopySceneExcerpts,
+  hasSceneExcerpts,
 }: {
   lyrics?: string
   disabled?: boolean
@@ -38,6 +40,8 @@ export function SongLyricsPanel({
   assignTarget?: { number: string } | null
   onSave: (lyrics: string) => Promise<void>
   onAssign?: (excerpt: string, remaining: string) => boolean | void | Promise<boolean | void>
+  onCopySceneExcerpts?: () => void | Promise<void>
+  hasSceneExcerpts?: boolean
 }) {
   const api = getAtlasApi()
   const { push, pushError } = useToast()
@@ -203,6 +207,19 @@ export function SongLyricsPanel({
           {dirty ? ' · não salvo' : ''}
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          {onCopySceneExcerpts ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-9 px-3 text-xs"
+              icon={<Copy className="h-3.5 w-3.5" />}
+              disabled={!hasSceneExcerpts}
+              title="Copia os trechos de todas as cenas, numerados na ordem da fila."
+              onClick={() => void onCopySceneExcerpts()}
+            >
+              Copiar trechos
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -211,7 +228,7 @@ export function SongLyricsPanel({
             disabled={!draft.trim()}
             onClick={() => void copy()}
           >
-            Copiar
+            Copiar letra
           </Button>
           {dirty ? (
             <button

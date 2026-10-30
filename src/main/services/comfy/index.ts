@@ -142,7 +142,7 @@ export function remapActiveComfyOutputDirs() {
  * Envia as cenas ativas do projeto. Os vídeos vão para `{pasta vinculada}/lipsync`
  * (`1.mp4`, `2.mp4`…). Nunca para outro lugar.
  */
-export function startComfyBatch(projectId: string | null): ComfyStartResult {
+export function startComfyBatch(projectId: string | null, refIds?: string[] | null): ComfyStartResult {
   if (!projectId?.trim()) throw new Error('Selecione um projeto para gerar.')
   const project = projectRepository.get(projectId)
   if (!project) throw new Error('Projeto não encontrado.')
@@ -158,9 +158,16 @@ export function startComfyBatch(projectId: string | null): ComfyStartResult {
       'Vincule a pasta das imagens e áudios neste projeto (Puxar da pasta). Os vídeos são gravados em lipsync, dentro dessa pasta.',
     )
   }
+  const only = Array.isArray(refIds)
+    ? refIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+    : []
   const config = sqliteComfyStore.getConfig()
   const refs = lipSyncRefRepository.list({ status: 'active', projectId })
-  const { scenes, problems } = planComfyScenes(refs, config.durationPadding)
+  const { scenes, problems } = planComfyScenes(
+    refs,
+    config.durationPadding,
+    only.length > 0 ? { refIds: only } : undefined,
+  )
   const view = withProjectName(comfyQueueService.startBatch({ projectId, outputDir, scenes }))!
   return { view, skipped: problems }
 }

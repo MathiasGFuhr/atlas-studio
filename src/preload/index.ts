@@ -559,8 +559,8 @@ const api = {
     testConnection: (baseUrl?: string) =>
       ipcRenderer.invoke(IPC.comfy.testConnection, baseUrl) as Promise<ComfyConnectionInfo>,
     discoverUrl: () => ipcRenderer.invoke(IPC.comfy.discoverUrl) as Promise<ComfyDiscoverResult>,
-    start: (projectId: string | null) =>
-      ipcRenderer.invoke(IPC.comfy.start, projectId) as Promise<ComfyStartResult>,
+    start: (projectId: string | null, refIds?: string[] | null) =>
+      ipcRenderer.invoke(IPC.comfy.start, projectId, refIds) as Promise<ComfyStartResult>,
     list: () => ipcRenderer.invoke(IPC.comfy.list) as Promise<ComfyBatchView[]>,
     latest: () => ipcRenderer.invoke(IPC.comfy.latest) as Promise<ComfyBatchView | null>,
     pause: (batchId: string) => ipcRenderer.invoke(IPC.comfy.pause, batchId) as Promise<ComfyBatchView | null>,
@@ -571,6 +571,7 @@ const api = {
   },
   system: {
     copyText: (text: string) => ipcRenderer.invoke(IPC.system.copyText, text) as Promise<boolean>,
+    readText: () => ipcRenderer.invoke(IPC.system.readText) as Promise<string>,
     openPath: (targetPath: string) =>
       ipcRenderer.invoke(IPC.system.openPath, targetPath) as Promise<boolean>,
   },

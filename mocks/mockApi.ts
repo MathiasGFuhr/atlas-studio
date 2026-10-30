@@ -1438,6 +1438,7 @@ export const mockApi = {
       await navigator.clipboard.writeText(text)
       return true
     },
+    readText: async () => navigator.clipboard.readText(),
     openPath: async () => true,
   },
   updates: {

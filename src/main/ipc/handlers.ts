@@ -1123,7 +1123,9 @@ export function registerIpcHandlers(deps: {
   })
   ipcMain.handle(IPC.comfy.testConnection, (_e, baseUrl?: string) => testComfyConnection(baseUrl))
   ipcMain.handle(IPC.comfy.discoverUrl, () => discoverComfyUrl())
-  ipcMain.handle(IPC.comfy.start, (_e, projectId: string | null) => startComfyBatch(projectId))
+  ipcMain.handle(IPC.comfy.start, (_e, projectId: string | null, refIds?: string[] | null) =>
+    startComfyBatch(projectId, refIds),
+  )
   ipcMain.handle(IPC.comfy.list, () => listComfyViews())
   ipcMain.handle(IPC.comfy.latest, () => latestComfyView())
   ipcMain.handle(IPC.comfy.pause, (_e, batchId: string) => comfyQueueService.pause(batchId))
@@ -1169,6 +1171,8 @@ export function registerIpcHandlers(deps: {
     clipboard.writeText(text)
     return true
   })
+
+  ipcMain.handle(IPC.system.readText, () => clipboard.readText())
 
   ipcMain.handle(IPC.system.openPath, async (_e, targetPath: string) => {
     if (!targetPath || typeof targetPath !== 'string') {

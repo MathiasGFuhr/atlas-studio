@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   Clapperboard,
+  ClipboardPaste,
   Copy,
   FolderInput,
   FolderPlus,
@@ -25,6 +26,8 @@ import {
 } from '@shared/lipSyncRefs'
 import { COMFY_DOWNLOAD_SUBDIR, planComfyScenes } from '@shared/comfy'
 import type { CustomPrompt } from '@shared/quickPrompts'
+import { parseScenePromptsForImport } from '@shared/scenePromptImport'
+import { formatNumberedSceneTexts } from '@shared/songLyrics'
 import type { Channel, Project } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
@@ -45,6 +48,7 @@ import { environmentBreadcrumb } from '../lib/environments'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { SongLyricsPanel } from '../components/SongLyricsPanel'
 import { ApplyAllScenesPromptModal } from '../components/lipsync/ApplyAllScenesPromptModal'
+import { NumberedPromptsModal } from '../components/lipsync/NumberedPromptsModal'
 import { cn } from '../lib/utils'
 
 type SavedPromptTarget = { kind: 'scene'; id: string } | { kind: 'all' }
@@ -274,6 +278,8 @@ export function LipSyncRefsPage() {
   const [savedPromptTarget, setSavedPromptTarget] = useState<SavedPromptTarget | null>(null)
   const [allScenesPromptOpen, setAllScenesPromptOpen] = useState(false)
   const [allScenesPrompt, setAllScenesPrompt] = useState('')
+  const [numberedPromptsOpen, setNumberedPromptsOpen] = useState(false)
+  const [numberedPromptsText, setNumberedPromptsText] = useState('')
   const [focusSceneId, setFocusSceneId] = useState<string | null>(null)
 
   const refreshSeq = useRef(0)
@@ -920,6 +926,14 @@ export function LipSyncRefsPage() {
     push('Letra da música salva.', 'success')
   }
 
+  function sceneExcerptTexts(): string[] {
+    return visibleItems.map((item) => drafts[item.id]?.lyrics ?? item.lyrics ?? '')
+  }
+
+  function scenePromptTexts(): string[] {
+    return visibleItems.map((item) => drafts[item.id]?.prompt ?? item.prompt ?? '')
+  }
+
   async function copyPrompt(id: string) {
     const draft = drafts[id]
     const item = items.find((entry) => entry.id === id)
@@ -940,6 +954,98 @@ export function LipSyncRefsPage() {
     }
   }
 
+  async function copyNumberedSceneTexts(
+    values: string[],
+    emptyMessage: string,
+    successMessage: string,
+    errorMessage: string,
+  ) {
+    const text = formatNumberedSceneTexts(values)
+    if (!text) {
+      push(emptyMessage)
+      return
+    }
+    try {
+      await api.system.copyText(text)
+      push(successMessage, 'success')
+    } catch (error) {
+      pushError(error, errorMessage)
+    }
+  }
+
+  async function copyAllExcerpts() {
+    await copyNumberedSceneTexts(
+      sceneExcerptTexts(),
+      'Nenhum trecho nas cenas.',
+      'Trechos copiados.',
+      'Não foi possível copiar os trechos.',
+    )
+  }
+
+  async function openNumberedPrompts() {
+    const current = formatNumberedSceneTexts(scenePromptTexts(), { includeEmpty: true })
+    let next = current
+    try {
+      const clipboard = (await api.system.readText()).trim()
+      if (parseScenePromptsForImport(clipboard).length > 0) next = clipboard
+    } catch {
+      /* usa os prompts que já estão nas cenas */
+    }
+    setNumberedPromptsText(next)
+    setNumberedPromptsOpen(true)
+  }
+
+  async function applyNumberedPrompts() {
+    const parsed = parseScenePromptsForImport(numberedPromptsText)
+    const targets = visibleItemsRef.current
+    if (parsed.length === 0 || targets.length === 0 || projectLocked) return
+    setBusy(true)
+    try {
+      const updatedList = await Promise.all(
+        parsed.map((entry) => {
+          const item = targets[entry.number - 1]
+          if (!item) return Promise.resolve(null)
+          const draft = draftsRef.current[item.id]
+          return api.lipSyncRefs.update(item.id, {
+            label: draft?.label ?? item.label,
+            prompt: entry.text,
+            lyrics: draft?.lyrics ?? item.lyrics,
+            projectId: (draft?.projectId ?? item.projectId) || null,
+          })
+        }),
+      )
+      const byId = new Map(
+        updatedList.filter((entry): entry is LipSyncRef => Boolean(entry)).map((entry) => [entry.id, entry]),
+      )
+      if (byId.size === 0) {
+        push('Nenhum número bateu com as cenas da fila.')
+        return
+      }
+      setItems((current) => current.map((item) => byId.get(item.id) ?? item))
+      setDrafts((current) => {
+        const next = { ...current }
+        for (const updated of byId.values()) {
+          next[updated.id] = toDraft(updated)
+        }
+        return next
+      })
+      setNumberedPromptsOpen(false)
+      const skipped = parsed.length - byId.size
+      push(
+        skipped > 0
+          ? `${byId.size} prompts colocados. ${skipped} ficaram de fora: não havia cena com esse número.`
+          : byId.size === 1
+            ? 'Prompt colocado na cena.'
+            : `${byId.size} prompts colocados nas cenas.`,
+        'success',
+      )
+    } catch (error) {
+      pushError(error, 'Não foi possível colocar os prompts.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const indexById = useMemo(
     () => new Map(visibleItems.map((item, index) => [item.id, index])),
     [visibleItems],
@@ -953,6 +1059,14 @@ export function LipSyncRefsPage() {
   const selectedProjectId = selectedDraft?.projectId || attachProjectId
   const selectedProject = projects.find((entry) => entry.id === selectedProjectId) ?? null
   const selectedProjectFolder = selectedProject?.projectFolderPath?.trim() ?? ''
+  const hasSceneExcerpts = useMemo(
+    () => formatNumberedSceneTexts(sceneExcerptTexts()).length > 0,
+    [visibleItems, drafts],
+  )
+  const numberedPromptCount = useMemo(
+    () => parseScenePromptsForImport(numberedPromptsText).length,
+    [numberedPromptsText],
+  )
   const menuItem = menu ? (visibleItems.find((item) => item.id === menu.id) ?? null) : null
 
   useEffect(() => {
@@ -1095,7 +1209,7 @@ export function LipSyncRefsPage() {
       return
     }
     const rect = anchor.getBoundingClientRect()
-    const flip = rect.bottom + 112 > window.innerHeight
+    const flip = rect.bottom + 160 > window.innerHeight
     setMenu({
       id,
       top: flip ? rect.top - 4 : rect.bottom + 4,
@@ -1118,7 +1232,7 @@ export function LipSyncRefsPage() {
     storyboardRef.current?.scrollTo({ left: 0, behavior: 'smooth' })
   }
 
-  async function openComfyPanel() {
+  async function openComfyPanel(refId?: string) {
     const projectId = currentProjectId()
     if (!projectId) {
       push('Crie ou selecione um projeto para gerar.')
@@ -1136,16 +1250,26 @@ export function LipSyncRefsPage() {
       pushError(error, 'Não foi possível salvar as cenas antes de enviar.')
       return
     }
+    const queue = visibleItemsRef.current
+    if (refId && !queue.some((item) => item.id === refId)) {
+      push('Essa cena não está na fila deste projeto.')
+      return
+    }
     const project = projectList.find((entry) => entry.id === projectId)
-    const plan = planComfyScenes(visibleItemsRef.current, comfyQueue.config?.durationPadding ?? 1)
+    const plan = planComfyScenes(
+      queue,
+      comfyQueue.config?.durationPadding ?? 1,
+      refId ? { refIds: [refId] } : undefined,
+    )
     const linked = project?.projectFolderPath?.trim() ?? ''
     comfyQueue.openComposer({
       projectId,
       projectName: project?.name ?? 'Projeto',
       sceneCount: plan.scenes.length,
-      totalCount: visibleItemsRef.current.length,
+      totalCount: refId ? 1 : queue.length,
       problems: plan.problems,
       outputDir: linked ? `${linked.replace(/[\\/]+$/, '')}\\${COMFY_DOWNLOAD_SUBDIR}` : null,
+      refIds: refId ? [refId] : undefined,
     })
   }
 
@@ -1276,6 +1400,28 @@ export function LipSyncRefsPage() {
                 type="button"
                 variant="secondary"
                 className={toolbarButtonClass}
+                icon={<ClipboardPaste className="h-3.5 w-3.5" />}
+                disabled={editsDisabled || visibleItems.length === 0}
+                title="Cola a lista numerada de prompts em cada cena, para o Comfy."
+                onClick={() => void openNumberedPrompts()}
+              >
+                Colocar prompts
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className={toolbarButtonClass}
+                icon={<Copy className="h-3.5 w-3.5" />}
+                disabled={visibleItems.length === 0 || !hasSceneExcerpts}
+                title="Copia os trechos de todas as cenas, numerados na ordem da fila."
+                onClick={() => void copyAllExcerpts()}
+              >
+                Copiar trechos
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className={toolbarButtonClass}
                 icon={<Trash2 className="h-3.5 w-3.5" />}
                 disabled={editsDisabled || visibleItems.length === 0}
                 title="Apaga todas as cenas da fila. Nada é salvo."
@@ -1308,7 +1454,7 @@ export function LipSyncRefsPage() {
                 className={toolbarButtonClass}
                 icon={<Clapperboard className="h-3.5 w-3.5" />}
                 disabled={!attachProjectId}
-                title="Envia as cenas ao ComfyUI. Os vídeos são gravados na pasta lipsync, dentro da pasta vinculada."
+                title="Envia todas as cenas prontas ao ComfyUI. Os vídeos são gravados na pasta lipsync, dentro da pasta vinculada."
                 onClick={() => void openComfyPanel()}
               >
                 Gerar no Comfy
@@ -1326,6 +1472,8 @@ export function LipSyncRefsPage() {
                 assignTarget={selectedItem ? { number: selectedNumber } : null}
                 onSave={saveSongLyrics}
                 onAssign={assignExcerptToSelectedScene}
+                onCopySceneExcerpts={copyAllExcerpts}
+                hasSceneExcerpts={hasSceneExcerpts}
               />
             </div>
           ) : null}
@@ -1395,6 +1543,17 @@ export function LipSyncRefsPage() {
                     <span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-xs font-semibold text-accent">
                       #{selectedNumber}
                     </span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="ml-auto h-8 px-3 py-0 text-xs"
+                      icon={<Clapperboard className="h-3.5 w-3.5" />}
+                      disabled={!attachProjectId}
+                      title="Envia só esta cena ao ComfyUI."
+                      onClick={() => void openComfyPanel(selectedItem.id)}
+                    >
+                      Enviar esta cena
+                    </Button>
                   </div>
                   <div
                     className={cn(
@@ -1540,6 +1699,16 @@ export function LipSyncRefsPage() {
                         <div className="mb-1.5 flex items-center justify-between gap-2">
                           <span className="text-xs font-medium text-muted">Prompt de lipsync desta cena</span>
                           <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition-colors hover:text-accent-hover disabled:opacity-40"
+                              disabled={editsDisabled || visibleItems.length === 0}
+                              title="Cola a lista numerada de prompts em cada cena, para o Comfy."
+                              onClick={() => void openNumberedPrompts()}
+                            >
+                              <ClipboardPaste className="h-3.5 w-3.5" />
+                              Colocar lista
+                            </button>
                             <button
                               type="button"
                               className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition-colors hover:text-accent-hover disabled:opacity-40"
@@ -1710,6 +1879,20 @@ export function LipSyncRefsPage() {
         onSubmit={() => void saveNewProject()}
       />
 
+      <NumberedPromptsModal
+        open={numberedPromptsOpen}
+        sceneCount={visibleItems.length}
+        parsedCount={numberedPromptCount}
+        text={numberedPromptsText}
+        applying={busy}
+        onChange={setNumberedPromptsText}
+        onClose={() => {
+          if (busy) return
+          setNumberedPromptsOpen(false)
+        }}
+        onApply={() => void applyNumberedPrompts()}
+      />
+
       <ApplyAllScenesPromptModal
         open={allScenesPromptOpen}
         sceneCount={visibleItems.length}
@@ -1796,6 +1979,20 @@ export function LipSyncRefsPage() {
             transform: menu.flip ? 'translate(-100%, -100%)' : 'translateX(-100%)',
           }}
         >
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-text hover:bg-hover disabled:opacity-40"
+            disabled={!attachProjectId}
+            onClick={() => {
+              const id = menuItem.id
+              setMenu(null)
+              void openComfyPanel(id)
+            }}
+          >
+            <Clapperboard className="h-3.5 w-3.5" />
+            Enviar esta cena
+          </button>
           <button
             type="button"
             role="menuitem"

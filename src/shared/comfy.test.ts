@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildComfySceneWorkflow,
   COMFY_DOWNLOAD_SUBDIR,
+  comfyBatchesJustFinished,
   comfyOutputTrimSeconds,
   comfyRunpodProxyUrl,
   detectComfyWorkflowMapping,
@@ -191,6 +192,22 @@ describe('planComfyScenes', () => {
     expect(scenes.map((scene) => scene.sceneNumber)).toEqual([1])
     expect(problems).toEqual(['Cena 02: falta áudio', 'Cena 03: falta prompt'])
   })
+
+  it('envia só as cenas pedidas, com o número original da fila', () => {
+    const { scenes, problems } = planComfyScenes([ref('a'), ref('b'), ref('c')], 1, { refIds: ['b'] })
+    expect(problems).toEqual([])
+    expect(scenes.map((scene) => [scene.sceneNumber, scene.refId])).toEqual([[2, 'b']])
+  })
+
+  it('só aponta problema da cena pedida', () => {
+    const { scenes, problems } = planComfyScenes(
+      [ref('a'), ref('b', { prompt: '  ' }), ref('c')],
+      1,
+      { refIds: ['b'] },
+    )
+    expect(scenes).toEqual([])
+    expect(problems).toEqual(['Cena 02: falta prompt'])
+  })
 })
 
 describe('comfyOutputTrimSeconds', () => {
@@ -301,5 +318,26 @@ describe('estimateComfyTiming', () => {
     )
     expect(timing.remainingMs).toBeNull()
     expect(formatComfyDuration(timing.elapsedMs)).toBe('3 min')
+  })
+})
+
+describe('comfyBatchesJustFinished', () => {
+  const view = (id: string, status: 'running' | 'paused' | 'done' | 'canceled') => ({
+    batch: { id, status },
+  })
+
+  it('avisa só o lote que estava gerando e agora está pronto', () => {
+    const finished = comfyBatchesJustFinished(['a', 'b'], [view('a', 'done'), view('b', 'running')])
+    expect(finished.map((entry) => entry.batch.id)).toEqual(['a'])
+  })
+
+  it('não avisa cancelamento nem lote que já estava pronto', () => {
+    expect(comfyBatchesJustFinished(['a'], [view('a', 'canceled')])).toEqual([])
+    expect(comfyBatchesJustFinished([], [view('b', 'done')])).toEqual([])
+  })
+
+  it('avisa o lote que saiu da lista depois de gerar (outro projeto segue)', () => {
+    const finished = comfyBatchesJustFinished(['a', 'b'], [view('b', 'running')], [view('a', 'running')])
+    expect(finished.map((entry) => entry.batch.id)).toEqual(['a'])
   })
 })

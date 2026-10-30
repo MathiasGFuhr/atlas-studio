@@ -928,6 +928,7 @@ export const IPC = {
   },
   system: {
     copyText: 'system:copyText',
+    readText: 'system:readText',
     openPath: 'system:openPath',
   },
   updates: {

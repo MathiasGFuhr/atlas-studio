@@ -424,6 +424,30 @@ export function isComfyBatchInProgress(status: ComfyBatchStatus): boolean {
   return status === 'running' || status === 'paused'
 }
 
+/** Lotes que estavam gerando e agora acabaram (não vale cancelamento). */
+export function comfyBatchesJustFinished<T extends { batch: Pick<ComfyBatch, 'id' | 'status'> }>(
+  previousInProgressIds: Iterable<string>,
+  views: T[],
+  previousViews: T[] = [],
+): T[] {
+  const previous = new Set(previousInProgressIds)
+  const stillActive = new Set(
+    views.filter((view) => isComfyBatchInProgress(view.batch.status)).map((view) => view.batch.id),
+  )
+  const finished: T[] = []
+  for (const id of previous) {
+    if (stillActive.has(id)) continue
+    const current = views.find((view) => view.batch.id === id)
+    if (current) {
+      if (current.batch.status === 'done') finished.push(current)
+      continue
+    }
+    const previousView = previousViews.find((view) => view.batch.id === id)
+    if (previousView && previousView.batch.status !== 'canceled') finished.push(previousView)
+  }
+  return finished
+}
+
 const VIDEO_EXT = /\.(mp4|webm|mov|mkv|gif)$/i
 
 /** Procura o vídeo gerado nas saídas do `/history`, preferindo o nó SaveVideo do workflow. */
@@ -468,10 +492,13 @@ export type ComfyScenePlan = {
 export function planComfyScenes(
   refs: Array<{ id: string; imagePath: string; audioPath: string; audioDuration: number | null; prompt: string }>,
   durationPadding: number,
+  options?: { refIds?: Iterable<string> },
 ): { scenes: ComfyScenePlan[]; problems: string[] } {
   const scenes: ComfyScenePlan[] = []
   const problems: string[] = []
+  const wanted = options?.refIds ? new Set(options.refIds) : null
   refs.forEach((ref, index) => {
+    if (wanted && !wanted.has(ref.id)) return
     const sceneNumber = index + 1
     const missing: string[] = []
     if (!ref.imagePath.trim()) missing.push('imagem')
