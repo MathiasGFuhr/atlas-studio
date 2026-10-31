@@ -521,6 +521,8 @@ const api = {
     selectFolder: (options?: SelectFolderOptions) =>
       ipcRenderer.invoke(IPC.dialog.selectFolder, options) as Promise<string | null>,
     selectImage: () => ipcRenderer.invoke(IPC.dialog.selectImage) as Promise<string | null>,
+    selectAudio: (options?: SelectFolderOptions) =>
+      ipcRenderer.invoke(IPC.dialog.selectAudio, options) as Promise<string | null>,
     readImageDataUrl: (filePath: string) =>
       ipcRenderer.invoke(IPC.dialog.readImageDataUrl, filePath) as Promise<string | null>,
     selectFiles: () => ipcRenderer.invoke(IPC.dialog.selectFiles) as Promise<string[]>,

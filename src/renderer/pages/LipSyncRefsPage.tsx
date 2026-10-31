@@ -784,6 +784,30 @@ export function LipSyncRefsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachProjectId, loading])
 
+  async function chooseAudio(id: string) {
+    const item = items.find((entry) => entry.id === id)
+    if (!item) return
+    const projectId = drafts[id]?.projectId || item.projectId || attachProjectId
+    const project = projects.find((entry) => entry.id === projectId)
+    const folder = project?.projectFolderPath?.trim() ?? ''
+    setBusy(true)
+    try {
+      const file = await api.dialog.selectAudio({
+        title: 'Áudio desta cena',
+        defaultPath: folder || undefined,
+      })
+      if (!file) return
+      const updated = await api.lipSyncRefs.setAudio(id, file)
+      if (!updated) return
+      setItems((current) => current.map((entry) => (entry.id === id ? updated : entry)))
+      push(item.audioPath.trim() ? 'Áudio trocado.' : 'Áudio adicionado.', 'success')
+    } catch (error) {
+      pushError(error, 'Não foi possível escolher o áudio.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function removeAudio(id: string) {
     setBusy(true)
     try {
@@ -1680,19 +1704,35 @@ export function LipSyncRefsPage() {
                             </span>
                           ) : (
                             <span className="text-muted">
-                              Sem áudio. Use “Puxar da pasta” com 1.mp3, 2.mp3…
+                              Sem áudio. Use “Puxar da pasta” com 1.mp3, 2.mp3… ou escolha um arquivo.
                             </span>
                           )}
                         </span>
-                        {selectedItem.audioPath ? (
+                        <span className="flex shrink-0 items-center gap-3">
                           <button
                             type="button"
-                            className="shrink-0 text-xs font-medium text-muted transition-colors hover:text-text"
-                            onClick={() => void removeAudio(selectedItem.id)}
+                            className="text-xs font-medium text-muted transition-colors hover:text-text disabled:opacity-50"
+                            disabled={busy}
+                            title={
+                              selectedItem.audioPath
+                                ? 'Trocar o áudio desta cena por outro arquivo'
+                                : 'Escolher o arquivo de áudio desta cena'
+                            }
+                            onClick={() => void chooseAudio(selectedItem.id)}
                           >
-                            Remover
+                            {selectedItem.audioPath ? 'Trocar' : 'Escolher'}
                           </button>
-                        ) : null}
+                          {selectedItem.audioPath ? (
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-muted transition-colors hover:text-text disabled:opacity-50"
+                              disabled={busy}
+                              onClick={() => void removeAudio(selectedItem.id)}
+                            >
+                              Remover
+                            </button>
+                          ) : null}
+                        </span>
                       </div>
 
                       <div className="flex flex-col">

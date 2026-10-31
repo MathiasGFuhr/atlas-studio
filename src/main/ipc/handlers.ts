@@ -63,11 +63,12 @@ import type {
   TeamChatCreateGroupInput,
   TeamChatSendInput,
 } from '../../shared/account'
-import type {
-  LipSyncRefCreateInput,
-  LipSyncRefListFilters,
-  LipSyncRefUpdateInput,
-  LipSyncSubject,
+import {
+  LIPSYNC_AUDIO_EXTENSIONS,
+  type LipSyncRefCreateInput,
+  type LipSyncRefListFilters,
+  type LipSyncRefUpdateInput,
+  type LipSyncSubject,
 } from '../../shared/lipSyncRefs'
 import { lipSyncRefRepository } from '../repositories/lipSyncRefRepository'
 import { musicRepository } from '../repositories/musicRepository'
@@ -1078,6 +1079,24 @@ export function registerIpcHandlers(deps: {
     })
     if (result.canceled || result.filePaths.length === 0) return []
     return result.filePaths
+  })
+  ipcMain.handle(IPC.dialog.selectAudio, async (_e, options?: SelectFolderOptions) => {
+    const win = getMainWindow()
+    const preferred = typeof options?.defaultPath === 'string' ? options.defaultPath : ''
+    const title = typeof options?.title === 'string' ? options.title.trim() : ''
+    const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: title || 'Áudio da cena',
+      properties: ['openFile'],
+      defaultPath: preferred && folderExists(preferred) ? preferred : undefined,
+      filters: [
+        {
+          name: 'Áudio',
+          extensions: LIPSYNC_AUDIO_EXTENSIONS.map((ext) => ext.slice(1)),
+        },
+      ],
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    return result.filePaths[0]
   })
   ipcMain.handle(IPC.dialog.readImageDataUrl, (_e, filePath: string) => readImageDataUrl(filePath))
 

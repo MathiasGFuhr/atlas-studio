@@ -1286,6 +1286,7 @@ export const mockApi = {
   dialog: {
     selectFolder: async () => null,
     selectImage: async () => null,
+    selectAudio: async () => null,
     selectImages: async () => [],
     readImageDataUrl: async () => null,
     selectFiles: async () => [],
