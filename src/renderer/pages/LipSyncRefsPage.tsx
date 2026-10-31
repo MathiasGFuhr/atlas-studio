@@ -23,6 +23,7 @@ import {
   comfyDurationSeconds,
   joinPromptTexts,
   lastLipSyncFolderSceneNumber,
+  reuseOpenProjectForFolder,
 } from '@shared/lipSyncRefs'
 import { COMFY_DOWNLOAD_SUBDIR, planComfyScenes } from '@shared/comfy'
 import type { CustomPrompt } from '@shared/quickPrompts'
@@ -72,15 +73,6 @@ function toDraft(source: {
     lyrics: source.lyrics ?? '',
     projectId: source.projectId ?? '',
   }
-}
-
-/** Nome da pasta vira nome do projeto na primeira vinculação, ou se o nome ainda era o da pasta antiga. */
-function projectNameFromLinkedFolder(project: Project, folder: string): string | undefined {
-  const folderName = folderNameFromPath(folder)
-  if (!folderName) return undefined
-  const oldFolderName = project.projectFolderPath ? folderNameFromPath(project.projectFolderPath) : ''
-  if (!project.name.trim() || project.name === oldFolderName) return folderName
-  return undefined
 }
 
 function isDirty(item: LipSyncRef, draft: Draft): boolean {
@@ -284,6 +276,7 @@ export function LipSyncRefsPage() {
 
   const refreshSeq = useRef(0)
   const pullSeq = useRef(0)
+  const skipAutoPullRef = useRef(false)
   const skipSceneScrollRef = useRef(false)
   const pushErrorRef = useRef(pushError)
   pushErrorRef.current = pushError
@@ -578,29 +571,29 @@ export function LipSyncRefsPage() {
   }
 
   async function bindFolderToProject(folder: string, project: Project | undefined): Promise<Project> {
-    const folderName = folderNameFromPath(folder)
+    const folderName = folderNameFromPath(folder) || 'Projeto'
     if (!project) {
+      const current = projectsRef.current.find((entry) => entry.id === currentProjectId())
       const created = await api.projects.create({
         name: folderName,
         description: '',
         projectType: 'music',
-        channelId: null,
+        channelId: current?.channelId ?? null,
         projectFolderPath: folder,
       })
       notifyProjectsChanged()
-      setProjects((current) =>
-        current.some((entry) => entry.id === created.id) ? current : [...current, created],
+      setProjects((currentList) =>
+        currentList.some((entry) => entry.id === created.id) ? currentList : [...currentList, created],
       )
       attachProjectIdRef.current = created.id
       setAttachProjectId(created.id)
       return created
     }
-    const nextName = projectNameFromLinkedFolder(project, folder)
     const updated = await api.projects.update(project.id, {
       projectFolderPath: folder,
-      ...(nextName ? { name: nextName } : {}),
+      name: folderName,
     })
-    const next = updated ?? { ...project, projectFolderPath: folder, name: nextName ?? project.name }
+    const next = updated ?? { ...project, projectFolderPath: folder, name: folderName }
     setProjects((current) => current.map((entry) => (entry.id === next.id ? next : entry)))
     notifyProjectsChanged()
     return next
@@ -618,8 +611,21 @@ export function LipSyncRefsPage() {
         defaultPath: linked || undefined,
       })
       if (!folder) return
+      skipAutoPullRef.current = true
+      pullSeq.current += 1
       const scan = await api.lipSyncRefs.scanFolder(folder)
-      const target = await bindFolderToProject(scan.folder, project)
+      const currentScenes = project
+        ? itemsRef.current.filter((item) => item.projectId === project.id)
+        : []
+      const reuseCurrent = Boolean(
+        project &&
+          reuseOpenProjectForFolder({
+            currentFolderPath: project.projectFolderPath,
+            selectedFolder: scan.folder,
+            currentSceneCount: currentScenes.length,
+          }),
+      )
+      const target = await bindFolderToProject(scan.folder, reuseCurrent ? project : undefined)
       if (scan.matches.length === 0 && scan.audios.length === 0) {
         push(
           `${target.name} vinculado à pasta, mas não há imagem ou áudio com nome só de número (1.png, 1.mp3…).`,
@@ -627,12 +633,14 @@ export function LipSyncRefsPage() {
         )
         return
       }
-      if (countFolderConflicts(scan) > 0) {
+      const queue = reuseCurrent ? currentScenes : []
+      if (reuseCurrent && countFolderConflicts(scan) > 0) {
         setFolderImport(scan)
         return
       }
-      await applyFolderImport(scan, true, { projectId: target.id })
+      await applyFolderImport(scan, true, { projectId: target.id, queue })
     } catch (error) {
+      skipAutoPullRef.current = false
       pushError(error, 'Não foi possível ler a pasta.')
     } finally {
       setBusy(false)
@@ -779,6 +787,10 @@ export function LipSyncRefsPage() {
 
   useEffect(() => {
     if (loading || !attachProjectId) return
+    if (skipAutoPullRef.current) {
+      skipAutoPullRef.current = false
+      return
+    }
     void pullLinkedFolder(attachProjectId)
     // A troca de projeto é o gatilho; a pasta vinculada entra sozinha na fila.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1364,27 +1376,34 @@ export function LipSyncRefsPage() {
         <p className="flex flex-1 items-center justify-center text-sm text-muted">Carregando…</p>
       ) : projects.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-elevated/40 px-6 py-16 text-center">
-          <p className="text-sm font-medium text-text">Crie um projeto de música primeiro</p>
+          <p className="text-sm font-medium text-text">Comece por um projeto de música</p>
           <p className="mt-1 max-w-md text-sm text-muted">
-            Escolha o canal, preencha título e descrição e, se quiser, já agenda a publicação.
+            Puxe a pasta da música — o projeto nasce com o nome dessa pasta — ou crie o projeto na
+            mão.
           </p>
-          <Button
-            type="button"
-            className="mt-5"
-            icon={<FolderPlus className="h-4 w-4" />}
-            onClick={openCreateProject}
-          >
-            Novo projeto
-          </Button>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              icon={<FolderInput className="h-4 w-4" />}
+              title="Cria o projeto com o nome da pasta e puxa 1.png, 1.mp3…"
+              onClick={() => void importFromFolder()}
+            >
+              Puxar da pasta
+            </Button>
+            <Button type="button" icon={<FolderPlus className="h-4 w-4" />} onClick={openCreateProject}>
+              Novo projeto
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-1 flex-col">
           <ComfyRunpodBar />
           {projectLocked ? (
             <p className="mb-3 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2 text-xs text-text">
-              Este projeto está gerando e não pode ser editado. Use <strong>Novo projeto</strong> ao
-              lado do seletor (ou escolha outro já existente), puxe a pasta e monte o próximo vídeo —
-              o RunPod continua.
+              Este projeto está gerando e não pode ser editado. Use <strong>Puxar da pasta</strong>{' '}
+              para criar o próximo com o nome da pasta, ou <strong>Novo projeto</strong> — o RunPod
+              continua.
             </p>
           ) : null}
           <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
@@ -1458,8 +1477,8 @@ export function LipSyncRefsPage() {
                 variant="secondary"
                 className={toolbarButtonClass}
                 icon={<FolderInput className="h-3.5 w-3.5" />}
-                disabled={editsDisabled}
-                title="Escolha a pasta da música: o nome e o vínculo do projeto ficam nessa pasta. 1.png e 1.mp3 viram a cena 1."
+                disabled={busy}
+                title="Cria um projeto com o nome da pasta escolhida. Não reaproveita outro projeto já feito. 1.png e 1.mp3 viram a cena 1."
                 onClick={() => void importFromFolder()}
               >
                 Puxar da pasta

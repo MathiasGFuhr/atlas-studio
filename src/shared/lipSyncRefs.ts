@@ -190,3 +190,31 @@ export function lastLipSyncFolderSceneNumber(
   const lastAudio = scan.audios[scan.audios.length - 1]?.number ?? 0
   return Math.max(lastImage, lastAudio)
 }
+
+function normalizeFolderKey(value: string | null | undefined): string {
+  return (value ?? '').trim().replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+/** Compara pastas ignorando barra, caixa e barra final. */
+export function sameLipSyncFolder(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const left = normalizeFolderKey(a)
+  const right = normalizeFolderKey(b)
+  return Boolean(left) && left === right
+}
+
+/**
+ * “Puxar da pasta” só reaproveita o projeto aberto se a pasta já for a dele,
+ * ou se ele ainda não tem pasta nem cenas. Qualquer outro caso cria um projeto novo.
+ */
+export function reuseOpenProjectForFolder(input: {
+  currentFolderPath: string | null | undefined
+  selectedFolder: string
+  currentSceneCount: number
+}): boolean {
+  if (sameLipSyncFolder(input.currentFolderPath, input.selectedFolder)) return true
+  if (!input.currentFolderPath?.trim() && input.currentSceneCount === 0) return true
+  return false
+}

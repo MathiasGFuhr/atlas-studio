@@ -1,6 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { COMFY_DOWNLOAD_SUBDIR } from '../../../shared/comfy'
+import {
+  COMFY_DOWNLOAD_SUBDIR,
+  reservedOutputFileNames,
+  uniqueOutputFileName,
+  uniqueSceneOutputFileName,
+} from '../../../shared/comfy'
 
 const LEGACY_COMFY_SUBDIR = 'comfy'
 
@@ -46,4 +51,27 @@ export function coerceComfyDownloadDir(
   if (base === COMFY_DOWNLOAD_SUBDIR) return stored
   if (base === LEGACY_COMFY_SUBDIR) return path.join(path.dirname(stored), COMFY_DOWNLOAD_SUBDIR)
   return path.join(stored, COMFY_DOWNLOAD_SUBDIR)
+}
+
+function namesInFolder(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir)
+  } catch {
+    return []
+  }
+}
+
+/** Destino livre na pasta lipsync. Se `1.mp4` já existe, grava `1 1.mp4`, `1 2.mp4`… */
+export function uniqueLipsyncVideoPath(dir: string, sceneNumber: number, ext = '.mp4'): string {
+  fs.mkdirSync(dir, { recursive: true })
+  return path.join(dir, uniqueSceneOutputFileName(sceneNumber, ext, reservedOutputFileNames(namesInFolder(dir))))
+}
+
+/** Nunca devolve um caminho que já tem arquivo. Se o destino está ocupado, coloca 1, 2, 3 no final. */
+export function uniqueExistingVideoPath(destPath: string): string {
+  const dir = path.dirname(destPath)
+  const ext = path.extname(destPath)
+  const stem = path.basename(destPath, ext)
+  fs.mkdirSync(dir, { recursive: true })
+  return path.join(dir, uniqueOutputFileName(stem, ext, reservedOutputFileNames(namesInFolder(dir))))
 }

@@ -10,7 +10,10 @@ import {
   formatComfyDuration,
   jobsToSubmit,
   normalizeComfyBaseUrl,
+  reservedOutputFileNames,
   sceneOutputFileName,
+  uniqueOutputFileName,
+  uniqueSceneOutputFileName,
   normalizeComfyConfig,
   parseComfyWorkflow,
   pickComfyVideoOutput,
@@ -280,6 +283,27 @@ describe('sceneOutputFileName', () => {
   it('grava o vídeo com o mesmo número da imagem e do áudio', () => {
     expect(sceneOutputFileName(1, '.mp4')).toBe('1.mp4')
     expect(sceneOutputFileName(15, '.MP4')).toBe('15.mp4')
+  })
+})
+
+describe('uniqueSceneOutputFileName', () => {
+  it('usa o número da cena quando a pasta ainda não tem esse arquivo', () => {
+    expect(uniqueSceneOutputFileName(1, '.mp4', [])).toBe('1.mp4')
+    expect(uniqueSceneOutputFileName(15, '.MP4', ['1.mp4'])).toBe('15.mp4')
+  })
+
+  it('coloca 1, 2, 3 no final em vez de sobrescrever', () => {
+    expect(uniqueSceneOutputFileName(1, '.mp4', ['1.mp4'])).toBe('1 1.mp4')
+    expect(uniqueSceneOutputFileName(1, '.mp4', ['1.mp4', '1 1.mp4'])).toBe('1 2.mp4')
+    expect(uniqueSceneOutputFileName(1, '.mp4', ['1.mp4', '1 1.mp4', '1 2.mp4'])).toBe('1 3.mp4')
+  })
+
+  it('não reaproveita o mesmo nome com outra capitalização', () => {
+    expect(uniqueSceneOutputFileName(1, '.mp4', ['1.MP4'])).toBe('1 1.mp4')
+  })
+
+  it('reserva o destino de um download .part em andamento', () => {
+    expect(uniqueOutputFileName('1', '.mp4', reservedOutputFileNames(['1.mp4.part']))).toBe('1 1.mp4')
   })
 })
 

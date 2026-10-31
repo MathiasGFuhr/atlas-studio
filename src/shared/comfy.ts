@@ -361,10 +361,50 @@ export function sceneStem(sceneNumber: number): string {
 /** Subpasta dos vídeos gerados, dentro da pasta vinculada do projeto (Puxar da pasta). */
 export const COMFY_DOWNLOAD_SUBDIR = 'lipsync'
 
-/** Nome do arquivo na pasta lipsync: `1.mp4` para a cena 1. */
+function safeOutputExt(ext: string): string {
+  return ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`
+}
+
+/** Nome preferido na pasta lipsync: `1.mp4` para a cena 1. */
 export function sceneOutputFileName(sceneNumber: number, ext = '.mp4'): string {
-  const safeExt = ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`
-  return `${sceneNumber}${safeExt}`
+  return `${sceneNumber}${safeOutputExt(ext)}`
+}
+
+/**
+ * Nomes já ocupados na pasta, inclusive o destino de um `.part` em andamento.
+ * Assim um download incompleto não libera o mesmo nome para outro vídeo.
+ */
+export function reservedOutputFileNames(names: Iterable<string>): string[] {
+  const reserved: string[] = []
+  for (const name of names) {
+    reserved.push(name)
+    if (name.toLowerCase().endsWith('.part')) reserved.push(name.slice(0, -5))
+  }
+  return reserved
+}
+
+/**
+ * Primeiro nome livre: `1.mp4`, ou `1 1.mp4`, `1 2.mp4`… se o preferido já existir.
+ * Nunca reaproveita um arquivo que já está na pasta.
+ */
+export function uniqueOutputFileName(baseName: string, ext: string, taken: Iterable<string>): string {
+  const safeExt = safeOutputExt(ext)
+  const takenLower = new Set([...taken].map((name) => name.toLowerCase()))
+  const preferred = `${baseName}${safeExt}`
+  if (!takenLower.has(preferred.toLowerCase())) return preferred
+  for (let index = 1; index <= 9999; index += 1) {
+    const candidate = `${baseName} ${index}${safeExt}`
+    if (!takenLower.has(candidate.toLowerCase())) return candidate
+  }
+  throw new Error('Não foi possível gravar um nome único para este vídeo.')
+}
+
+export function uniqueSceneOutputFileName(
+  sceneNumber: number,
+  ext: string,
+  taken: Iterable<string>,
+): string {
+  return uniqueOutputFileName(String(sceneNumber), ext, taken)
 }
 
 export function comfyUploadName(batchId: string, sceneNumber: number, ext: string): string {

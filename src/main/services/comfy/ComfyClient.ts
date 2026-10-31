@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import type { ComfyApiWorkflow, ComfyConnectionInfo, ComfyOutputFile } from '../../../shared/comfy'
 import { normalizeComfyBaseUrl } from '../../../shared/comfy'
+import { uniqueExistingVideoPath } from './outputDir'
 
 const SHORT_TIMEOUT_MS = 30_000
 const UPLOAD_TIMEOUT_MS = 5 * 60_000
@@ -26,7 +27,7 @@ export interface ComfyApi {
   queuePrompt(workflow: ComfyApiWorkflow, clientId: string): Promise<string>
   history(promptId: string): Promise<ComfyHistoryEntry | null>
   queue(): Promise<ComfyQueueState>
-  download(file: ComfyOutputFile, destPath: string): Promise<void>
+  download(file: ComfyOutputFile, destPath: string): Promise<string>
   deleteQueued(promptIds: string[]): Promise<void>
   interrupt(): Promise<void>
 }
@@ -144,21 +145,23 @@ export class ComfyClient implements ComfyApi {
     return { running: ids(data.queue_running), pending: ids(data.queue_pending) }
   }
 
-  async download(file: ComfyOutputFile, destPath: string): Promise<void> {
+  async download(file: ComfyOutputFile, destPath: string): Promise<string> {
     const query = new URLSearchParams({ filename: file.filename, subfolder: file.subfolder, type: file.type })
     const response = await this.request(`/view?${query.toString()}`, {}, DOWNLOAD_TIMEOUT_MS)
     if (!response.ok || !response.body) {
       throw new ComfyUnreachableError(`O ComfyUI respondeu ${response.status} ao baixar ${file.filename}.`)
     }
-    fs.mkdirSync(path.dirname(destPath), { recursive: true })
-    const partial = `${destPath}.part`
+    const dest = uniqueExistingVideoPath(destPath)
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    const partial = `${dest}.part`
     try {
       await pipeline(
         Readable.fromWeb(response.body as unknown as WebReadableStream<Uint8Array>),
         fs.createWriteStream(partial),
       )
-      if (fs.existsSync(destPath)) fs.unlinkSync(destPath)
-      fs.renameSync(partial, destPath)
+      const finalDest = fs.existsSync(dest) ? uniqueExistingVideoPath(dest) : dest
+      fs.renameSync(partial, finalDest)
+      return finalDest
     } catch (error) {
       fs.rmSync(partial, { force: true })
       const reason = error instanceof Error ? error.message : String(error)

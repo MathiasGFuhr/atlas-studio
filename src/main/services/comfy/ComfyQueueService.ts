@@ -19,8 +19,8 @@ import {
   jobsToSubmit,
   pickComfyVideoOutput,
   randomComfySeed,
-  sceneOutputFileName,
 } from '../../../shared/comfy'
+import { uniqueLipsyncVideoPath } from './outputDir'
 import { ComfyUnreachableError, comfyExecutionError, type ComfyApi, type ComfyQueueState } from './ComfyClient'
 import type { ComfyStore, StoredComfyJob } from './comfyStore'
 
@@ -394,25 +394,25 @@ export class ComfyQueueService {
     if (path.resolve(outputDir) !== path.resolve(batch.outputDir)) {
       this.store.updateBatch(batch.id, { outputDir })
     }
-    const dest = path.join(outputDir, sceneOutputFileName(job.sceneNumber, ext))
+    const dest = uniqueLipsyncVideoPath(outputDir, job.sceneNumber, ext)
     const task = client
       .download(output, dest)
-      .then(async () => {
+      .then(async (saved) => {
         if (this.store.getConfig().trimToAudio) {
           try {
-            const trimmed = await this.trimOutput(dest, job.audioPath)
-            if (trimmed) this.log('comfy.job.trimmed', { batchId: batch.id, scene: job.sceneNumber, dest })
+            const trimmed = await this.trimOutput(saved, job.audioPath)
+            if (trimmed) this.log('comfy.job.trimmed', { batchId: batch.id, scene: job.sceneNumber, dest: saved })
           } catch (error) {
             this.log('comfy.job.trim_failed', {
               batchId: batch.id,
               scene: job.sceneNumber,
-              dest,
+              dest: saved,
               message: errorMessage(error),
             })
           }
         }
-        this.store.updateJob(job.id, { status: 'done', outputPath: dest, error: null })
-        this.log('comfy.job.downloaded', { batchId: batch.id, scene: job.sceneNumber, dest })
+        this.store.updateJob(job.id, { status: 'done', outputPath: saved, error: null })
+        this.log('comfy.job.downloaded', { batchId: batch.id, scene: job.sceneNumber, dest: saved })
       })
       .catch((error: unknown) => {
         // Falha de rede: continua em "downloading" e tenta no próximo ciclo; o arquivo segue no pod.

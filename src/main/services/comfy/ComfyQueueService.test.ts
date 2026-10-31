@@ -117,6 +117,7 @@ class FakeComfy implements ComfyApi {
     this.guard()
     fs.mkdirSync(path.dirname(destPath), { recursive: true })
     fs.writeFileSync(destPath, file.filename)
+    return destPath
   }
   async deleteQueued(promptIds: string[]) {
     this.order = this.order.filter((id) => !promptIds.includes(id))
@@ -374,5 +375,18 @@ describe('ComfyQueueService', () => {
     expect(fs.existsSync(path.join(outputDir, '1.mp4'))).toBe(false)
     expect(store.getBatch(batch.id)?.outputDir).toBe(lipsyncDir)
     fs.rmSync(lipsyncDir, { recursive: true, force: true })
+  })
+
+  it('nunca apaga um vídeo já existente: grava 1 1.mp4, 1 2.mp4…', async () => {
+    fs.writeFileSync(path.join(outputDir, '1.mp4'), 'geracao-anterior')
+    fs.writeFileSync(path.join(outputDir, '1 1.mp4'), 'segunda-geracao')
+    const { batch } = service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(1) })
+    await cycle()
+    comfy.finishRunning()
+    await cycle()
+    expect(fs.readFileSync(path.join(outputDir, '1.mp4'), 'utf8')).toBe('geracao-anterior')
+    expect(fs.readFileSync(path.join(outputDir, '1 1.mp4'), 'utf8')).toBe('segunda-geracao')
+    expect(fs.existsSync(path.join(outputDir, '1 2.mp4'))).toBe(true)
+    expect(store.listJobs(batch.id)[0].outputPath).toBe(path.join(outputDir, '1 2.mp4'))
   })
 })

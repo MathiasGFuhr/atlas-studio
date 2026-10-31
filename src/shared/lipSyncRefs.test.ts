@@ -5,6 +5,8 @@ import {
   lastLipSyncFolderSceneNumber,
   matchNumberedFiles,
   matchNumberedImages,
+  reuseOpenProjectForFolder,
+  sameLipSyncFolder,
   sceneNumberFromFileName,
 } from './lipSyncRefs'
 
@@ -112,5 +114,47 @@ describe('joinPromptTexts', () => {
 
   it('sem texto útil fica vazio', () => {
     expect(joinPromptTexts(['  ', ''])).toBe('')
+  })
+})
+
+describe('sameLipSyncFolder', () => {
+  it('trata barra invertida, caixa e barra final como a mesma pasta', () => {
+    expect(sameLipSyncFolder('D:\\Musicas\\Nova faixa\\', 'd:/musicas/nova faixa')).toBe(true)
+  })
+
+  it('pastas diferentes não batem', () => {
+    expect(sameLipSyncFolder('D:\\Musicas\\A', 'D:\\Musicas\\B')).toBe(false)
+  })
+})
+
+describe('reuseOpenProjectForFolder', () => {
+  it('reaproveita só quando a pasta já é a do projeto aberto', () => {
+    expect(
+      reuseOpenProjectForFolder({
+        currentFolderPath: 'D:\\Musicas\\Nova faixa',
+        selectedFolder: 'D:\\Musicas\\Nova faixa',
+        currentSceneCount: 8,
+      }),
+    ).toBe(true)
+  })
+
+  it('reaproveita projeto vazio ainda sem pasta', () => {
+    expect(
+      reuseOpenProjectForFolder({
+        currentFolderPath: null,
+        selectedFolder: 'D:\\Musicas\\Nova faixa',
+        currentSceneCount: 0,
+      }),
+    ).toBe(true)
+  })
+
+  it('não puxa pasta nova para um projeto que já foi feito', () => {
+    expect(
+      reuseOpenProjectForFolder({
+        currentFolderPath: 'D:\\Musicas\\Who Says Desire Has an Age Limit',
+        selectedFolder: 'D:\\Musicas\\Nova faixa',
+        currentSceneCount: 18,
+      }),
+    ).toBe(false)
   })
 })
