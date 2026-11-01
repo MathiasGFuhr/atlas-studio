@@ -48,6 +48,7 @@ const pageLoaders = {
   shortsProjects: () => import('./pages/ShortsProjectsPage'),
   tasks: () => import('./pages/TasksPage'),
   teamChat: () => import('./pages/TeamChatPage'),
+  financeiro: () => import('./pages/FinanceiroPage'),
 }
 
 const ProjectsPage = lazy(() => pageLoaders.projects().then((m) => ({ default: m.ProjectsPage })))
@@ -79,6 +80,9 @@ const ShortsProjectsPage = lazy(() =>
 )
 const TasksPage = lazy(() => pageLoaders.tasks().then((m) => ({ default: m.TasksPage })))
 const TeamChatPage = lazy(() => pageLoaders.teamChat().then((m) => ({ default: m.TeamChatPage })))
+const FinanceiroPage = lazy(() =>
+  pageLoaders.financeiro().then((m) => ({ default: m.FinanceiroPage })),
+)
 
 function preloadPages() {
   for (const load of Object.values(pageLoaders)) {
@@ -240,6 +244,7 @@ export default function App() {
                 <Route path="/shorts" element={<ShortsProjectsPage />} />
                 <Route path="/shorts/:jobId" element={<ShortsStudioPage />} />
                 <Route path="/tarefas" element={<TasksPage />} />
+                <Route path="/financeiro" element={<FinanceiroPage />} />
                 <Route path="/equipe" element={<TeamChatPage account={session.user} />} />
                 <Route path="/chat" element={<OpenChatRedirect />} />
                 <Route path="/prompts" element={<Navigate to={MUSIC_PROMPTS_PATH} replace />} />

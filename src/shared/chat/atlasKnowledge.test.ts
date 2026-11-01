@@ -23,8 +23,12 @@ describe('resolveAtlasScreen', () => {
     expect(resolveAtlasScreen('Shorts').path).toBe('/shorts')
   })
 
+  it('abre financeiro', () => {
+    expect(resolveAtlasScreen('financeiro').path).toBe('/financeiro')
+  })
+
   it('recusa uma tela inventada', () => {
-    expect(() => resolveAtlasScreen('financeiro')).toThrow(/Não conheço a tela/)
+    expect(() => resolveAtlasScreen('estoque')).toThrow(/Não conheço a tela/)
   })
 })
 

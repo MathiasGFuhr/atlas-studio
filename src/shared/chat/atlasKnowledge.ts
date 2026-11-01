@@ -19,6 +19,7 @@ export const ATLAS_SCREENS: AtlasScreen[] = [
   { id: 'publicados', label: 'Publicados', path: '/canais/publicados', aliases: ['publicados'] },
   { id: 'shorts', label: 'Shorts', path: '/shorts', aliases: ['short', 'cortes de video', 'cortes de vídeo'] },
   { id: 'tarefas', label: 'Tarefas', path: '/tarefas', aliases: ['tasks'] },
+  { id: 'financeiro', label: 'Financeiro', path: '/financeiro', aliases: ['capital', 'finanças', 'financas'] },
   { id: 'equipe', label: 'Equipe', path: '/equipe', aliases: ['chat', 'mensagens'] },
   { id: 'configuracoes', label: 'Configurações', path: '/configuracoes', aliases: ['settings', 'ajustes'] },
 ]

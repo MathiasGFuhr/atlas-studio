@@ -13,6 +13,7 @@ import {
   Music2,
   Settings,
   Tv,
+  Wallet,
 } from 'lucide-react'
 import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
@@ -35,6 +36,7 @@ type NavItem = {
   label: string
   icon: ComponentType<{ className?: string; strokeWidth?: number }>
   end?: boolean
+  badge?: string
 }
 
 type NavSection = {
@@ -66,6 +68,7 @@ const navSections: NavSection[] = [
       { to: '/canais', label: 'Canais', icon: Tv },
       { to: '/equipe', label: 'Chat', icon: MessagesSquare },
       { to: '/tarefas', label: 'Tarefas', icon: CheckSquare },
+      { to: '/financeiro', label: 'Financeiro', icon: Wallet },
     ],
   },
 ]
@@ -249,6 +252,9 @@ export function AppSidebar({
                 )}
               >
                 <item.icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+                {collapsed && item.badge ? (
+                  <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-warning" />
+                ) : null}
                 {collapsed && item.to === '/tarefas' && pendingCount > 0 ? (
                   <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
                 ) : null}
@@ -265,6 +271,11 @@ export function AppSidebar({
               {collapsed ? null : (
                 <>
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {item.badge ? (
+                    <span className="rounded-md bg-warning-subtle px-1.5 py-0.5 text-[10px] font-semibold text-warning">
+                      {item.badge}
+                    </span>
+                  ) : null}
                   {item.to === '/tarefas' && pendingCount > 0 ? (
                     <span className="rounded-md bg-hover px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
                       {pendingCount}
@@ -277,7 +288,7 @@ export function AppSidebar({
                   ) : null}
                   {item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
                     <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
-                  ) : (
+                  ) : item.badge ? null : (
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-2/80 transition-colors group-hover:text-muted" />
                   )}
                 </>
