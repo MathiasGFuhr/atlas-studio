@@ -6,6 +6,7 @@ import {
   Receipt,
   Scale,
   TrendingUp,
+  Wallet,
 } from 'lucide-react'
 import {
   monthlyProfit,
