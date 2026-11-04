@@ -14,10 +14,11 @@ import {
   Settings,
   Tv,
   Wallet,
+  Workflow,
 } from 'lucide-react'
 import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
-import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
+import { MUSIC_FLOW_PATH, MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { AtlasAiStatusCard } from './AtlasAiStatusCard'
 import { AtlasLogo } from './AtlasLogo'
 import { SidebarChannelSwitcher } from './SidebarChannelSwitcher'
@@ -58,6 +59,7 @@ const navSections: NavSection[] = [
       { to: ENVIRONMENTS.music.basePath, label: 'Projetos', icon: Music2 },
       { to: MUSIC_PROMPTS_PATH, label: 'Prompts', icon: MessageSquareText },
       { to: MUSIC_LIPSYNC_PATH, label: 'Lipsync', icon: Mic2 },
+      { to: MUSIC_FLOW_PATH, label: 'Flow', icon: Workflow },
       { to: '/shorts', label: 'Shorts', icon: Clapperboard },
     ],
   },

@@ -1,4 +1,4 @@
-import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '../workspaceCapabilities'
+import { MUSIC_FLOW_PATH, MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '../workspaceCapabilities'
 import { foldPersonName } from './teamMessageTarget'
 
 export type AtlasScreen = {
@@ -14,6 +14,7 @@ export const ATLAS_SCREENS: AtlasScreen[] = [
   { id: 'faixas', label: 'Faixas', path: '/musica/faixas', aliases: ['cortes', 'audio', 'áudio', 'editor'] },
   { id: 'prompts', label: 'Prompts', path: MUSIC_PROMPTS_PATH, aliases: ['meus prompts'] },
   { id: 'lipsync', label: 'Lipsync', path: MUSIC_LIPSYNC_PATH, aliases: ['referencias', 'referências'] },
+  { id: 'flow', label: 'Flow', path: MUSIC_FLOW_PATH, aliases: ['google flow', 'prompts flow', 'prompt flow'] },
   { id: 'canais', label: 'Canais', path: '/canais', aliases: ['channels'] },
   { id: 'agenda', label: 'Agenda', path: '/canais/agenda', aliases: ['calendario', 'calendário'] },
   { id: 'publicados', label: 'Publicados', path: '/canais/publicados', aliases: ['publicados'] },
@@ -100,6 +101,6 @@ export const ATLAS_SYSTEM_GUIDE = [
   'Apagar (delete_*) pede confirmação. Não diga que já apagou antes da confirmação.',
   'Importar áudio ou vídeo sem caminho abre o seletor de arquivo do Windows.',
   'Análise automática e exportação de Shorts rodam na tela do Shorts. Abra o projeto com open_short em vez de fingir que a análise terminou.',
-  'Telas: Início, Projetos, Faixas, Prompts, Lipsync, Canais, Agenda, Publicados, Shorts, Tarefas, Equipe, Configurações.',
+  'Telas: Início, Projetos, Faixas, Prompts, Lipsync, Flow, Canais, Agenda, Publicados, Shorts, Tarefas, Equipe, Configurações.',
   'Status de vídeo na agenda: colocando, editando, agendando, publicado.',
 ].join(' ')

@@ -27,6 +27,10 @@ describe('resolveAtlasScreen', () => {
     expect(resolveAtlasScreen('financeiro').path).toBe('/financeiro')
   })
 
+  it('abre o flow', () => {
+    expect(resolveAtlasScreen('flow').path).toBe('/musica/flow')
+  })
+
   it('recusa uma tela inventada', () => {
     expect(() => resolveAtlasScreen('estoque')).toThrow(/Não conheço a tela/)
   })

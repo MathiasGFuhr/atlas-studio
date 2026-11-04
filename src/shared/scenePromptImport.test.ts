@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   extractComfyPromptsFromDirectionDoc,
+  extractFlowPromptsFromDirectionDoc,
   looksLikeDirectionDoc,
+  looksLikeFlowDirectionDoc,
+  parseFlowPromptsForImport,
   parseScenePromptsForImport,
 } from './scenePromptImport'
 
@@ -14,6 +17,7 @@ CANTADAS: 12 — cenas 02, 03 e 04.
 ====================================================================
 CENA 01 — O RIFF E A ENTRADA DO PULSO
 Categoria: BANDA COMPLETA 1/2 — instrumental.
+Referências a anexar: B1 + P1.
 
 1. FLOW — IMAGEM
 \`\`\`text
@@ -29,6 +33,7 @@ Do not generate new audio.
 ====================================================================
 CENA 02 — COMPOSTURA NA PRIMEIRA FRASE
 Categoria: CANTADA 1/12.
+Referências a anexar: D1 + B1 + P1 + M1.
 
 1. FLOW — IMAGEM
 \`\`\`text
@@ -102,6 +107,40 @@ describe('parseScenePromptsForImport', () => {
     ).toEqual([
       { number: 1, text: 'prompt um' },
       { number: 3, text: 'prompt três' },
+    ])
+  })
+})
+
+describe('extractFlowPromptsFromDirectionDoc', () => {
+  it('pega só o bloco FLOW de cada cena, com o número original', () => {
+    expect(extractFlowPromptsFromDirectionDoc(SAMPLE)).toEqual([
+      {
+        number: 1,
+        text: 'One horizontal 16:9 live-concert photograph.',
+      },
+      {
+        number: 2,
+        text: 'Generate a single 16:9 photograph of the referenced singer.',
+      },
+    ])
+  })
+
+  it('não usa o prompt Comfy no lugar do Flow', () => {
+    const [first] = extractFlowPromptsFromDirectionDoc(SAMPLE)
+    expect(first?.text).not.toMatch(/Animate this initial band frame/)
+  })
+})
+
+describe('parseFlowPromptsForImport', () => {
+  it('reconhece o documento de direção Flow', () => {
+    expect(looksLikeFlowDirectionDoc(SAMPLE)).toBe(true)
+    expect(parseFlowPromptsForImport(SAMPLE)).toHaveLength(2)
+  })
+
+  it('aceita lista 1- 2- 3-', () => {
+    expect(parseFlowPromptsForImport('1- prompt flow um\n\n2- prompt flow dois')).toEqual([
+      { number: 1, text: 'prompt flow um' },
+      { number: 2, text: 'prompt flow dois' },
     ])
   })
 })

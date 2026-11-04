@@ -104,6 +104,8 @@ export const MUSIC_PROMPTS_PATH = '/musica/prompts'
 export const MUSIC_PROMPTS_CUSTOM_PATH = MUSIC_PROMPTS_PATH
 /** Referências de imagem + prompt de lipsync. */
 export const MUSIC_LIPSYNC_PATH = '/musica/lipsync'
+/** Extrator de prompts Flow para copiar cena a cena. */
+export const MUSIC_FLOW_PATH = '/musica/flow'
 
 export function contentAreaFromPath(pathname: string): ContentArea | null {
   if (pathname === '/prompts' || pathname.startsWith('/prompts/')) return 'music'

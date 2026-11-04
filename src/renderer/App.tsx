@@ -23,7 +23,7 @@ import { AppUpdateProvider } from './hooks/useAppUpdate'
 import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
 import { ComfyQueueProvider } from './hooks/useComfyQueue'
 import { ComfyQueueDock } from './components/lipsync/ComfyQueueDock'
-import { MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
+import { MUSIC_FLOW_PATH, MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
 import { version as appVersion } from '../../package.json'
 import { AtlasLogo } from './components/AtlasLogo'
 import { shouldShowWelcome, WelcomeSplash } from './components/WelcomeSplash'
@@ -40,6 +40,7 @@ const pageLoaders = {
   channelAgenda: () => import('./pages/ChannelAgendaPage'),
   channelPublished: () => import('./pages/ChannelPublishedVideosPage'),
   prompts: () => import('./pages/PromptsPage'),
+  flowPrompts: () => import('./pages/FlowPromptsPage'),
   lipSync: () => import('./pages/LipSyncRefsPage'),
   settings: () => import('./pages/SettingsPage'),
   music: () => import('./pages/MusicPage'),
@@ -66,6 +67,9 @@ const ChannelPublishedVideosPage = lazy(() =>
   pageLoaders.channelPublished().then((m) => ({ default: m.ChannelPublishedVideosPage })),
 )
 const PromptsPage = lazy(() => pageLoaders.prompts().then((m) => ({ default: m.PromptsPage })))
+const FlowPromptsPage = lazy(() =>
+  pageLoaders.flowPrompts().then((m) => ({ default: m.FlowPromptsPage })),
+)
 const LipSyncRefsPage = lazy(() => pageLoaders.lipSync().then((m) => ({ default: m.LipSyncRefsPage })))
 const SettingsPage = lazy(() => pageLoaders.settings().then((m) => ({ default: m.SettingsPage })))
 const MusicPage = lazy(() => pageLoaders.music().then((m) => ({ default: m.MusicPage })))
@@ -234,7 +238,9 @@ export default function App() {
                 <Route path="/musica/faixas" element={<MusicPage />} />
                 <Route path="/musica/faixas/:id" element={<MusicEditorPage />} />
                 <Route path={MUSIC_PROMPTS_PATH} element={<PromptsPage />} />
+                <Route path={MUSIC_FLOW_PATH} element={<FlowPromptsPage />} />
                 <Route path={MUSIC_LIPSYNC_PATH} element={<LipSyncRefsPage />} />
+                <Route path="/flow" element={<Navigate to={MUSIC_FLOW_PATH} replace />} />
 
                 <Route path="/canais" element={<ChannelsPage />} />
                 <Route path="/canais/agenda" element={<ChannelAgendaPage />} />

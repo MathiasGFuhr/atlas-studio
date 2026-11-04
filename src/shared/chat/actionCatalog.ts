@@ -303,7 +303,7 @@ export const ATLAS_ACTION_CATALOG: ChatActionDefinition[] = [
   },
   {
     name: 'open_screen',
-    description: 'Abre uma tela: início, projetos, faixas, prompts, lipsync, canais, agenda, publicados, shorts, tarefas, equipe ou configurações.',
+    description: 'Abre uma tela: início, projetos, faixas, prompts, lipsync, flow, canais, agenda, publicados, shorts, tarefas, equipe ou configurações.',
     category: 'studio',
     confirmationRequired: false,
     inputSchema: { screen: 'string' },
