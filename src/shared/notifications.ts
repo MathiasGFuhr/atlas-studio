@@ -1,6 +1,12 @@
 import type { AtlasTask } from './types'
 import { daysBetweenYmd, dueDateState, todayYmd } from './tasks'
-import { UPDATE_SETTINGS_HREF, updateNotificationId, type AppUpdateState } from './updates'
+import {
+  UPDATE_SETTINGS_HREF,
+  atlasV2UpdateCopy,
+  isAtlasV2Release,
+  updateNotificationId,
+  type AppUpdateState,
+} from './updates'
 
 export type AtlasNotificationKind = 'task-overdue' | 'task-today' | 'app-update'
 
@@ -68,16 +74,32 @@ export function deriveTaskNotifications(
   return sortNotifications([...items.values()])
 }
 
-export function deriveUpdateNotification(status: {
-  state: AppUpdateState | string
-  availableVersion: string | null
-}): AtlasNotification | null {
+export function deriveUpdateNotification(
+  status: {
+    state: AppUpdateState | string
+    availableVersion: string | null
+  },
+  accountName = '',
+): AtlasNotification | null {
   const version = status.availableVersion?.trim()
   if (!version) return null
   if (status.state !== 'available' && status.state !== 'downloading' && status.state !== 'ready') {
     return null
   }
   const id = updateNotificationId(version)
+  if (isAtlasV2Release(version)) {
+    const copy = atlasV2UpdateCopy(accountName)
+    return {
+      id,
+      kind: 'app-update',
+      title: copy.notificationTitle,
+      body: copy.notificationBody,
+      hint: `Atlas Studio ${version}`,
+      href: UPDATE_SETTINGS_HREF,
+      sortAt: version,
+      createdAt: version,
+    }
+  }
   return {
     id,
     kind: 'app-update',

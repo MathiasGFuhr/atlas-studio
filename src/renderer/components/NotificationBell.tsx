@@ -23,6 +23,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [tasks, setTasks] = useState<AtlasTask[]>([])
   const [readKeys, setReadKeys] = useState<string[]>([])
+  const [accountName, setAccountName] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const writeGen = useRef(0)
 
@@ -39,6 +40,7 @@ export function NotificationBell() {
     void api.settings
       .get()
       .then((settings) => {
+        setAccountName(settings.accountName?.trim() || '')
         if (writeGen.current !== 0) return
         setReadKeys(normalizeNotificationReadKeys(settings.notificationReadKeys))
       })
@@ -58,10 +60,10 @@ export function NotificationBell() {
   }, [api, loadTasks, navigate])
 
   const items = useMemo(() => {
-    const update = updateStatus ? deriveUpdateNotification(updateStatus) : null
+    const update = updateStatus ? deriveUpdateNotification(updateStatus, accountName) : null
     const next = deriveTaskNotifications(tasks)
     return update ? [update, ...next] : next
-  }, [tasks, updateStatus])
+  }, [tasks, updateStatus, accountName])
   const unread = useMemo(() => unreadNotifications(items, readKeys), [items, readKeys])
   const unreadCount = unread.length
 

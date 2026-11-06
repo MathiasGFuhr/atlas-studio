@@ -332,6 +332,23 @@ select:focus-visible {
   }
 }
 
+/* —— Card de update 2.0 na sidebar —— */
+.atlas-update-premiere {
+  background:
+    radial-gradient(ellipse 90% 80% at 20% 0%, rgb(53 191 155 / 0.16), transparent 55%),
+    linear-gradient(180deg, rgb(24 56 47 / 0.35), rgb(13 18 24 / 0.2));
+}
+
+.atlas-update-premiere__glow {
+  background: radial-gradient(
+    circle at 80% 20%,
+    color-mix(in srgb, var(--color-accent) 22%, transparent),
+    transparent 55%
+  );
+  animation: atlas-welcome-glow 4s ease-in-out infinite;
+  opacity: 0.7;
+}
+
 /* —— Première Atlas Studio 2.0 —— */
 @keyframes atlas-premiere-bg {
   from {

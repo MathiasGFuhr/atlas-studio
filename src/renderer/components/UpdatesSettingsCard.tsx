@@ -2,6 +2,8 @@ import { Download, RefreshCw, RotateCcw } from 'lucide-react'
 import type { AppSettings } from '@shared/types'
 import {
   UPDATE_NOTES_FALLBACK,
+  atlasV2UpdateCopy,
+  isAtlasV2Release,
   normalizeReleaseNotes,
   safeUpdateErrorText,
   updateStateLabel,
@@ -38,7 +40,9 @@ export function UpdatesSettingsCard({
   const showProgress = state === 'downloading'
   const percent = status?.downloadPercent
   const availableVersion = status?.availableVersion
-  const notes = availableVersion
+  const premiere = isAtlasV2Release(availableVersion)
+  const premiereCopy = premiere ? atlasV2UpdateCopy(settings.accountName) : null
+  const notes = availableVersion && !premiere
     ? normalizeReleaseNotes(status?.releaseNotes, { displayedVersion: availableVersion })
     : { items: [] as string[] }
   const errorText = safeUpdateErrorText(status?.errorMessage)
@@ -63,29 +67,45 @@ export function UpdatesSettingsCard({
 
         {availableVersion &&
         (state === 'available' || state === 'error' || state === 'downloading' || state === 'ready') ? (
-          <div className="rounded-xl border border-border-soft bg-elevated px-3.5 py-3">
-            <p className="text-sm font-semibold text-text">Nova versão disponível</p>
-            <p className="mt-0.5 text-sm text-accent">Atlas Studio {availableVersion}</p>
-            {notes.title ? (
-              <p className="mt-2 text-xs font-medium leading-relaxed text-text">{notes.title}</p>
-            ) : null}
-            {notes.items.length > 0 ? (
-              <ul className="mt-2 space-y-1">
-                {notes.items.map((item, index) => (
-                  <li key={`${index}-${item.slice(0, 24)}`} className="flex gap-2 text-xs leading-relaxed text-muted">
-                    <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-muted/70" aria-hidden />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {notes.text ? (
-              <p className="mt-2 text-xs leading-relaxed text-muted">{notes.text}</p>
-            ) : null}
-            {notes.items.length === 0 && !notes.text ? (
-              <p className="mt-2 text-xs leading-relaxed text-muted">{UPDATE_NOTES_FALLBACK}</p>
-            ) : null}
-          </div>
+          premiereCopy ? (
+            <div className="atlas-update-premiere relative overflow-hidden rounded-xl border border-accent/35 px-3.5 py-3.5">
+              <div className="atlas-update-premiere__glow pointer-events-none absolute inset-0" aria-hidden />
+              <div className="relative">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
+                  {premiereCopy.eyebrow}
+                </p>
+                <p className="home-greeting mt-1.5 text-xl leading-tight text-text">
+                  {premiereCopy.settingsTitle}
+                </p>
+                <p className="mt-1 text-sm text-accent">Atlas Studio {availableVersion}</p>
+                <p className="mt-2 text-xs leading-relaxed text-muted">{premiereCopy.settingsSubtitle}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border-soft bg-elevated px-3.5 py-3">
+              <p className="text-sm font-semibold text-text">Nova versão disponível</p>
+              <p className="mt-0.5 text-sm text-accent">Atlas Studio {availableVersion}</p>
+              {notes.title ? (
+                <p className="mt-2 text-xs font-medium leading-relaxed text-text">{notes.title}</p>
+              ) : null}
+              {notes.items.length > 0 ? (
+                <ul className="mt-2 space-y-1">
+                  {notes.items.map((item, index) => (
+                    <li key={`${index}-${item.slice(0, 24)}`} className="flex gap-2 text-xs leading-relaxed text-muted">
+                      <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-muted/70" aria-hidden />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {notes.text ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted">{notes.text}</p>
+              ) : null}
+              {notes.items.length === 0 && !notes.text ? (
+                <p className="mt-2 text-xs leading-relaxed text-muted">{UPDATE_NOTES_FALLBACK}</p>
+              ) : null}
+            </div>
+          )
         ) : null}
 
         {showProgress ? (
@@ -147,7 +167,7 @@ export function UpdatesSettingsCard({
               disabled={busy}
               onClick={() => void download()}
             >
-              Baixar atualização
+              {premiereCopy ? premiereCopy.ctaDownload : 'Baixar atualização'}
             </Button>
           ) : null}
           {showInstall ? (
@@ -156,7 +176,7 @@ export function UpdatesSettingsCard({
                 disabled={busy}
                 onClick={() => void install()}
               >
-                Reiniciar e atualizar
+                {premiereCopy ? premiereCopy.ctaInstall : 'Reiniciar e atualizar'}
               </Button>
               <Button variant="ghost" disabled={busy} onClick={minimizeSidebarCard}>
                 Depois

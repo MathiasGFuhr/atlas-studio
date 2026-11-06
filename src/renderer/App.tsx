@@ -124,8 +124,8 @@ export default function App() {
   const codexAuth = useCodexAuth()
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [pageTourOpen, setPageTourOpen] = useState(false)
-  const [premiereOpen, setPremiereOpen] = useState(shouldShowPremiereV2)
-  const [welcomeOpen, setWelcomeOpen] = useState(() => !shouldShowPremiereV2() && shouldShowWelcome())
+  const [premiereOpen, setPremiereOpen] = useState(false)
+  const [welcomeOpen, setWelcomeOpen] = useState(false)
   const closePremiere = useCallback(() => {
     setPremiereOpen(false)
     // A première substitui o splash diário nesta abertura.
@@ -153,6 +153,17 @@ export default function App() {
       })
     return api.account.onChanged(setSession)
   }, [api])
+
+  // Decide a abertura só depois do login — assim a première 2.0 não se perde no loading.
+  useEffect(() => {
+    if (session === 'loading' || !session.user || !tourChecked) return
+    if (shouldShowPremiereV2()) {
+      setPremiereOpen(true)
+      setWelcomeOpen(false)
+      return
+    }
+    if (shouldShowWelcome()) setWelcomeOpen(true)
+  }, [session, tourChecked])
 
   const signedIn = session !== 'loading' && Boolean(session.user)
   useEffect(() => {

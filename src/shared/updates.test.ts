@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  atlasV2UpdateCopy,
+  isAtlasV2Release,
   isSidebarUpdateRelevant,
   shouldAutoCheckOnStartup,
   shouldRunBackgroundUpdateCheck,
@@ -146,6 +148,20 @@ describe('atualizações', () => {
     expect(sidebarUpdateToastMessage('1.5.3')).toBe('Atlas Studio 1.5.3 está disponível.')
     expect(safeUpdateErrorText('ENOTFOUND github.com\n    at ClientRequest')).toBe(
       'Não foi possível concluir a atualização. Tente novamente em alguns instantes.',
+    )
+  })
+
+  it('personaliza a copy da atualização 2.0', () => {
+    expect(isAtlasV2Release('2.0.0')).toBe(true)
+    expect(isAtlasV2Release('v2.1.3')).toBe(true)
+    expect(isAtlasV2Release('1.59.0')).toBe(false)
+    const copy = atlasV2UpdateCopy('Mathias Fuhr')
+    expect(copy.headline).toContain('Mathias')
+    expect(copy.statusAvailable).toContain('2.0')
+    expect(copy.ctaInstall).toMatch(/2\.0/)
+    expect(sidebarUpdateToastMessage('2.0.0', 'Mathias Fuhr')).toContain('Mathias')
+    expect(deriveUpdateNotification({ state: 'available', availableVersion: '2.0.0' }, 'Mathias').title).toBe(
+      'Atlas Studio 2.0',
     )
   })
 })

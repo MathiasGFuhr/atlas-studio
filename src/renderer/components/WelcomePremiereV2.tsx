@@ -2,13 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import heroImage from '../assets/home-hero.jpg'
 import { AtlasLogo } from './AtlasLogo'
 
-const PREMIERE_KEY = 'atlas.premiere.v2'
+/** Chave da première 2.0 — só marca como vista ao sair da cena. */
+const PREMIERE_KEY = 'atlas.premiere.v2.0'
+const LEGACY_KEYS = ['atlas.premiere.v2']
 const EXIT_MS = 720
-/** Tempo até o CTA aparecer; o usuário já pode pular antes. */
+/** Tempo até o CTA aparecer; Enter/Espaço já pulam antes. */
 const CTA_READY_MS = 2800
 
 export function shouldShowPremiereV2() {
   try {
+    for (const key of LEGACY_KEYS) localStorage.removeItem(key)
     return localStorage.getItem(PREMIERE_KEY) !== '1'
   } catch {
     return true
@@ -41,7 +44,6 @@ export function WelcomePremiereV2({
   }, [leaving])
 
   useEffect(() => {
-    markPremiereSeen()
     const ctaTimer = window.setTimeout(() => setCtaReady(true), CTA_READY_MS)
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {

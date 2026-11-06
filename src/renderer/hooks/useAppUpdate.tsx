@@ -72,8 +72,13 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false)
   const [userDownloadError, setUserDownloadError] = useState(false)
   const [sidebarMinimized, setSidebarMinimized] = useState(false)
+  const [accountName, setAccountName] = useState('')
 
   useEffect(() => {
+    void api.settings
+      .get()
+      .then((settings) => setAccountName(settings.accountName?.trim() || ''))
+      .catch(() => undefined)
     void api.updates.status().then((next) => {
       setStatus(next)
       const version = next.availableVersion?.trim()
@@ -101,8 +106,8 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
     if (!version) return
     if (readToastedVersion(version)) return
     markToastedVersion(version)
-    push(sidebarUpdateToastMessage(version), 'success')
-  }, [status, push])
+    push(sidebarUpdateToastMessage(version, accountName), 'success')
+  }, [status, accountName, push])
 
   const run = useCallback(
     async (action: () => Promise<AppUpdateStatus>, kind: 'check' | 'download' | 'install') => {
