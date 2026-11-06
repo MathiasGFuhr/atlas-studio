@@ -46,9 +46,10 @@ export function NumberedPromptsModal({
         <p className="text-sm text-muted">
           Cole a lista <span className="font-medium text-text">1- 2- 3-</span> ou o documento de
           direção (<span className="font-medium text-text">CENA</span> /{' '}
-          <span className="font-medium text-text">CORTE</span>, com ou sem ```). Só o bloco{' '}
-          <span className="font-medium text-text">ComfyUI</span> entra em cada cena — Flow e Veo
-          ficam de fora.
+          <span className="font-medium text-text">CORTE</span>, com ou sem ```). O bloco{' '}
+          <span className="font-medium text-text">ComfyUI</span> entra na cena com letra. No corte
+          de banda ou instrumental, sem Comfy, entra o bloco{' '}
+          <span className="font-medium text-text">Veo</span>. Flow fica de fora.
         </p>
         <textarea
           value={text}
@@ -63,8 +64,8 @@ export function NumberedPromptsModal({
           {parsedCount === 0
             ? `${sceneCount} ${sceneCount === 1 ? 'cena' : 'cenas'} na fila. Lista numerada ou documento CENA/CORTE.`
             : parsedCount === 1
-              ? '1 prompt Comfy reconhecido.'
-              : `${parsedCount} prompts Comfy reconhecidos.`}
+              ? '1 prompt reconhecido.'
+              : `${parsedCount} prompts reconhecidos.`}
         </p>
       </div>
     </Modal>

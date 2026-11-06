@@ -20,6 +20,17 @@ const SCENE_HEADER_GLOBAL = new RegExp(
 const COMFY_MARKER = /(?:^|\n)\s*(?:\d+\.\s*)?COMFY\s*UI\b/i
 
 /**
+ * Animação de banda/instrumental quando o corte não tem bloco ComfyUI.
+ * Veo, Kling e Runway continuam só delimitando um bloco Comfy já encontrado.
+ */
+const FALLBACK_ANIMATION_MARKER =
+  /(?:^|\n)\s*(?:\d+\.\s*)?(?:VEO(?:\s*\d+)?|KLING|RUNWAY)\b/i
+
+/** Documento de direção para o LipSync: cena/corte mais Comfy ou Veo/Kling/Runway. */
+const LIPSYNC_DIRECTION_MARKER =
+  /(?:^|\n)\s*(?:\d+\.\s*)?(?:COMFY\s*UI|VEO(?:\s*\d+)?|KLING|RUNWAY)\b/i
+
+/**
  * FLOW — IMAGEM / FLOW - IMAGE / Google Flow / 1. FLOW — …
  * `\bFLOW\b` sozinho também vale (documentos sem o sufixo IMAGEM).
  */
@@ -28,7 +39,8 @@ const FLOW_MARKER =
 
 /**
  * Próxima seção depois do bloco atual (outro motor, próximo corte, separador).
- * VEO / KLING / RUNWAY só delimitam; não entram no LipSync nem no Flow.
+ * VEO / KLING / RUNWAY delimitam o bloco atual. No LipSync eles só entram
+ * quando o corte não tem ComfyUI (banda e instrumental). No Flow ficam de fora.
  */
 const NEXT_SECTION = new RegExp(
   [
@@ -47,7 +59,7 @@ const TITLE_SUFFIX =
 
 export function looksLikeDirectionDoc(source: string): boolean {
   const text = source.replace(/\r\n/g, '\n')
-  return SCENE_HEADER_LINE.test(text) && COMFY_MARKER.test(text)
+  return SCENE_HEADER_LINE.test(text) && LIPSYNC_DIRECTION_MARKER.test(text)
 }
 
 export function looksLikeFlowDirectionDoc(source: string): boolean {
@@ -106,13 +118,20 @@ function contentAfterMarker(sceneBlock: string, marker: RegExp): string {
   return inlinePrompt || bodyPrompt
 }
 
-function extractPromptsFromDirectionDoc(source: string, marker: RegExp): ImportedScenePrompt[] {
+function extractPromptsFromDirectionDoc(
+  source: string,
+  marker: RegExp,
+  fallbackMarker?: RegExp,
+): ImportedScenePrompt[] {
   const text = source.replace(/\r\n/g, '\n')
   const starts = sceneStarts(text)
   const byNumber = new Map<number, string>()
   starts.forEach((entry, i) => {
     const end = starts[i + 1]?.index ?? text.length
-    const prompt = contentAfterMarker(text.slice(entry.index, end), marker)
+    const block = text.slice(entry.index, end)
+    const prompt =
+      contentAfterMarker(block, marker) ||
+      (fallbackMarker ? contentAfterMarker(block, fallbackMarker) : '')
     if (prompt) byNumber.set(entry.number, prompt)
   })
   return [...byNumber.entries()]
@@ -130,9 +149,14 @@ export function extractFlowPromptsFromDirectionDoc(source: string): ImportedScen
   return extractPromptsFromDirectionDoc(source, FLOW_MARKER)
 }
 
-/** Lista `1- prompt` ou documento completo de direção (só o bloco ComfyUI). */
+/**
+ * Lista `1- prompt` ou documento de direção.
+ * ComfyUI tem prioridade. Corte sem Comfy (banda/instrumental) usa Veo, Kling ou Runway.
+ */
 export function parseScenePromptsForImport(source: string): ImportedScenePrompt[] {
-  if (looksLikeDirectionDoc(source)) return extractComfyPromptsFromDirectionDoc(source)
+  if (looksLikeDirectionDoc(source)) {
+    return extractPromptsFromDirectionDoc(source, COMFY_MARKER, FALLBACK_ANIMATION_MARKER)
+  }
   return parseNumberedSceneTexts(source)
 }
 

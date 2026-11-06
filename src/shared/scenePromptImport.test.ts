@@ -144,12 +144,12 @@ describe('parseScenePromptsForImport', () => {
     ])
   })
 
-  it('lê documento CORTE sem fence e ignora FLOW/VEO', () => {
+  it('lê documento CORTE sem fence, ignora FLOW e usa Veo no corte sem Comfy', () => {
     expect(looksLikeDirectionDoc(CORTE_SAMPLE)).toBe(true)
     const extracted = extractComfyPromptsFromDirectionDoc(CORTE_SAMPLE)
     expect(extracted.map((entry) => entry.number)).toEqual([1, 3])
     const parsed = parseScenePromptsForImport(CORTE_SAMPLE)
-    expect(parsed.map((entry) => entry.number)).toEqual([1, 3])
+    expect(parsed.map((entry) => entry.number)).toEqual([1, 2, 3])
     expect(parsed[0]?.text).toBe(
       [
         'Animate this supplied frame as one continuous spoken-address take.',
@@ -159,8 +159,32 @@ describe('parseScenePromptsForImport', () => {
     )
     expect(parsed[0]?.text).not.toMatch(/Photograph Daniel on stage/)
     expect(parsed[0]?.text).not.toMatch(/^(?:COMFYUI|FLOW|VEO)\b/im)
-    expect(parsed[1]?.text).toContain('Continue this exact composition as a single singing take')
-    expect(parsed.some((entry) => entry.text.includes('instrumental shot'))).toBe(false)
+    expect(parsed[1]?.text).toBe(
+      'One continuous instrumental shot beginning exactly from the supplied image.',
+    )
+    expect(parsed[1]?.text).not.toMatch(/Photograph Caio/)
+    expect(parsed[2]?.text).toContain('Continue this exact composition as a single singing take')
+  })
+
+  it('prefere Comfy e só cai no Veo quando o corte é de banda ou instrumental', () => {
+    const doc = `
+CORTE 01 — Canto
+COMFYUI — ANIMAÇÃO E LIPSYNC
+Sing this line.
+VEO 3 — ANIMAÇÃO
+Do not use this veo line.
+
+CORTE 02 — Instrumental — banda
+FLOW — IMAGEM
+Photograph the guitarist.
+VEO 3 — ANIMAÇÃO
+Band plays the instrumental passage.
+`
+    const parsed = parseScenePromptsForImport(doc)
+    expect(parsed).toEqual([
+      { number: 1, text: 'Sing this line.' },
+      { number: 2, text: 'Band plays the instrumental passage.' },
+    ])
   })
 
   it('aceita SCENE/CUT e bloco Comfy sem numeração 1./2.', () => {
