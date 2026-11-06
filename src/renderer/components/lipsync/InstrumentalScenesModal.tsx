@@ -8,6 +8,10 @@ function sceneLabel(number: number): string {
   return String(number).padStart(2, '0')
 }
 
+function emptyChoice(): InstrumentalChoice {
+  return { presetIds: [], custom: '' }
+}
+
 export function InstrumentalScenesModal({
   numbers,
   choices,
@@ -38,16 +42,23 @@ export function InstrumentalScenesModal({
 
   const index = Math.min(step, Math.max(numbers.length - 1, 0))
   const number = numbers[index]
-  const choice = number === undefined ? undefined : choices[number]
-  const selected = choice?.presetId ?? ''
-  const custom = choice?.custom ?? ''
-  const ready = Boolean(number !== undefined && resolveInstrumentalChoice(selected, custom))
+  const choice = number === undefined ? emptyChoice() : (choices[number] ?? emptyChoice())
+  const selected = new Set(choice.presetIds)
+  const custom = choice.custom
+  const ready = Boolean(number !== undefined && resolveInstrumentalChoice(choice))
   const last = index >= numbers.length - 1
 
-  function pick(presetId: string) {
+  function toggle(presetId: string) {
     if (number === undefined) return
-    onChange(number, { presetId, custom: presetId === selected ? custom : '' })
-    if (presetId !== 'outro' && !last) setStep(index + 1)
+    const nextIds = selected.has(presetId)
+      ? choice.presetIds.filter((id) => id !== presetId)
+      : [...choice.presetIds, presetId]
+    onChange(number, { presetIds: nextIds, custom: choice.custom })
+  }
+
+  function setCustom(value: string) {
+    if (number === undefined) return
+    onChange(number, { presetIds: choice.presetIds, custom: value })
   }
 
   const title =
@@ -96,26 +107,27 @@ export function InstrumentalScenesModal({
           <p className="text-sm leading-relaxed text-muted">
             {reason === 'empty-lyrics' ? (
               <>
-                A cena {sceneLabel(number)} tem áudio e ainda não tem trecho de letra. Escolha o que
-                está tocando (violão, guitarra, banda…). A próxima cena sem letra abre aqui mesmo.
+                A cena {sceneLabel(number)} tem áudio e ainda não tem trecho de letra. Selecione um
+                ou mais instrumentos e, se quiser, digite o que está tocando.
               </>
             ) : (
               <>
                 A cena {sceneLabel(number)} tem áudio e não tem{' '}
-                <span className="text-text">.txt</span>. Escolha o que está tocando. A próxima cena
-                sem letra abre aqui mesmo.
+                <span className="text-text">.txt</span>. Selecione um ou mais instrumentos e, se
+                quiser, digite o que está tocando.
               </>
             )}
           </p>
           <div className="flex flex-wrap gap-2">
             {INSTRUMENTAL_PRESETS.map((preset) => {
-              const active = selected === preset.id
+              const active = selected.has(preset.id)
               return (
                 <button
                   key={preset.id}
                   type="button"
                   disabled={applying}
-                  onClick={() => pick(preset.id)}
+                  aria-pressed={active}
+                  onClick={() => toggle(preset.id)}
                   className={cn(
                     'rounded-xl border px-3 py-2 text-sm transition-colors disabled:opacity-50',
                     active
@@ -128,17 +140,21 @@ export function InstrumentalScenesModal({
               )
             })}
           </div>
-          {selected === 'outro' ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={`instrumental-custom-${number}`} className="text-xs font-medium text-muted">
+              Ou digite (opcional)
+            </label>
             <input
+              id={`instrumental-custom-${number}`}
               value={custom}
               disabled={applying}
-              placeholder="Descreva o que está tocando"
-              onChange={(event) => onChange(number, { presetId: 'outro', custom: event.target.value })}
+              placeholder="Ex.: sanfona, percussão, solo acústico…"
+              onChange={(event) => setCustom(event.target.value)}
               className="h-10 rounded-xl border border-border bg-bg/50 px-3 text-sm text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
             />
-          ) : null}
+          </div>
           <p className="text-[11px] text-muted-2">
-            Banda e banda + cantor marcam a cena como banda.
+            Pode marcar vários. O trecho fica tipo “Violão, Guitarra”. Banda marca a cena como banda.
           </p>
         </div>
       )}

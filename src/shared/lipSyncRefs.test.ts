@@ -131,15 +131,21 @@ describe('mergeRootAndFolderClips', () => {
 describe('resolveInstrumentalChoice', () => {
   it('grava o nome do instrumento e marca banda quando a opção é de banda', () => {
     expect(resolveInstrumentalChoice('violao', '')).toEqual({ lyrics: 'Violão', subject: null })
-    expect(resolveInstrumentalChoice('banda-cantor', '')).toEqual({
+    expect(resolveInstrumentalChoice({ presetIds: ['banda-cantor'], custom: '' })).toEqual({
       lyrics: 'Banda + cantor sem cantar',
       subject: 'band',
     })
   })
 
-  it('outro só vale com texto', () => {
-    expect(resolveInstrumentalChoice('outro', '  ')).toBeNull()
-    expect(resolveInstrumentalChoice('outro', 'sanfona')).toEqual({ lyrics: 'sanfona', subject: null })
+  it('aceita vários instrumentos e texto livre', () => {
+    expect(
+      resolveInstrumentalChoice({ presetIds: ['violao', 'guitarra'], custom: 'percussão' }),
+    ).toEqual({ lyrics: 'Violão, Guitarra, percussão', subject: null })
+    expect(resolveInstrumentalChoice({ presetIds: [], custom: '  ' })).toBeNull()
+    expect(resolveInstrumentalChoice({ presetIds: [], custom: 'sanfona' })).toEqual({
+      lyrics: 'sanfona',
+      subject: null,
+    })
   })
 })
 
@@ -155,7 +161,9 @@ describe('applyInstrumentalChoices', () => {
         { number: 2, fileName: 'solo.wav', path: 'C:/02/solo.wav', duration: null, excerpt: null },
       ],
     }
-    const applied = applyInstrumentalChoices(scan, { 2: { presetId: 'banda', custom: '' } })
+    const applied = applyInstrumentalChoices(scan, {
+      2: { presetIds: ['banda'], custom: '' },
+    })
     expect(applied.scan.audios[0]?.excerpt).toBe('Banda')
     expect(applied.subjects).toEqual({ 2: 'band' })
   })

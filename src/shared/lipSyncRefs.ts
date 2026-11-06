@@ -144,27 +144,37 @@ export const INSTRUMENTAL_PRESETS: InstrumentalPreset[] = [
   { id: 'teclado', label: 'Teclado', subject: null },
   { id: 'banda', label: 'Banda', subject: 'band' },
   { id: 'banda-cantor', label: 'Banda + cantor sem cantar', subject: 'band' },
-  { id: 'outro', label: 'Outro', subject: null },
 ]
 
 export type InstrumentalChoice = {
-  presetId: string
+  /** Um ou mais instrumentos selecionados. */
+  presetIds: string[]
+  /** Texto livre opcional (sempre pode digitar). */
   custom: string
 }
 
-/** Texto que vai para o trecho da cena, e o assunto quando a opção é de banda. */
+/** Texto que vai para o trecho da cena, e o assunto quando alguma opção é de banda. */
 export function resolveInstrumentalChoice(
-  presetId: string,
-  customText: string,
+  choice: InstrumentalChoice | string,
+  customText = '',
 ): { lyrics: string; subject: LipSyncSubject | null } | null {
-  const preset = INSTRUMENTAL_PRESETS.find((entry) => entry.id === presetId)
-  if (!preset) return null
-  if (preset.id === 'outro') {
-    const lyrics = customText.replace(/\r\n/g, '\n').trim()
-    if (!lyrics) return null
-    return { lyrics, subject: null }
+  const presetIds = typeof choice === 'string' ? [choice] : choice.presetIds
+  const customRaw = typeof choice === 'string' ? customText : choice.custom
+  const custom = customRaw.replace(/\r\n/g, '\n').trim()
+
+  const labels: string[] = []
+  let subject: LipSyncSubject | null = null
+  for (const id of presetIds) {
+    if (id === 'outro') continue
+    const preset = INSTRUMENTAL_PRESETS.find((entry) => entry.id === id)
+    if (!preset) continue
+    if (!labels.includes(preset.label)) labels.push(preset.label)
+    if (preset.subject === 'band') subject = 'band'
   }
-  return { lyrics: preset.label, subject: preset.subject }
+
+  const parts = [...labels, ...(custom ? [custom] : [])]
+  if (parts.length === 0) return null
+  return { lyrics: parts.join(', '), subject }
 }
 
 export function applyInstrumentalChoices(
@@ -175,7 +185,7 @@ export function applyInstrumentalChoices(
   const audios = scan.audios.map((audio) => {
     if (audio.excerpt !== null) return audio
     const choice = choices[audio.number]
-    const resolved = choice ? resolveInstrumentalChoice(choice.presetId, choice.custom) : null
+    const resolved = choice ? resolveInstrumentalChoice(choice) : null
     if (!resolved) return audio
     if (resolved.subject) subjects[audio.number] = resolved.subject
     return { ...audio, excerpt: resolved.lyrics }

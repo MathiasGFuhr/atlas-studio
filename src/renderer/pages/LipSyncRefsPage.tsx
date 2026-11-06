@@ -788,9 +788,7 @@ export function LipSyncRefsPage() {
       let applied = 0
       for (const number of pending.numbers) {
         const choice = pending.choices[number]
-        const resolved = choice
-          ? resolveInstrumentalChoice(choice.presetId, choice.custom)
-          : null
+        const resolved = choice ? resolveInstrumentalChoice(choice) : null
         if (!resolved) continue
         const item = queue[number - 1]
         if (!item) continue
