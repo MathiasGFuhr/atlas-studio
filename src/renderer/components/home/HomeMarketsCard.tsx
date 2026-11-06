@@ -70,23 +70,23 @@ export function HomeMarketsCard({
 
   return (
     <>
-      <Card padding="lg" className="relative flex shrink-0 flex-col">
+      <Card padding="lg" className="home-v2-panel relative flex shrink-0 flex-col">
         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]" aria-hidden>
           <img
             src={marketsBg}
             alt=""
-            className="h-full w-full object-cover object-center"
+            className="h-full w-full scale-105 object-cover object-center opacity-90"
           />
-          <div className="absolute inset-0 bg-bg/68" />
-          <div className="absolute inset-0 bg-gradient-to-b from-bg/50 via-bg/58 to-bg/85" />
+          <div className="absolute inset-0 bg-bg/72" />
+          <div className="absolute inset-0 bg-gradient-to-b from-bg/45 via-bg/62 to-bg/90" />
         </div>
 
-        <div className="relative mb-3.5 flex shrink-0 items-end justify-between gap-3">
+        <div className="relative mb-4 flex shrink-0 items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-2">
               Mercados
             </p>
-            <h2 className="mt-1 text-[17px] font-semibold tracking-tight text-text">
+            <h2 className="home-greeting mt-1.5 text-[1.35rem] leading-none text-text">
               Fusos horários
             </h2>
           </div>

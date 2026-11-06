@@ -11,12 +11,12 @@ export function HomeActivityCard({
   onOpen: (href: string) => void
 }) {
   return (
-    <Card padding="lg" className="flex min-h-[240px] flex-col">
-      <div className="mb-3">
-        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+    <Card padding="lg" className="home-v2-panel flex min-h-[240px] flex-col">
+      <div className="mb-4">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-2">
           Movimento
         </p>
-        <h2 className="mt-1 text-[17px] font-semibold tracking-tight text-text">
+        <h2 className="home-greeting mt-1.5 text-[1.35rem] leading-none text-text">
           Atividade recente
         </h2>
       </div>

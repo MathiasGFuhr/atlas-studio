@@ -123,23 +123,25 @@ export function HomeCalendarCard({
   const monthCount = videos.length
 
   return (
-    <Card padding="lg" className="relative flex flex-col overflow-hidden">
+    <Card padding="lg" className="home-v2-panel relative flex flex-col overflow-hidden">
       <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]" aria-hidden>
         <img
           src={calendarBg}
           alt=""
-          className="h-full w-full object-cover object-center"
+          className="h-full w-full scale-105 object-cover object-center opacity-85"
         />
-        <div className="absolute inset-0 bg-bg/70" />
-        <div className="absolute inset-0 bg-gradient-to-b from-bg/45 via-bg/60 to-bg/88" />
+        <div className="absolute inset-0 bg-bg/74" />
+        <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-bg/65 to-bg/92" />
       </div>
 
-      <div className="relative mb-3 flex items-start justify-between gap-3">
+      <div className="relative mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-2">
             Calendário
           </p>
-          <h2 className="mt-1 text-[17px] font-semibold tracking-tight text-text">Agenda do canal</h2>
+          <h2 className="home-greeting mt-1.5 text-[1.35rem] leading-none text-text">
+            Agenda do canal
+          </h2>
         </div>
         {selectedChannel ? (
           <button
@@ -167,7 +169,7 @@ export function HomeCalendarCard({
                 {selectedChannel?.name ?? 'Canal principal'}
               </p>
               <p className="mt-0.5 text-[11px] text-muted-2">
-                Canal principal · troque na barra lateral
+                Canal principal · troque no topo
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">

@@ -26,7 +26,6 @@ import {
 } from '@shared/workspaceCapabilities'
 import { AtlasAiStatusCard } from './AtlasAiStatusCard'
 import { AtlasLogo } from './AtlasLogo'
-import { SidebarChannelSwitcher } from './SidebarChannelSwitcher'
 import { SidebarUpdateCard } from './SidebarUpdateCard'
 import { ENVIRONMENTS } from '../lib/environments'
 import { cn } from '../lib/utils'
@@ -351,10 +350,6 @@ export function AppSidebar({
             />
           </div>
         )}
-      </div>
-
-      <div className="pb-1">
-        <SidebarChannelSwitcher compact={collapsed} />
       </div>
 
       <nav className="sidebar-nav flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-2 pt-3">

@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { GlobalSearch } from './GlobalSearch'
+import { HeaderChannelSwitcher } from './HeaderChannelSwitcher'
 import { NewMenuButton } from './NewMenuButton'
 import { NotificationBell } from './NotificationBell'
 import type { AppSettings } from '@shared/types'
@@ -13,8 +14,12 @@ export function TopBar({ settings }: { settings: AppSettings | null }) {
       data-tour="topbar"
       className="flex h-14 shrink-0 items-center gap-2 border-b border-border-soft bg-topbar px-3 sm:h-[68px] sm:gap-4 sm:px-6"
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-[12rem] max-w-[22rem]">
         <GlobalSearch />
+      </div>
+
+      <div className="flex min-w-0 flex-[1.4] justify-center">
+        <HeaderChannelSwitcher />
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">

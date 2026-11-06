@@ -19,13 +19,13 @@ export function HomeTasksCard({
   onCreate: () => void
 }) {
   return (
-    <Card padding="lg" className="flex min-h-[240px] flex-col">
-      <div className="mb-3 flex items-end justify-between gap-3">
+    <Card padding="lg" className="home-v2-panel flex min-h-[240px] flex-col">
+      <div className="mb-4 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-2">
             Operação
           </p>
-          <h2 className="mt-1 text-[17px] font-semibold tracking-tight text-text">Tarefas</h2>
+          <h2 className="home-greeting mt-1.5 text-[1.35rem] leading-none text-text">Tarefas</h2>
         </div>
         <div className="flex items-center gap-1">
           <button

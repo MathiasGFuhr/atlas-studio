@@ -260,41 +260,47 @@ export function HomePage() {
         : 'Organizadas por prazo e prioridade'
 
   return (
-    <div className="relative h-full overflow-y-auto">
-      <div className="relative mx-auto w-full max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(15rem,1fr)]">
+    <div className="home-v2 relative h-full overflow-y-auto">
+      <div className="home-v2__atmosphere pointer-events-none absolute inset-x-0 top-0 h-[28rem]" aria-hidden />
+      <div className="relative mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(16rem,1fr)] xl:gap-6">
           {/* Coluna principal */}
-          <div className="flex min-w-0 flex-col gap-4">
-            <HomeHero hello={homeHello()} name={accountName} dateLabel={homeDateLabel()} />
+          <div className="flex min-w-0 flex-col gap-5">
+            <HomeHero
+              hello={homeHello()}
+              name={accountName}
+              dateLabel={homeDateLabel()}
+              onPrimaryAction={() => openCreate('music')}
+            />
 
-            <Card padding="sm" className="overflow-hidden !p-0">
+            <Card padding="sm" className="home-v2-panel overflow-hidden !p-0">
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
                 <HomeStatCard
-                  className="border-b border-border-soft sm:border-r xl:border-b-0 xl:border-r"
-                  icon={<CalendarDays className="h-4 w-4 text-accent" />}
+                  className="border-b border-border-soft/80 sm:border-r xl:border-b-0 xl:border-r"
+                  icon={<CalendarDays className="h-4 w-4" />}
                   label="Agendamentos"
                   value={upcomingVideos.length}
                   hint={upcomingVideos.length === 0 ? 'Nada na agenda' : 'Na agenda'}
                   onClick={() => navigate(channelAgendaPath())}
                 />
                 <HomeStatCard
-                  className="border-b border-border-soft sm:border-r-0 xl:border-b-0 xl:border-r"
-                  icon={<Newspaper className="h-4 w-4 text-accent" />}
+                  className="border-b border-border-soft/80 sm:border-r-0 xl:border-b-0 xl:border-r"
+                  icon={<Newspaper className="h-4 w-4" />}
                   label="Publicações"
                   value={publishedCount}
                   hint="Publicados"
                   onClick={() => navigate(channelPublishedPath())}
                 />
                 <HomeStatCard
-                  className="border-b border-border-soft sm:border-r xl:border-b-0 xl:border-r"
-                  icon={<ListTodo className="h-4 w-4 text-accent" />}
+                  className="border-b border-border-soft/80 sm:border-r xl:border-b-0 xl:border-r"
+                  icon={<ListTodo className="h-4 w-4" />}
                   label="Tarefas pendentes"
                   value={pending.length}
                   hint={todayCount > 0 ? `${todayCount} para hoje` : 'Nada para hoje'}
                   onClick={() => navigate('/tarefas')}
                 />
                 <HomeStatCard
-                  icon={<Activity className="h-4 w-4 text-accent" />}
+                  icon={<Activity className="h-4 w-4" />}
                   label="Atividade recente"
                   value={latestActivity ? formatRelativeDate(latestActivity.at) : '—'}
                   hint={latestActivity?.detail ?? 'Sem movimento'}
@@ -302,7 +308,7 @@ export function HomePage() {
               </div>
             </Card>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
               <div className="min-w-0 lg:col-span-2">
                 <HomeCalendarCard
                   channels={channels}
@@ -361,7 +367,7 @@ export function HomePage() {
           </div>
 
           {/* Coluna direita */}
-          <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex min-w-0 flex-col gap-5">
             <div id="team-chat-incoming-slot" className="contents" />
             <HomeMarketsCard
               clocks={worldClocks}

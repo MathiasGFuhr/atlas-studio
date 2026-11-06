@@ -538,6 +538,128 @@ select:focus-visible {
   color: var(--color-text);
 }
 
+.home-v2__atmosphere {
+  background:
+    radial-gradient(ellipse 70% 55% at 18% 0%, color-mix(in srgb, var(--color-accent) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 88% 8%, color-mix(in srgb, var(--color-accent) 8%, transparent), transparent 65%);
+  opacity: 0.9;
+}
+
+.home-v2-hero {
+  background: color-mix(in srgb, var(--color-elevated) 70%, transparent);
+}
+
+.home-v2-hero__bg {
+  animation: home-v2-kenburns 28s ease-in-out infinite alternate;
+  transform-origin: 55% 40%;
+}
+
+.home-v2-hero__bloom {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--color-accent) 22%, transparent) 0%,
+    transparent 68%
+  );
+  filter: blur(8px);
+  animation: home-v2-bloom 8s ease-in-out infinite alternate;
+}
+
+.home-v2-hero__in {
+  animation: home-v2-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.home-v2-hero__name {
+  background: linear-gradient(
+    120deg,
+    var(--color-text) 0%,
+    color-mix(in srgb, var(--color-accent) 78%, white) 55%,
+    var(--color-text) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: home-v2-name-shine 7s ease-in-out infinite;
+}
+
+.home-v2-panel {
+  border-color: color-mix(in srgb, var(--color-border) 85%, var(--color-accent) 15%);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 4%, transparent) inset,
+    0 18px 40px -28px rgba(0, 0, 0, 0.55);
+}
+
+.home-v2-stat {
+  animation: home-v2-rise 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.home-v2-stat:nth-child(1) {
+  animation-delay: 120ms;
+}
+
+.home-v2-stat:nth-child(2) {
+  animation-delay: 180ms;
+}
+
+.home-v2-stat:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.home-v2-stat:nth-child(4) {
+  animation-delay: 300ms;
+}
+
+@keyframes home-v2-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes home-v2-kenburns {
+  from {
+    transform: scale(1.02);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes home-v2-bloom {
+  from {
+    opacity: 0.55;
+    transform: translateY(-50%) scale(0.92);
+  }
+  to {
+    opacity: 0.9;
+    transform: translateY(-50%) scale(1.08);
+  }
+}
+
+@keyframes home-v2-name-shine {
+  0%,
+  100% {
+    background-position: 0% center;
+  }
+  50% {
+    background-position: 100% center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-v2-hero__bg,
+  .home-v2-hero__bloom,
+  .home-v2-hero__in,
+  .home-v2-hero__name,
+  .home-v2-stat {
+    animation: none;
+  }
+}
+
 .sidebar-brand {
   font-family: var(--font-display);
   font-weight: 400;

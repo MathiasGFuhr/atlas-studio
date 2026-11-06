@@ -18,23 +18,25 @@ export function HomeStatCard({
 }) {
   const interactive = Boolean(onClick)
   const classes = cn(
-    'group/stat relative flex min-h-[100px] min-w-0 items-center gap-4 px-5 py-5 text-left',
-    'transition-colors duration-200',
-    interactive && 'cursor-pointer hover:bg-hover/60',
+    'home-v2-stat group/stat relative flex min-h-[108px] min-w-0 flex-col justify-between gap-4 px-5 py-5 text-left',
+    'transition-[background-color,border-color] duration-200',
+    interactive && 'cursor-pointer hover:bg-hover/45',
     className,
   )
 
   const content = (
     <>
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border-soft bg-elevated text-muted transition-colors group-hover/stat:border-border-strong group-hover/stat:text-text">
-        {icon}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-2">{label}</p>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border-soft/80 bg-elevated/80 text-accent transition-colors group-hover/stat:border-accent/30">
+          {icon}
+        </div>
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">{label}</p>
-        <p className="mt-1.5 truncate text-[22px] font-semibold tabular-nums tracking-tight text-text">
+        <p className="truncate text-[1.65rem] font-semibold tabular-nums tracking-tight text-text">
           {value}
         </p>
-        {hint ? <p className="mt-1 truncate text-xs leading-snug text-muted-2">{hint}</p> : null}
+        {hint ? <p className="mt-1 truncate text-xs leading-snug text-muted">{hint}</p> : null}
       </div>
     </>
   )

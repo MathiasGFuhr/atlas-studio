@@ -13,13 +13,13 @@ export function HomePipeline({
   onSeeAll: () => void
 }) {
   return (
-    <Card padding="lg" className="min-h-[280px]">
-      <div className="mb-4 flex items-end justify-between gap-3">
+    <Card padding="lg" className="home-v2-panel min-h-[280px]">
+      <div className="mb-5 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-2">
             Lançamentos
           </p>
-          <h2 className="mt-1 text-[17px] font-semibold tracking-tight text-text">Pipeline</h2>
+          <h2 className="home-greeting mt-1.5 text-[1.35rem] leading-none text-text">Pipeline</h2>
         </div>
         <button
           type="button"
