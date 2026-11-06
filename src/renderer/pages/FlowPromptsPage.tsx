@@ -114,7 +114,7 @@ export function FlowPromptsPage() {
       <PageHeader
         breadcrumb={environmentBreadcrumb('music', 'Flow')}
         title="Prompts Flow"
-        subtitle="Cole o documento de direção, separe só os blocos FLOW — IMAGEM e copie cena a cena para o Google Flow."
+        subtitle="Cole o documento de direção (CENA/CORTE, com ou sem ```). Só o bloco FLOW — IMAGEM entra — Comfy e Veo ficam de fora."
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -146,7 +146,7 @@ export function FlowPromptsPage() {
         </Button>
         <p className="text-xs text-muted">
           {prompts.length === 0
-            ? 'Lista 1- 2- 3- ou documento com CENA + bloco FLOW.'
+            ? 'Lista 1- 2- 3- ou documento CENA/CORTE/SCENE + bloco FLOW.'
             : prompts.length === 1
               ? '1 prompt Flow pronto para copiar.'
               : `${prompts.length} prompts Flow prontos para copiar.`}
@@ -164,7 +164,7 @@ export function FlowPromptsPage() {
             onChange={(event) => updateSource(event.target.value)}
             spellCheck={false}
             placeholder={
-              'Cole aqui o documento completo (CENA 01, FLOW — IMAGEM, ComfyUI…)\nou a lista:\n\n1- prompt da cena 1\n\n2- prompt da cena 2'
+              'CORTE 01 — Título\nFLOW — IMAGEM\n/closeup /documentary — Photograph…\n\nCORTE 02 — …\nou a lista:\n\n1- prompt da cena 1'
             }
             className="min-h-[280px] flex-1 resize-none rounded-xl border border-border bg-bg/40 px-3 py-2.5 font-mono text-[12px] leading-relaxed text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none xl:min-h-0"
           />

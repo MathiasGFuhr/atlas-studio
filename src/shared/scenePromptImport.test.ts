@@ -95,6 +95,40 @@ COMFY cena ${i + 1} unique-line
   })
 })
 
+const CORTE_SAMPLE = `
+DANIEL DE JESUS — ESTUFA
+19 cortes | Flow + ComfyUI + Veo 3
+
+CORTE 01 — Abertura falada
+Referências: Cantor + rosto.
+
+FLOW — IMAGEM
+/closeup /documentary — Photograph Daniel on stage.
+
+COMFYUI — ANIMAÇÃO E SINCRONIZAÇÃO PELO ÁUDIO
+Animate this supplied frame as one continuous spoken-address take.
+Use the actual speech audio supplied to the audio-conditioned workflow.
+No subtitles, captions, on-screen lyrics or added text.
+
+CORTE 02 — Instrumental — violão
+Referências: Banda + cenário.
+
+FLOW — IMAGEM
+/closeup /softlight — Photograph Caio with acoustic guitar.
+
+VEO 3 — ANIMAÇÃO
+One continuous instrumental shot beginning exactly from the supplied image.
+
+CORTE 03 — Primeiro verso
+FLOW — IMAGEM
+Portrait of Daniel singing.
+
+COMFYUI — ANIMAÇÃO E SINCRONIZAÇÃO PELO ÁUDIO
+Continue this exact composition as a single singing take driven by the supplied vocal audio.
+Keep his attention on the listener.
+No subtitles, captions, on-screen lyrics or added text.
+`
+
 describe('parseScenePromptsForImport', () => {
   it('reconhece o documento de direção', () => {
     expect(looksLikeDirectionDoc(SAMPLE)).toBe(true)
@@ -108,6 +142,43 @@ describe('parseScenePromptsForImport', () => {
       { number: 1, text: 'prompt um' },
       { number: 3, text: 'prompt três' },
     ])
+  })
+
+  it('lê documento CORTE sem fence e ignora FLOW/VEO', () => {
+    expect(looksLikeDirectionDoc(CORTE_SAMPLE)).toBe(true)
+    const extracted = extractComfyPromptsFromDirectionDoc(CORTE_SAMPLE)
+    expect(extracted.map((entry) => entry.number)).toEqual([1, 3])
+    const parsed = parseScenePromptsForImport(CORTE_SAMPLE)
+    expect(parsed.map((entry) => entry.number)).toEqual([1, 3])
+    expect(parsed[0]?.text).toBe(
+      [
+        'Animate this supplied frame as one continuous spoken-address take.',
+        'Use the actual speech audio supplied to the audio-conditioned workflow.',
+        'No subtitles, captions, on-screen lyrics or added text.',
+      ].join('\n'),
+    )
+    expect(parsed[0]?.text).not.toMatch(/Photograph Daniel on stage/)
+    expect(parsed[0]?.text).not.toMatch(/^(?:COMFYUI|FLOW|VEO)\b/im)
+    expect(parsed[1]?.text).toContain('Continue this exact composition as a single singing take')
+    expect(parsed.some((entry) => entry.text.includes('instrumental shot'))).toBe(false)
+  })
+
+  it('aceita SCENE/CUT e bloco Comfy sem numeração 1./2.', () => {
+    const doc = `
+SCENE 04 — Verse
+FLOW — IMAGEM
+/closeup — singer portrait
+
+COMFYUI — ANIMAÇÃO E SINCRONIZAÇÃO PELO ÁUDIO
+Sing with the supplied vocal audio.
+
+CUT 05 — Bridge
+COMFY UI — LIPSYNC
+Keep the mouth locked to the recording.
+`
+    expect(parseScenePromptsForImport(doc).map((entry) => entry.number)).toEqual([4, 5])
+    expect(parseScenePromptsForImport(doc)[0]?.text).toBe('Sing with the supplied vocal audio.')
+    expect(parseScenePromptsForImport(doc)[1]?.text).toBe('Keep the mouth locked to the recording.')
   })
 })
 
@@ -129,6 +200,18 @@ describe('extractFlowPromptsFromDirectionDoc', () => {
     const [first] = extractFlowPromptsFromDirectionDoc(SAMPLE)
     expect(first?.text).not.toMatch(/Animate this initial band frame/)
   })
+
+  it('lê documento CORTE sem fence e ignora Comfy/VEO', () => {
+    expect(looksLikeFlowDirectionDoc(CORTE_SAMPLE)).toBe(true)
+    const extracted = extractFlowPromptsFromDirectionDoc(CORTE_SAMPLE)
+    expect(extracted.map((entry) => entry.number)).toEqual([1, 2, 3])
+    expect(extracted[0]?.text).toBe('/closeup /documentary — Photograph Daniel on stage.')
+    expect(extracted[1]?.text).toBe('/closeup /softlight — Photograph Caio with acoustic guitar.')
+    expect(extracted[2]?.text).toBe('Portrait of Daniel singing.')
+    expect(extracted.every((entry) => !/^(?:COMFYUI|VEO)\b/im.test(entry.text))).toBe(true)
+    expect(extracted.some((entry) => entry.text.includes('Animate this supplied frame'))).toBe(false)
+    expect(extracted.some((entry) => entry.text.includes('instrumental shot'))).toBe(false)
+  })
 })
 
 describe('parseFlowPromptsForImport', () => {
@@ -142,5 +225,32 @@ describe('parseFlowPromptsForImport', () => {
       { number: 1, text: 'prompt flow um' },
       { number: 2, text: 'prompt flow dois' },
     ])
+  })
+
+  it('aceita CORTE/SCENE/CUT e markdown no cabeçalho', () => {
+    const doc = `
+## CORTE 01 — Abertura
+FLOW — IMAGEM
+/closeup /documentary — singer at the mic.
+
+COMFYUI — ANIMAÇÃO
+Animate with audio.
+
+**SCENE 02** — Guitar
+1. FLOW - IMAGE
+Seated guitarist, sunburst acoustic.
+
+VEO 3 — ANIMAÇÃO
+Instrumental take.
+
+# CUT #03 — Wide
+Google Flow — IMAGEM
+Wide conservatory stage with the full band.
+`
+    const parsed = parseFlowPromptsForImport(doc)
+    expect(parsed.map((entry) => entry.number)).toEqual([1, 2, 3])
+    expect(parsed[0]?.text).toBe('/closeup /documentary — singer at the mic.')
+    expect(parsed[1]?.text).toBe('Seated guitarist, sunburst acoustic.')
+    expect(parsed[2]?.text).toBe('Wide conservatory stage with the full band.')
   })
 })
