@@ -160,8 +160,7 @@ describe('atualizações', () => {
     expect(copy.statusAvailable).toContain('2.0')
     expect(copy.ctaInstall).toMatch(/2\.0/)
     expect(sidebarUpdateToastMessage('2.0.0', 'Mathias Fuhr')).toContain('Mathias')
-    expect(deriveUpdateNotification({ state: 'available', availableVersion: '2.0.0' }, 'Mathias').title).toBe(
-      'Atlas Studio 2.0',
-    )
+    const notice = deriveUpdateNotification({ state: 'available', availableVersion: '2.0.0' }, 'Mathias')
+    expect(notice?.title).toBe('Atlas Studio 2.0')
   })
 })
