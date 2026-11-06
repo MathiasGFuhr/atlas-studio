@@ -28,6 +28,8 @@ export type LipSyncRef = {
   imagePreviewUrl?: string | null
   /** Trecho de áudio da cena (cópia em userData); vazio quando ainda não vinculado. */
   audioPath: string
+  /** URL atlas-media para ouvir o trecho no renderer; null se não houver áudio. */
+  audioUrl?: string | null
   /** Duração real do áudio em segundos, lida pelo FFmpeg. */
   audioDuration: number | null
   projectId: string | null

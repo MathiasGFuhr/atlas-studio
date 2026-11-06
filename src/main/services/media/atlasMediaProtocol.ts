@@ -3,7 +3,10 @@ import fs from 'node:fs'
 import { Readable } from 'node:stream'
 import { net, protocol } from 'electron'
 import { pathToFileURL } from 'node:url'
+import { LIPSYNC_AUDIO_EXTENSIONS } from '../../../shared/lipSyncRefs'
 import { parseByteRange } from '../../../shared/mediaRange'
+import { lipSyncRefRepository } from '../../repositories/lipSyncRefRepository'
+import { projectRepository } from '../../repositories/projectRepository'
 import { shortsRepository } from '../../repositories/shortsRepository'
 import { getUserDataPath } from '../../paths'
 import { ATLAS_MEDIA_SCHEME, isAllowedImagePath } from './localImageUrl'
@@ -57,14 +60,48 @@ function musicRoot() {
   return path.join(getUserDataPath(), 'music')
 }
 
+function lipsyncRefsRoot() {
+  return path.join(getUserDataPath(), 'lipsync-refs')
+}
+
 function isInsideRoot(filePath: string, root: string): boolean {
   const resolvedRoot = path.resolve(root).toLowerCase() + path.sep
   return path.resolve(filePath).toLowerCase().startsWith(resolvedRoot)
 }
 
+function isAudioFile(filePath: string): boolean {
+  return LIPSYNC_AUDIO_EXTENSIONS.includes(path.extname(filePath).toLowerCase())
+}
+
 function isAllowedMediaPath(resolved: string): boolean {
   if (isInsideRoot(resolved, shortsRoot()) || isInsideRoot(resolved, musicRoot())) return true
   if (isAllowedImagePath(resolved)) return true
+  if (isAudioFile(resolved) && isInsideRoot(resolved, lipsyncRefsRoot())) return true
+  if (isAudioFile(resolved)) {
+    try {
+      const target = resolved.toLowerCase()
+      const refs = lipSyncRefRepository.list({ status: 'active' })
+      if (
+        refs.some((ref) => {
+          const audio = ref.audioPath?.trim()
+          return audio ? path.resolve(audio).toLowerCase() === target : false
+        })
+      ) {
+        return true
+      }
+      const projects = projectRepository.list()
+      if (
+        projects.some((project) => {
+          const folder = project.projectFolderPath?.trim()
+          return folder ? isInsideRoot(resolved, folder) : false
+        })
+      ) {
+        return true
+      }
+    } catch {
+      /* repositório ainda não pronto */
+    }
+  }
   const target = resolved.toLowerCase()
   return shortsRepository.listSourcePaths().some((source) => path.resolve(source).toLowerCase() === target)
 }

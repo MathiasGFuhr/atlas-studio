@@ -96,6 +96,13 @@ function sceneNumber(index: number): string {
   return String(index + 1).padStart(2, '0')
 }
 
+/** URL atlas-media para ouvir um áudio local no modal de instrumento. */
+function atlasAudioUrl(filePath: string | null | undefined): string | null {
+  const value = filePath?.trim()
+  if (!value) return null
+  return `atlas-media://local/?p=${encodeURIComponent(value)}`
+}
+
 function folderExcerptByScene(scan: LipSyncFolderScan): Map<number, string> {
   const excerpts = new Map<number, string>()
   for (const excerpt of scan.excerpts ?? []) {
@@ -2282,6 +2289,16 @@ export function LipSyncRefsPage() {
         choices={pendingInstrumental?.choices ?? {}}
         applying={busy}
         hasConflicts={pendingInstrumental?.hasConflicts ?? false}
+        audioUrls={
+          pendingInstrumental
+            ? Object.fromEntries(
+                pendingInstrumental.scan.audios.map((audio) => [
+                  audio.number,
+                  atlasAudioUrl(audio.path),
+                ]),
+              )
+            : {}
+        }
         onChange={(number, choice) =>
           setPendingInstrumental((current) =>
             current
@@ -2302,6 +2319,16 @@ export function LipSyncRefsPage() {
         applying={busy}
         hasConflicts={false}
         reason="empty-lyrics"
+        audioUrls={
+          pendingSceneInstruments
+            ? Object.fromEntries(
+                pendingSceneInstruments.numbers.map((number) => {
+                  const item = visibleItems[number - 1]
+                  return [number, item?.audioUrl ?? atlasAudioUrl(item?.audioPath) ?? null]
+                }),
+              )
+            : {}
+        }
         onChange={(number, choice) =>
           setPendingSceneInstruments((current) =>
             current

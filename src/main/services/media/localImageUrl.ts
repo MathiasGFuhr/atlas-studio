@@ -61,3 +61,9 @@ function versionedMediaUrl(resolved: string): string | null {
   // mtime+size na URL: trocar a imagem com o mesmo nome invalida o cache do Chromium.
   return `${toAtlasMediaUrl(resolved)}&v=${Math.trunc(stats.mtimeMs)}-${stats.size}`
 }
+
+/** URL atlas-media para ouvir áudio local (lipsync-refs / pasta do projeto). */
+export function localAudioUrl(filePath: string | null | undefined): string | null {
+  if (!filePath?.trim()) return null
+  return versionedMediaUrl(path.resolve(filePath))
+}

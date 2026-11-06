@@ -11,7 +11,7 @@ import type {
   LipSyncSubject,
 } from '../../shared/lipSyncRefs'
 import { isLipSyncRefStatus, isLipSyncSubject } from '../../shared/lipSyncRefs'
-import { localImageThumbUrl, localImageUrl } from '../services/media/localImageUrl'
+import { localAudioUrl, localImageThumbUrl, localImageUrl } from '../services/media/localImageUrl'
 import { warmImageThumbnails } from '../services/media/imageThumbnails'
 import {
   archiveLipSyncRefToProjectFolder,
@@ -84,6 +84,7 @@ function mapRow(row: Row): LipSyncRef {
     imageThumbUrl: localImageThumbUrl(row.image_path, 360),
     imagePreviewUrl: localImageThumbUrl(row.image_path, 1080),
     audioPath: row.audio_path?.trim() ?? '',
+    audioUrl: localAudioUrl(row.audio_path),
     audioDuration:
       row.audio_duration != null && Number.isFinite(Number(row.audio_duration))
         ? Number(row.audio_duration)
