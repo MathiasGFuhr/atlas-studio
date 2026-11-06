@@ -72,6 +72,13 @@ import {
 } from '../../shared/lipSyncRefs'
 import { lipSyncRefRepository } from '../repositories/lipSyncRefRepository'
 import { musicRepository } from '../repositories/musicRepository'
+import { transcribeLocalAudio } from '../services/shorts/transcribeLocal'
+import {
+  parseMusicCaptionLanguage,
+  parseMusicCaptionModel,
+  resolveWhisperModelName,
+  type MusicCaption,
+} from '../../shared/musicAnalysis'
 import { shortsRepository } from '../repositories/shortsRepository'
 import { analyzeShortsJob, regenerateShortsClipCopy } from '../services/shorts/ShortsPipeline'
 import { loadShortsAnalysisPlan } from '../services/shorts/ShortsAnalysisPlanner'
@@ -89,7 +96,13 @@ import {
   updateClip as updateShortsClip,
   updateProjectSettings,
 } from '../services/shorts/ShortsProjectService'
-import { buildSrt, buildVerticalCropPlan, buildClipFramingPlan, cuesForClip } from '../../shared/shortsExport'
+import {
+  buildSrt,
+  buildVerticalCropPlan,
+  buildClipFramingPlan,
+  cuesForClip,
+  parseSrt,
+} from '../../shared/shortsExport'
 import { buildFramingExportFilter } from '../../shared/shortsFraming'
 import {
   SHORTS_OUTPUT_WIDTH,
@@ -110,6 +123,10 @@ import type { MusicAdviseRequest } from '../../shared/audio/audioCutAdvisor'
 import type { AudioExportFormat, Mp3Bitrate } from '../../shared/audio/audioExport'
 import { adviseMusicCutsWithCodex } from '../services/audio/CodexAudioCutAdvisor'
 import { exportMusicSegment, exportMusicSegments } from '../services/audio/AudioExportService'
+import {
+  exportMusicCutsToLipSync,
+  type MusicCutLipSyncInput,
+} from '../services/audio/exportMusicCutsToLipSync'
 import type { ChatSendMessageRequest } from '../../shared/chat/types'
 import type { AgentProviderId } from '../../shared/agents/types'
 import { ChatService } from '../services/chat/ChatService'
@@ -475,6 +492,13 @@ export function registerIpcHandlers(deps: {
     },
   )
 
+  function writeCutSrt(audioPath: string, captions: MusicCaption[], start: number, end: number) {
+    const relative = cuesForClip(captions, start, end).filter((cue) => cue.text.trim())
+    const srt = buildSrt(relative)
+    if (!srt.trim()) return
+    fs.writeFileSync(`${audioPath.replace(/\.[^.]+$/, '')}.srt`, `${srt}\n`, 'utf8')
+  }
+
   ipcMain.handle(IPC.music.list, (_e, filters?: { projectId?: string }) =>
     musicRepository.list(filters),
   )
@@ -602,6 +626,7 @@ export function registerIpcHandlers(deps: {
         format,
         bitrate,
       })
+      writeCutSrt(saved, track.captions, payload.start, payload.end)
       settingsRepository.update({ musicExportFolder: path.dirname(saved) })
       return saved
     },
@@ -636,17 +661,108 @@ export function registerIpcHandlers(deps: {
       const cuts = payload.cuts?.length
         ? payload.cuts
         : track.cuts.map((cut) => ({ start: cut.start, end: cut.end, label: cut.label }))
-      return exportMusicSegments({
+      const saved = await exportMusicSegments({
         id: payload.id,
         directory,
         format,
         bitrate,
         cuts,
       })
+      saved.forEach((file, index) => {
+        const cut = cuts[index]
+        if (cut) writeCutSrt(file, track.captions, cut.start, cut.end)
+      })
+      return saved
     },
   )
+  ipcMain.handle(IPC.music.transcribe, async (_e, id: string, language?: string, model?: string) => {
+    const track = musicRepository.get(id)
+    if (!track) throw new Error('Música não encontrada')
+    const captionLanguage = parseMusicCaptionLanguage(language)
+    const captionModel = parseMusicCaptionModel(model)
+    const whisperModel = resolveWhisperModelName(captionModel, captionLanguage)
+    const audioPath =
+      track.originalPath && fs.existsSync(track.originalPath) ? track.originalPath : track.previewPath
+    if (!audioPath || !fs.existsSync(audioPath)) throw new Error('Arquivo de áudio não encontrado')
+    const outputDir = path.join(path.dirname(audioPath), 'captions')
+    const result = await transcribeLocalAudio(audioPath, outputDir, {
+      language: captionLanguage,
+      model: whisperModel,
+    })
+    if (result.cues.length === 0) {
+      throw new Error(
+        result.detail ||
+          'Não foi possível gerar a legenda. Instale o modelo com: py -3 -m pip install faster-whisper',
+      )
+    }
+    return musicRepository.saveCaptions(id, result.cues, captionLanguage)
+  })
+  ipcMain.handle(IPC.music.exportSrt, async (_e, id: string) => {
+    const track = musicRepository.get(id)
+    if (!track) throw new Error('Música não encontrada')
+    const srt = buildSrt(track.captions.filter((cue) => cue.text.trim()))
+    if (!srt.trim()) throw new Error('Gere a legenda antes de salvar o SRT.')
+    const win = getMainWindow()
+    const suggested = `${track.name}.srt`
+    const lastFolder = settingsRepository.get().musicExportFolder
+    const result = await dialog.showSaveDialog(win ?? undefined!, {
+      title: 'Salvar legenda',
+      defaultPath: lastFolder ? path.join(lastFolder, suggested) : suggested,
+      filters: [{ name: 'Legenda SRT', extensions: ['srt'] }],
+    })
+    if (result.canceled || !result.filePath) return null
+    const target = result.filePath.toLowerCase().endsWith('.srt') ? result.filePath : `${result.filePath}.srt`
+    fs.writeFileSync(target, `${srt}\n`, 'utf8')
+    settingsRepository.update({ musicExportFolder: path.dirname(target) })
+    return target
+  })
+  ipcMain.handle(IPC.music.importSrt, async (_e, id: string) => {
+    const track = musicRepository.get(id)
+    if (!track) throw new Error('Música não encontrada')
+    const win = getMainWindow()
+    const lastFolder = settingsRepository.get().musicExportFolder
+    const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: 'Importar legenda SRT',
+      defaultPath: lastFolder || undefined,
+      properties: ['openFile'],
+      filters: [
+        { name: 'Legenda SRT', extensions: ['srt'] },
+        { name: 'Todos os arquivos', extensions: ['*'] },
+      ],
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    const filePath = result.filePaths[0]
+    const raw = fs.readFileSync(filePath, 'utf8')
+    const cues = parseSrt(raw)
+    if (cues.length === 0) {
+      throw new Error('Não achei nenhuma legenda válida nesse SRT. Exporte de novo no CapCut e tente outra vez.')
+    }
+    settingsRepository.update({ musicExportFolder: path.dirname(filePath) })
+    return musicRepository.saveCaptions(id, cues, track.captionsLanguage ?? null)
+  })
   ipcMain.handle(IPC.music.adviseCuts, async (_e, request: MusicAdviseRequest) => {
     return adviseMusicCutsWithCodex(request, codexService)
+  })
+  ipcMain.handle(IPC.music.exportCutsToLipSync, async (_e, payload: MusicCutLipSyncInput) => {
+    const track = musicRepository.get(payload.trackId)
+    if (!track) throw new Error('Música não encontrada')
+    if (!track.projectId) {
+      throw new Error('Vincule esta faixa a um projeto de música antes de enviar ao LipSync.')
+    }
+    const project = projectRepository.get(track.projectId)
+    const win = getMainWindow()
+    const current =
+      project?.projectFolderPath || settingsRepository.get().musicExportFolder || undefined
+    const picked = await dialog.showOpenDialog(win ?? undefined!, {
+      title: 'Escolher pasta para baixar os cortes e enviar ao LipSync',
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: current,
+    })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    const directory = path.resolve(picked.filePaths[0])
+    projectRepository.update(track.projectId, { projectFolderPath: directory })
+    settingsRepository.update({ musicExportFolder: directory })
+    return exportMusicCutsToLipSync({ ...payload, directory })
   })
 
   ipcMain.handle(IPC.shorts.list, (_e, filters?: ShortsProjectListFilters) =>

@@ -10,7 +10,7 @@ import {
   MessageSquareText,
   MessagesSquare,
   Mic2,
-  Music2,
+  Scissors,
   Settings,
   Tv,
   Wallet,
@@ -18,7 +18,12 @@ import {
 } from 'lucide-react'
 import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
-import { MUSIC_FLOW_PATH, MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
+import {
+  MUSIC_FLOW_PATH,
+  MUSIC_LIPSYNC_PATH,
+  MUSIC_PROMPTS_PATH,
+  MUSIC_TRACKS_PATH,
+} from '@shared/workspaceCapabilities'
 import { AtlasAiStatusCard } from './AtlasAiStatusCard'
 import { AtlasLogo } from './AtlasLogo'
 import { SidebarChannelSwitcher } from './SidebarChannelSwitcher'
@@ -56,8 +61,8 @@ const navSections: NavSection[] = [
     id: 'estudio',
     label: 'Estúdio',
     items: [
-      { to: ENVIRONMENTS.music.basePath, label: 'Projetos', icon: Music2 },
       { to: MUSIC_PROMPTS_PATH, label: 'Prompts', icon: MessageSquareText },
+      { to: MUSIC_TRACKS_PATH, label: 'Cortes', icon: Scissors },
       { to: MUSIC_LIPSYNC_PATH, label: 'Lipsync', icon: Mic2 },
       { to: MUSIC_FLOW_PATH, label: 'Flow', icon: Workflow },
       { to: '/shorts', label: 'Shorts', icon: Clapperboard },
@@ -87,11 +92,16 @@ function isSidebarLinkActive(to: string, pathname: string, matched: boolean): bo
       pathname === ENVIRONMENTS.music.basePath ||
       (pathname.startsWith(`${ENVIRONMENTS.music.basePath}/`) &&
         !pathname.startsWith(MUSIC_PROMPTS_PATH) &&
-        !pathname.startsWith(MUSIC_LIPSYNC_PATH))
+        !pathname.startsWith(MUSIC_TRACKS_PATH) &&
+        !pathname.startsWith(MUSIC_LIPSYNC_PATH) &&
+        !pathname.startsWith(MUSIC_FLOW_PATH))
     )
   }
   if (to === MUSIC_PROMPTS_PATH) {
     return pathname === MUSIC_PROMPTS_PATH || pathname.startsWith(`${MUSIC_PROMPTS_PATH}/`)
+  }
+  if (to === MUSIC_TRACKS_PATH) {
+    return pathname === MUSIC_TRACKS_PATH || pathname.startsWith(`${MUSIC_TRACKS_PATH}/`)
   }
   if (to === MUSIC_LIPSYNC_PATH) {
     return pathname === MUSIC_LIPSYNC_PATH || pathname.startsWith(`${MUSIC_LIPSYNC_PATH}/`)

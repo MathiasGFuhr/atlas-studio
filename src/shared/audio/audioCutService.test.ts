@@ -37,6 +37,7 @@ describe('audioCutService', () => {
       [168, 245],
       [245, 310],
     ])
+    expect(cuts.map((cut) => cut.label)).toEqual(['Trecho 1', 'Trecho 2', 'Trecho 3', 'Trecho 4'])
   })
 
   it('move marcador sem cruzar o vizinho', () => {

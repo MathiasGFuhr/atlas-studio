@@ -825,6 +825,10 @@ export const IPC = {
     exportAll: 'music:exportAll',
     chooseExportFolder: 'music:chooseExportFolder',
     adviseCuts: 'music:adviseCuts',
+    transcribe: 'music:transcribe',
+    exportSrt: 'music:exportSrt',
+    importSrt: 'music:importSrt',
+    exportCutsToLipSync: 'music:exportCutsToLipSync',
   },
   shorts: {
     list: 'shorts:list',

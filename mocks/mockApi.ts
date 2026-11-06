@@ -900,6 +900,16 @@ export const mockApi = {
     exportAll: async () => null,
     chooseExportFolder: async () => settings.musicExportFolder || null,
     adviseCuts: async (request: MusicAdviseRequest) => adviseCutsLocally(request),
+    transcribe: async (_id: string, _language?: 'pt' | 'en', _model?: string) => {
+      throw new Error('Legenda indisponível no modo mock. Use o Electron.')
+    },
+    exportSrt: async () => null,
+    importSrt: async () => {
+      throw new Error('Importação de SRT indisponível no modo mock. Use o Electron.')
+    },
+    exportCutsToLipSync: async () => {
+      throw new Error('Envio ao LipSync indisponível no modo mock. Use o Electron.')
+    },
   },
   shorts: {
     list: async () => [] as ShortsJob[],

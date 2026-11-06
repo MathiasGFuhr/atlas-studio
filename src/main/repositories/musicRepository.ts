@@ -3,7 +3,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db/database'
 import { getUserDataPath } from '../paths'
-import type { MusicTrack } from '../../shared/musicAnalysis'
+import type { MusicCaption, MusicTrack } from '../../shared/musicAnalysis'
 import { parseMusicCutsJson, serializeMusicCutsJson } from '../../shared/audio/persist'
 import { runFfmpeg } from '../services/audio/ffmpeg'
 import { buildFfmpegExportArgs, type AudioExportFormat, type Mp3Bitrate } from '../../shared/audio/audioExport'
@@ -17,8 +17,40 @@ type TrackRow = {
   duration: number
   cut_mode: string
   cuts_json: string
+  captions_json?: string | null
+  captions_language?: string | null
   created_at: string
   updated_at: string
+}
+
+function ensureCaptionColumns() {
+  const database = getDb()
+  const columns = database.prepare('PRAGMA table_info(music_tracks)').all() as Array<{ name: string }>
+  const names = new Set(columns.map((column) => column.name))
+  if (!names.has('captions_json')) {
+    database.exec(`ALTER TABLE music_tracks ADD COLUMN captions_json TEXT NOT NULL DEFAULT '[]'`)
+  }
+  if (!names.has('captions_language')) {
+    database.exec('ALTER TABLE music_tracks ADD COLUMN captions_language TEXT')
+  }
+}
+
+function parseCaptions(value: string | null | undefined): MusicCaption[] {
+  try {
+    const parsed = JSON.parse(value || '[]') as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object') return []
+      const record = item as Record<string, unknown>
+      const start = Number(record.start)
+      const end = Number(record.end)
+      const text = String(record.text ?? '').replace(/\s+/g, ' ').trim()
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !text) return []
+      return [{ start, end, text }]
+    })
+  } catch {
+    return []
+  }
 }
 
 function parseCuts(value: string) {
@@ -36,6 +68,8 @@ function mapTrack(row: TrackRow): MusicTrack {
     duration: Number(row.duration) || 0,
     cutMode: row.cut_mode === 'manual' ? 'manual' : 'automatico',
     cuts: parsed.cuts,
+    captions: parseCaptions(row.captions_json),
+    captionsLanguage: row.captions_language?.trim() || null,
     selectedId: parsed.selectedId,
     appliedPreset: parsed.appliedPreset,
     createdAt: row.created_at,
@@ -135,6 +169,18 @@ export const musicRepository = {
         next.updatedAt,
         id,
       )
+    return this.get(id)
+  },
+
+  saveCaptions(id: string, captions: MusicCaption[], language: string | null): MusicTrack | null {
+    const current = this.get(id)
+    if (!current) return null
+    ensureCaptionColumns()
+    getDb()
+      .prepare(
+        `UPDATE music_tracks SET captions_json = ?, captions_language = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(JSON.stringify(captions), language, new Date().toISOString(), id)
     return this.get(id)
   },
 

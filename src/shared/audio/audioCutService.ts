@@ -22,7 +22,7 @@ export function makeSegment(
     id: extra?.id ?? `cut-${index}-${Math.round(start * 1000)}`,
     start: roundTime(Math.max(0, start)),
     end: roundTime(Math.max(start + MIN_SEGMENT, end)),
-    label: extra?.label ?? `Corte ${index}`,
+    label: extra?.label ?? `Trecho ${index}`,
     source,
     reason: extra?.reason,
     confidence: extra?.confidence,
@@ -31,6 +31,14 @@ export function makeSegment(
 
 export function sortCuts(cuts: MusicSegment[]): MusicSegment[] {
   return [...cuts].sort((a, b) => a.start - b.start || a.end - b.end)
+}
+
+/** Renomeia os cortes em ordem de tempo: Trecho 1, Trecho 2, Trecho 3… */
+export function renumberCutLabels(cuts: MusicSegment[]): MusicSegment[] {
+  return sortCuts(cuts).map((cut, index) => ({
+    ...cut,
+    label: `Trecho ${index + 1}`,
+  }))
 }
 
 export function clampSegment(
@@ -149,23 +157,15 @@ export function splitAtPlayhead(cuts: MusicSegment[], time: number, duration: nu
       ...containing,
       id: nextId('cut-split'),
       start: split,
-      label: nextLabel(cuts, containing.label),
+      label: containing.label,
       source: 'manual',
     }
-    return sortCuts(cuts.flatMap((cut) => (cut.id === containing.id ? [left, right] : [cut])))
+    return renumberCutLabels(cuts.flatMap((cut) => (cut.id === containing.id ? [left, right] : [cut])))
   }
 
   const points = collectSplitPoints(cuts, duration)
   if (!points.some((point) => timesNear(point, split, MIN_SEGMENT))) points.push(split)
-  return segmentsFromTimes(points, duration, 'manual', labelExtrasFromCuts(cuts, duration))
-}
-
-function nextLabel(cuts: MusicSegment[], base: string): string {
-  const used = new Set(cuts.map((cut) => cut.label))
-  if (!used.has(`${base} B`)) return `${base} B`
-  let index = cuts.length + 1
-  while (used.has(`Corte ${index}`)) index += 1
-  return `Corte ${index}`
+  return renumberCutLabels(segmentsFromTimes(points, duration, 'manual', labelExtrasFromCuts(cuts, duration)))
 }
 
 function collectSplitPoints(cuts: MusicSegment[], duration: number): number[] {
@@ -193,9 +193,11 @@ export function addManualSelection(
   const length = Math.min(remaining, remaining < 8 ? remaining : 4)
   const cut = makeSegment(start, start + length, cuts.length + 1, 'manual', {
     id: nextId('cut-manual'),
-    label: `Corte ${cuts.length + 1}`,
+    label: `Trecho ${cuts.length + 1}`,
   })
-  return { cuts: [...cuts, cut], selectedId: cut.id }
+  const nextCuts = renumberCutLabels([...cuts, cut])
+  const selected = nextCuts.find((item) => item.id === cut.id) ?? nextCuts[nextCuts.length - 1]
+  return { cuts: nextCuts, selectedId: selected?.id ?? cut.id }
 }
 
 export function removeCut(cuts: MusicSegment[], cutId: string): MusicSegment[] {

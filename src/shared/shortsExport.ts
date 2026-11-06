@@ -205,5 +205,52 @@ export function buildSrt(cues: TranscriptCue[]): string {
     .join('\n\n')
 }
 
+function parseSrtTimestamp(value: string): number | null {
+  const match = value
+    .trim()
+    .match(/^(\d{1,2}):([0-5]?\d):([0-5]?\d)[,.](\d{1,3})$/)
+  if (!match) return null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  const seconds = Number(match[3])
+  const millis = Number(match[4].padEnd(3, '0'))
+  if (![hours, minutes, seconds, millis].every(Number.isFinite)) return null
+  return hours * 3600 + minutes * 60 + seconds + millis / 1000
+}
+
+function stripSrtMarkup(text: string): string {
+  return text
+    .replace(/\{\\an\d+\}/gi, '')
+    .replace(/<\/?[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Lê SRT do CapCut (e similares) e devolve cues absolutas no tempo da faixa. */
+export function parseSrt(raw: string): TranscriptCue[] {
+  const normalized = raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+  if (!normalized) return []
+  const blocks = normalized.split(/\n{2,}/)
+  const cues: TranscriptCue[] = []
+  for (const block of blocks) {
+    const lines = block
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+    if (lines.length < 2) continue
+    const timingIndex = lines.findIndex((line) => line.includes('-->'))
+    if (timingIndex < 0) continue
+    const timing = lines[timingIndex].match(/^(.+?)\s*-->\s*(.+?)(?:\s+.*)?$/)
+    if (!timing) continue
+    const start = parseSrtTimestamp(timing[1])
+    const end = parseSrtTimestamp(timing[2])
+    if (start == null || end == null || end <= start) continue
+    const text = stripSrtMarkup(lines.slice(timingIndex + 1).join(' '))
+    if (!text) continue
+    cues.push({ start, end, text })
+  }
+  return cues.sort((a, b) => a.start - b.start || a.end - b.end)
+}
+
 export const SHORTS_CAPTION_STYLE =
   "FontName=Arial,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BackColour=&H80000000,BorderStyle=3,Outline=1,Shadow=0,Alignment=2,MarginV=80,Bold=0"

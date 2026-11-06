@@ -27,6 +27,7 @@ import { MUSIC_FLOW_PATH, MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared
 import { version as appVersion } from '../../package.json'
 import { AtlasLogo } from './components/AtlasLogo'
 import { shouldShowWelcome, WelcomeSplash } from './components/WelcomeSplash'
+import { shouldShowPremiereV2, WelcomePremiereV2 } from './components/WelcomePremiereV2'
 
 /*
  * Páginas fora da Home viram chunks separados: o bundle inicial fica menor e
@@ -123,7 +124,12 @@ export default function App() {
   const codexAuth = useCodexAuth()
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [pageTourOpen, setPageTourOpen] = useState(false)
-  const [welcomeOpen, setWelcomeOpen] = useState(shouldShowWelcome)
+  const [premiereOpen, setPremiereOpen] = useState(shouldShowPremiereV2)
+  const [welcomeOpen, setWelcomeOpen] = useState(() => !shouldShowPremiereV2() && shouldShowWelcome())
+  const closePremiere = useCallback(() => {
+    setPremiereOpen(false)
+    // A première substitui o splash diário nesta abertura.
+  }, [])
   const closeWelcome = useCallback(() => setWelcomeOpen(false), [])
   const settingsRef = useRef(settings)
   settingsRef.current = settings
@@ -302,7 +308,14 @@ export default function App() {
           v{appVersion}
         </div>
 
-        {welcomeOpen && tourChecked ? (
+        {premiereOpen && tourChecked ? (
+          <WelcomePremiereV2
+            name={settings?.accountName?.trim() || session.user.name}
+            onDone={closePremiere}
+          />
+        ) : null}
+
+        {welcomeOpen && !premiereOpen && tourChecked ? (
           <WelcomeSplash
             name={settings?.accountName?.trim() || session.user.name}
             onDone={closeWelcome}
@@ -310,7 +323,7 @@ export default function App() {
         ) : null}
 
         <ProductTour
-          open={tourOpen && !welcomeOpen}
+          open={tourOpen && !welcomeOpen && !premiereOpen}
           steps={INTRO_TOUR_STEPS}
           aiConnected={codexAuth.isConnected}
           offerConnect
@@ -320,7 +333,7 @@ export default function App() {
         />
         <PageTourHost
           ready={tourChecked}
-          blocked={welcomeOpen || tourOpen || codexAuth.showOnboarding || linkModalOpen}
+          blocked={welcomeOpen || premiereOpen || tourOpen || codexAuth.showOnboarding || linkModalOpen}
           seen={settings?.seenProductTours ?? []}
           onSeen={markPageTourSeen}
           onActiveChange={setPageTourOpen}

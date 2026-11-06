@@ -34,7 +34,14 @@ import type {
   TaskWriteInput,
   VideoListFilters,
 } from '../shared/types'
-import type { AutoCutPreset, MusicCutMode, MusicSegment, MusicTrack } from '../shared/musicAnalysis'
+import type {
+  AutoCutPreset,
+  MusicCaptionLanguage,
+  MusicCaptionModel,
+  MusicCutMode,
+  MusicSegment,
+  MusicTrack,
+} from '../shared/musicAnalysis'
 import type { MusicAdviseRequest, MusicAdviseResult } from '../shared/audio/audioCutAdvisor'
 import type { AudioExportFormat, Mp3Bitrate } from '../shared/audio/audioExport'
 import type {
@@ -267,6 +274,22 @@ const api = {
     chooseExportFolder: () => ipcRenderer.invoke(IPC.music.chooseExportFolder) as Promise<string | null>,
     adviseCuts: (request: MusicAdviseRequest) =>
       ipcRenderer.invoke(IPC.music.adviseCuts, request) as Promise<MusicAdviseResult>,
+    transcribe: (id: string, language?: MusicCaptionLanguage, model?: MusicCaptionModel) =>
+      ipcRenderer.invoke(IPC.music.transcribe, id, language, model) as Promise<MusicTrack | null>,
+    exportSrt: (id: string) => ipcRenderer.invoke(IPC.music.exportSrt, id) as Promise<string | null>,
+    importSrt: (id: string) => ipcRenderer.invoke(IPC.music.importSrt, id) as Promise<MusicTrack | null>,
+    exportCutsToLipSync: (payload: {
+      trackId: string
+      cuts?: Array<{ start: number; end: number; label: string }>
+      format?: AudioExportFormat
+      bitrate?: Mp3Bitrate
+      subject?: 'singer' | 'band'
+    }) =>
+      ipcRenderer.invoke(IPC.music.exportCutsToLipSync, payload) as Promise<{
+        folder: string
+        files: string[]
+        refs: Array<{ id: string; label: string }>
+      } | null>,
   },
   shorts: {
     list: (filters?: ShortsProjectListFilters) =>

@@ -13,6 +13,69 @@ export interface MusicSegment {
   confidence?: number
 }
 
+/** Fala com tempo, gerada a partir do áudio da faixa. */
+export interface MusicCaption {
+  start: number
+  end: number
+  text: string
+}
+
+/** Idiomas que o usuário pode escolher para a legenda da música. */
+export type MusicCaptionLanguage = 'pt' | 'en'
+
+export const MUSIC_CAPTION_LANGUAGES: Array<{ value: MusicCaptionLanguage; label: string }> = [
+  { value: 'pt', label: 'Português (Brasil)' },
+  { value: 'en', label: 'English' },
+]
+
+export function parseMusicCaptionLanguage(value: string | null | undefined): MusicCaptionLanguage {
+  return value === 'en' ? 'en' : 'pt'
+}
+
+/**
+ * Modelos do Whisper (via faster-whisper) que o usuário pode escolher.
+ * Quanto maior, mais precisa a letra — e mais lenta a geração no CPU.
+ */
+export type MusicCaptionModel = 'tiny' | 'base' | 'small' | 'medium' | 'turbo' | 'large-v3'
+
+export const MUSIC_CAPTION_MODELS: Array<{
+  value: MusicCaptionModel
+  label: string
+  hint: string
+}> = [
+  { value: 'tiny', label: 'Tiny · mais rápido', hint: 'Rascunho rápido. Pode errar mais a letra.' },
+  { value: 'base', label: 'Base · rápido', hint: 'Bom para ouvir a letra sem esperar muito.' },
+  { value: 'small', label: 'Small · equilibrado', hint: 'Equilíbrio entre velocidade e precisão.' },
+  { value: 'medium', label: 'Medium · preciso', hint: 'Recomendado para música em português.' },
+  { value: 'turbo', label: 'Turbo · preciso e mais ágil', hint: 'Quase a qualidade do Large, bem mais rápido.' },
+  { value: 'large-v3', label: 'Large · máxima precisão', hint: 'Mais preciso. Em CPU pode demorar bastante.' },
+]
+
+export function parseMusicCaptionModel(value: string | null | undefined): MusicCaptionModel {
+  switch (value) {
+    case 'tiny':
+    case 'base':
+    case 'small':
+    case 'medium':
+    case 'turbo':
+    case 'large-v3':
+      return value
+    default:
+      return 'medium'
+  }
+}
+
+/** Nome que o faster-whisper baixa. Em inglês, usa a variante .en quando existir. */
+export function resolveWhisperModelName(
+  model: MusicCaptionModel,
+  language: MusicCaptionLanguage,
+): string {
+  if (language === 'en' && (model === 'tiny' || model === 'base' || model === 'small' || model === 'medium')) {
+    return `${model}.en`
+  }
+  return model
+}
+
 export interface MusicSilenceRegion {
   start: number
   end: number
@@ -37,6 +100,8 @@ export interface MusicTrack {
   duration: number
   cutMode: MusicCutMode
   cuts: MusicSegment[]
+  captions: MusicCaption[]
+  captionsLanguage?: string | null
   selectedId?: string | null
   appliedPreset?: AutoCutPreset | null
   createdAt: string

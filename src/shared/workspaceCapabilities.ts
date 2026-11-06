@@ -102,6 +102,8 @@ export function isContentAreaEnabled(
 export const MUSIC_PROMPTS_PATH = '/musica/prompts'
 /** Meus prompts (chat ou cadastro manual). */
 export const MUSIC_PROMPTS_CUSTOM_PATH = MUSIC_PROMPTS_PATH
+/** Estúdio de corte e legenda das faixas. */
+export const MUSIC_TRACKS_PATH = '/musica/faixas'
 /** Referências de imagem + prompt de lipsync. */
 export const MUSIC_LIPSYNC_PATH = '/musica/lipsync'
 /** Extrator de prompts Flow para copiar cena a cena. */

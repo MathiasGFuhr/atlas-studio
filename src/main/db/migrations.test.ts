@@ -141,6 +141,33 @@ function seedLegacyContent(db: AppDatabase) {
   ).run(at, at)
 }
 
+describe('legenda da faixa', () => {
+  it('cria as colunas de legenda mesmo quando o banco já passou da versão 25', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      )
+    `)
+    db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (36, ?, ?)').run(
+      'remove-atlas-flow',
+      new Date().toISOString(),
+    )
+
+    const result = migrateSchema(db)
+
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    const columns = (db.prepare('PRAGMA table_info(music_tracks)').all() as Array<{ name: string }>).map(
+      (column) => column.name,
+    )
+    expect(columns).toContain('captions_json')
+    expect(columns).toContain('captions_language')
+  })
+})
+
 describe('migração para projetos de História e Música', () => {
   it('converte roteiros e faixas existentes em projetos sem apagar dados', async () => {
     const db = await createLegacyDatabase()

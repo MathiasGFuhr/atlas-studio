@@ -184,6 +184,24 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyProjectsSongLyrics,
   },
+  { version: 25, name: 'retired-module-25', backup: false, up: noopSchemaStep },
+  { version: 26, name: 'retired-module-26', backup: false, up: noopSchemaStep },
+  { version: 27, name: 'retired-module-27', backup: false, up: noopSchemaStep },
+  { version: 28, name: 'remove-retired-image-integration', backup: false, up: noopSchemaStep },
+  { version: 29, name: 'atlas-flow-projects', backup: false, up: noopSchemaStep },
+  { version: 30, name: 'atlas-flow-project-refs', backup: false, up: noopSchemaStep },
+  { version: 31, name: 'atlas-flow-download-folder', backup: false, up: noopSchemaStep },
+  { version: 32, name: 'atlas-flow-ref-synced', backup: false, up: noopSchemaStep },
+  { version: 33, name: 'atlas-flow-project-prompts', backup: false, up: noopSchemaStep },
+  { version: 34, name: 'atlas-flow-prompt-send', backup: false, up: noopSchemaStep },
+  { version: 35, name: 'atlas-flow-image-settings', backup: false, up: noopSchemaStep },
+  { version: 36, name: 'remove-atlas-flow', backup: false, up: noopSchemaStep },
+  {
+    version: 37,
+    name: 'music-track-captions',
+    backup: false,
+    up: applyMusicTrackCaptions,
+  },
 ]
 
 /** Versão lógica do schema: sempre o último passo de SCHEMA_STEPS. */
@@ -411,6 +429,22 @@ function applyComfyQueue(database: AppDatabase): SchemaStepResult {
   `)
   database.exec('CREATE INDEX IF NOT EXISTS idx_comfy_batches_created ON comfy_batches(created_at)')
   database.exec('CREATE INDEX IF NOT EXISTS idx_comfy_jobs_batch ON comfy_jobs(batch_id, scene_number)')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function noopSchemaStep(): SchemaStepResult {
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyMusicTrackCaptions(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'music_tracks')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'music_tracks', 'captions_json', "TEXT NOT NULL DEFAULT '[]'")
+  ensureColumn(database, 'music_tracks', 'captions_language', 'TEXT')
   return { historyCreated: 0, musicCreated: 0 }
 }
 
@@ -1048,6 +1082,8 @@ function applyIncrementalBase(database: AppDatabase): {
   // “desvinculado de propósito” (ex.: exclusão do projeto no Atlas).
   const addedScriptProjectId = ensureColumn(database, 'scripts', 'project_id', 'TEXT')
   const addedTrackProjectId = ensureColumn(database, 'music_tracks', 'project_id', 'TEXT')
+  ensureColumn(database, 'music_tracks', 'captions_json', "TEXT NOT NULL DEFAULT '[]'")
+  ensureColumn(database, 'music_tracks', 'captions_language', 'TEXT')
   ensureColumn(database, 'channels', 'channel_type', "TEXT NOT NULL DEFAULT 'history'")
   ensureColumn(database, 'projects', 'channel_id', 'TEXT')
   database.exec('CREATE INDEX IF NOT EXISTS idx_scripts_project ON scripts(project_id)')

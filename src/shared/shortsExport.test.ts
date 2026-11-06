@@ -5,6 +5,7 @@ import {
 } from './shorts'
 import {
   buildSrt,
+  parseSrt,
   buildClipFramingPlan,
   buildShortsEditorialRecord,
   buildShortsPreviewFrame,
@@ -157,5 +158,24 @@ describe('shortsExport', () => {
     const srt = buildSrt(cues)
     expect(srt).toContain('00:00:00,000')
     expect(wrapCaptionLines(cues[0].text).split('\n').length).toBeLessThanOrEqual(2)
+  })
+
+  it('lê SRT do CapCut com vírgula, ponto e tags', () => {
+    const cues = parseSrt(`\uFEFF1
+00:00:05,500 --> 00:00:08,200
+O refrão começa
+
+2
+00:01:02.100 --> 00:01:05.000
+<font color="#FFFFFF">Na frente do palco</font>
+
+3
+00:02:00,000 --> 00:01:00,000
+inválido
+`)
+    expect(cues).toEqual([
+      { start: 5.5, end: 8.2, text: 'O refrão começa' },
+      { start: 62.1, end: 65, text: 'Na frente do palco' },
+    ])
   })
 })

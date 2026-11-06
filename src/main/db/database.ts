@@ -244,6 +244,8 @@ export async function initDatabase(workspaceRoot: string): Promise<AppDatabase> 
       duration REAL NOT NULL DEFAULT 0,
       cut_mode TEXT NOT NULL DEFAULT 'automatico',
       cuts_json TEXT NOT NULL DEFAULT '[]',
+      captions_json TEXT NOT NULL DEFAULT '[]',
+      captions_language TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
