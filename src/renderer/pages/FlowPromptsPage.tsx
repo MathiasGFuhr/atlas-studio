@@ -9,8 +9,27 @@ import { getAtlasApi } from '../lib/api'
 import { environmentBreadcrumb } from '../lib/environments'
 import { cn } from '../lib/utils'
 
+const FLOW_SOURCE_STORAGE_KEY = 'atlas.flow.prompts.source'
+
 function sceneLabel(number: number): string {
   return `Cena ${String(number).padStart(2, '0')}`
+}
+
+function readFlowSource(): string {
+  try {
+    return window.localStorage.getItem(FLOW_SOURCE_STORAGE_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function writeFlowSource(value: string): void {
+  try {
+    if (value) window.localStorage.setItem(FLOW_SOURCE_STORAGE_KEY, value)
+    else window.localStorage.removeItem(FLOW_SOURCE_STORAGE_KEY)
+  } catch {
+    // armazenamento cheio ou indisponível: a sessão atual continua na memória
+  }
 }
 
 /**
@@ -20,10 +39,15 @@ function sceneLabel(number: number): string {
 export function FlowPromptsPage() {
   const api = getAtlasApi()
   const { push, pushError } = useToast()
-  const [source, setSource] = useState('')
+  const [source, setSource] = useState(readFlowSource)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const prompts = useMemo(() => parseFlowPromptsForImport(source), [source])
+
+  function updateSource(value: string) {
+    setSource(value)
+    writeFlowSource(value)
+  }
 
   async function pasteFromClipboard() {
     try {
@@ -32,7 +56,7 @@ export function FlowPromptsPage() {
         push('A área de transferência está vazia.')
         return
       }
-      setSource(text)
+      updateSource(text)
       const count = parseFlowPromptsForImport(text).length
       push(
         count === 0
@@ -81,7 +105,7 @@ export function FlowPromptsPage() {
   }
 
   function clearAll() {
-    setSource('')
+    updateSource('')
     setCopiedId(null)
   }
 
@@ -137,7 +161,7 @@ export function FlowPromptsPage() {
           </div>
           <textarea
             value={source}
-            onChange={(event) => setSource(event.target.value)}
+            onChange={(event) => updateSource(event.target.value)}
             spellCheck={false}
             placeholder={
               'Cole aqui o documento completo (CENA 01, FLOW — IMAGEM, ComfyUI…)\nou a lista:\n\n1- prompt da cena 1\n\n2- prompt da cena 2'
