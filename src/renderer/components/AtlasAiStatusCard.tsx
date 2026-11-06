@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronRight, RefreshCw, Sparkles, Zap } from 'lucide-react'
+import { ChevronRight, RefreshCw, Zap } from 'lucide-react'
 import type { AtlasAiStatusView } from '@shared/atlasAiStatus'
 import {
   atlasV2UpdateCopy,
@@ -34,17 +34,17 @@ function updateStatusLine(
   tone: 'ok' | 'warn' | 'muted' | 'busy' | 'premiere'
 } {
   if (!status) return { label: '—', tone: 'muted' }
-  const v2 =
+  const v2Incoming =
     isAtlasV2Release(status.availableVersion) &&
     (status.state === 'available' || status.state === 'ready' || status.state === 'downloading')
-  const copy = v2 ? atlasV2UpdateCopy(accountName) : null
+  const copy = v2Incoming ? atlasV2UpdateCopy(accountName) : null
 
   switch (status.state) {
     case 'up-to-date':
       if (isAtlasV2Release(status.currentVersion)) {
         return {
           label: atlasV2UpdateCopy(accountName).statusInstalled,
-          tone: 'premiere',
+          tone: 'ok',
         }
       }
       return {
@@ -117,19 +117,11 @@ export function AtlasAiStatusCard({
   accountName?: string
 }) {
   const api = getAtlasApi()
-  const { status, busy, check, download, install } = useAppUpdate()
+  const { status, busy, check } = useAppUpdate()
   const [resolvedName, setResolvedName] = useState(accountName)
   const updateLine = updateStatusLine(status, resolvedName)
   const checking = status?.state === 'checking' || busy
   const live = view.kind === 'connected' || view.kind === 'connecting'
-  const onV2 = isAtlasV2Release(status?.currentVersion)
-  const premiereIncoming =
-    isAtlasV2Release(status?.availableVersion) &&
-    (status?.state === 'available' || status?.state === 'ready' || status?.state === 'downloading')
-  const premiereInstalled =
-    onV2 && (status?.state === 'up-to-date' || status?.state === 'idle' || status?.state === 'checking')
-  const premiere = premiereIncoming || premiereInstalled
-  const copy = premiere ? atlasV2UpdateCopy(resolvedName) : null
 
   useEffect(() => {
     if (accountName.trim()) {
@@ -147,16 +139,6 @@ export function AtlasAiStatusCard({
       cancelled = true
     }
   }, [accountName, api])
-
-  function premiereAction() {
-    if (status?.state === 'ready') {
-      void install()
-      return
-    }
-    if (status?.state === 'available' || status?.state === 'error') {
-      void download()
-    }
-  }
 
   if (compact) {
     return (
@@ -182,28 +164,12 @@ export function AtlasAiStatusCard({
         <button
           type="button"
           title={updateLine.label}
-          aria-label={
-            premiere
-              ? `${updateLine.label}. Abrir atualização 2.0`
-              : `Verificar atualização. ${updateLine.label}`
-          }
-          disabled={checking && !premiere}
-          onClick={() => {
-            if (premiere) premiereAction()
-            else void check()
-          }}
-          className={cn(
-            'relative flex h-10 w-full items-center justify-center rounded-xl border transition-colors',
-            premiere
-              ? 'border-accent/40 bg-accent/15 text-accent hover:bg-accent/25'
-              : 'border-border-soft bg-elevated text-muted hover:border-border-strong hover:text-text disabled:opacity-60',
-          )}
+          aria-label={`Verificar atualização. ${updateLine.label}`}
+          disabled={checking}
+          onClick={() => void check()}
+          className="relative flex h-10 w-full items-center justify-center rounded-xl border border-border-soft bg-elevated text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-60"
         >
-          {premiere ? (
-            <Sparkles className="h-3.5 w-3.5" />
-          ) : (
-            <RefreshCw className={cn('h-3.5 w-3.5', checking && 'animate-spin')} />
-          )}
+          <RefreshCw className={cn('h-3.5 w-3.5', checking && 'animate-spin')} />
           {updateLine.tone === 'warn' || updateLine.tone === 'premiere' ? (
             <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-accent" />
           ) : null}
@@ -213,12 +179,7 @@ export function AtlasAiStatusCard({
   }
 
   return (
-    <div
-      className={cn(
-        'relative overflow-hidden rounded-2xl border bg-card',
-        premiere ? 'border-accent/35' : 'border-border-soft',
-      )}
-    >
+    <div className="relative overflow-hidden rounded-2xl border border-border-soft bg-card">
       <button
         type="button"
         data-tour="ai"
@@ -261,93 +222,38 @@ export function AtlasAiStatusCard({
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-2" />
       </button>
 
-      {premiere && copy ? (
-        <div className="atlas-update-premiere relative border-t border-accent/25 px-3 py-3">
-          <div className="atlas-update-premiere__glow pointer-events-none absolute inset-0" aria-hidden />
-          <div className="relative">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-accent">
-              {copy.eyebrow}
-            </p>
-            <p className="home-greeting mt-1 text-[1.05rem] leading-tight text-text">
-              {premiereInstalled ? copy.installedHeadline : copy.headline}
-            </p>
-            <p className="mt-1.5 text-[11px] leading-snug text-muted">
-              {premiereInstalled ? copy.installedLine : copy.line}
-            </p>
-            {status?.state === 'downloading' ? (
-              <div className="mt-2.5">
-                <p className="text-[11px] text-accent">{updateLine.label}</p>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-hover">
-                  <div
-                    className={cn(
-                      'h-full rounded-full bg-accent transition-[width] duration-200',
-                      status.downloadPercent == null && 'w-full animate-pulse opacity-50',
-                    )}
-                    style={
-                      status.downloadPercent == null
-                        ? undefined
-                        : { width: `${status.downloadPercent}%` }
-                    }
-                  />
-                </div>
-              </div>
-            ) : premiereInstalled ? (
-              <button
-                type="button"
-                disabled={checking}
-                onClick={() => void check()}
-                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-accent/30 bg-elevated/80 px-2.5 py-2 text-[11px] font-semibold text-accent transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <RefreshCw className={cn('h-3 w-3', checking && 'animate-spin')} />
-                Verificar atualizações
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={premiereAction}
-                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-2.5 py-2 text-[11px] font-semibold text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Sparkles className="h-3 w-3" />
-                {status?.state === 'ready' ? copy.ctaInstall : copy.ctaDownload}
-              </button>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="relative flex items-center gap-2 border-t border-border-soft bg-input/60 px-3 py-2.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-2">
-              Atualização
-            </p>
-            <p
-              className={cn(
-                'mt-0.5 text-xs leading-snug',
-                updateLine.tone === 'ok' && 'text-accent',
-                updateLine.tone === 'warn' && 'text-warning',
-                updateLine.tone === 'busy' && 'text-muted',
-                updateLine.tone === 'muted' && 'text-muted',
-                updateLine.tone === 'premiere' && 'text-accent',
-              )}
-              title={updateLine.label}
-            >
-              {updateLine.label}
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={checking}
-            onClick={() => void check()}
+      <div className="relative flex items-center gap-2 border-t border-border-soft bg-input/60 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-2">
+            Atualização
+          </p>
+          <p
             className={cn(
-              'inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-elevated px-2.5 py-1.5 text-[11px] font-semibold text-muted transition-colors',
-              'hover:bg-hover hover:text-text disabled:cursor-not-allowed disabled:text-disabled',
+              'mt-0.5 text-xs leading-snug',
+              updateLine.tone === 'ok' && 'text-accent',
+              updateLine.tone === 'warn' && 'text-warning',
+              updateLine.tone === 'busy' && 'text-muted',
+              updateLine.tone === 'muted' && 'text-muted',
+              updateLine.tone === 'premiere' && 'text-accent',
             )}
+            title={updateLine.label}
           >
-            <RefreshCw className={cn('h-3 w-3', checking && 'animate-spin')} />
-            Verificar
-          </button>
+            {updateLine.label}
+          </p>
         </div>
-      )}
+        <button
+          type="button"
+          disabled={checking}
+          onClick={() => void check()}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-elevated px-2.5 py-1.5 text-[11px] font-semibold text-muted transition-colors',
+            'hover:bg-hover hover:text-text disabled:cursor-not-allowed disabled:text-disabled',
+          )}
+        >
+          <RefreshCw className={cn('h-3 w-3', checking && 'animate-spin')} />
+          Verificar
+        </button>
+      </div>
     </div>
   )
 }
