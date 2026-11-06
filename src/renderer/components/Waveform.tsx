@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent } from 'react'
-import { AudioLines, Captions } from 'lucide-react'
+import { AudioLines, Captions, Trash2 } from 'lucide-react'
 import type { MusicCaption, MusicSegment } from '@shared/musicAnalysis'
 import { formatTimecode } from '@shared/musicAnalysis'
-import { getCutMarkers, type CutMarker } from '@shared/audio/audioCutService'
+import { findCutAtTime, getCutMarkers, type CutMarker } from '@shared/audio/audioCutService'
 import { timeFromClientX } from '@shared/audio/playback'
 import { cn } from '../lib/utils'
 
@@ -51,6 +51,7 @@ export function Waveform({
   flash,
   onSeek,
   onSelect,
+  onDeleteCut,
   onChangeCut: _onChangeCut,
   onCommitCut: _onCommitCut,
   onMoveMarker,
@@ -69,6 +70,7 @@ export function Waveform({
   flash?: boolean
   onSeek: (time: number) => void
   onSelect: (id: string | null, time: number) => void
+  onDeleteCut?: (id: string) => void
   onChangeCut: (id: string, start: number, end: number) => void
   onCommitCut: () => void
   onMoveMarker: (marker: CutMarker, time: number) => void
@@ -344,6 +346,8 @@ export function Waveform({
                       onPointerDown={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
+                        const hit = findCutAtTime(cuts, caption.start)
+                        if (hit) onSelect(hit.id, caption.start)
                         onSeek(caption.start)
                       }}
                     >
@@ -366,15 +370,58 @@ export function Waveform({
                   </div>
                 ) : null}
               </div>
-              {selected && duration > 0 ? (
-                <div
-                  className="pointer-events-none absolute top-1.5 bottom-1.5 z-10 rounded-md ring-1 ring-white/75"
-                  style={{
-                    left: `${(selected.start / duration) * 100}%`,
-                    width: `${((selected.end - selected.start) / duration) * 100}%`,
-                  }}
-                />
-              ) : null}
+              {duration > 0
+                ? cuts.map((cut) => {
+                    const isSelected = cut.id === selectedId
+                    const left = (cut.start / duration) * 100
+                    const width = ((cut.end - cut.start) / duration) * 100
+                    const widthPx = ((cut.end - cut.start) / duration) * laneWidth
+                    return (
+                      <div
+                        key={cut.id}
+                        className={cn(
+                          'pointer-events-none absolute top-1.5 bottom-1.5 z-10 rounded-md',
+                          isSelected
+                            ? 'ring-1 ring-white/80 bg-white/10'
+                            : 'ring-1 ring-white/15 hover:ring-white/35',
+                        )}
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                      >
+                        {widthPx >= 64 ? (
+                          <span
+                            className={cn(
+                              'pointer-events-none absolute bottom-1.5 left-2 max-w-[calc(100%-0.75rem)] truncate rounded px-1.5 py-0.5 text-[10px] font-medium',
+                              isSelected
+                                ? 'bg-black/55 text-white'
+                                : 'bg-black/35 text-white/80',
+                            )}
+                          >
+                            {cut.label}
+                          </span>
+                        ) : null}
+                        {isSelected && onDeleteCut ? (
+                          <button
+                            type="button"
+                            title="Remover corte (Delete)"
+                            aria-label={`Remover ${cut.label}`}
+                            className="pointer-events-auto absolute top-1.5 right-1.5 z-20 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white/90 transition-colors hover:bg-danger/80 hover:text-white"
+                            onPointerDown={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              onDeleteCut(cut.id)
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
+                    )
+                  })
+                : null}
             </div>
 
             {pendingCut && duration > 0 && pendingCut.seconds > 0.05 ? (

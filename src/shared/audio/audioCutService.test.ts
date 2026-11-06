@@ -51,9 +51,25 @@ describe('audioCutService', () => {
     expect(moved[0].end).toBe(moved[1].start)
   })
 
-  it('remove um segmento selecionado', () => {
+  it('remove um segmento selecionado e absorve no vizinho', () => {
     const cuts = splitAtPlayhead([], 40, 100)
-    expect(removeCut(cuts, cuts[0].id)).toHaveLength(1)
+    const next = removeCut(cuts, cuts[0].id)
+    expect(next).toHaveLength(1)
+    expect(next[0].start).toBe(0)
+    expect(next[0].end).toBe(100)
+  })
+
+  it('remove um corte do meio e junta com o anterior', () => {
+    const duration = 100
+    let cuts = splitAtPlayhead([], 25, duration)
+    cuts = splitAtPlayhead(cuts, 55, duration)
+    const middle = cuts[1]
+    const next = removeCut(cuts, middle.id)
+    expect(next).toHaveLength(2)
+    expect(next.map((cut) => [cut.start, cut.end])).toEqual([
+      [0, 55],
+      [55, 100],
+    ])
   })
 
   it('altera start e end com precisão decimal', () => {

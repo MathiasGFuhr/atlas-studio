@@ -43,6 +43,7 @@ import {
   addManualSelection,
   fitCutsToExactDuration,
   removeCut as removeCutFromList,
+  nextSelectedAfterRemove,
   renameCut,
   sanitizeExportName,
   getCutMarkers,
@@ -558,6 +559,20 @@ export function MusicEditorPage() {
     )
   }
 
+  function deleteSelectedCut(cutId = selectedId) {
+    if (!track || !cutId) return
+    if (!track.cuts.some((cut) => cut.id === cutId)) return
+    applyLocal(
+      {
+        cuts: removeCutFromList(track.cuts, cutId),
+        cutMode: 'manual',
+        selectedId: nextSelectedAfterRemove(track.cuts, cutId),
+        appliedPreset: track.appliedPreset ?? null,
+      },
+      true,
+    )
+  }
+
   function changeCut(cutId: string, start: number, end: number, recordHistory = false) {
     if (!track) return
     applyLocal(
@@ -838,15 +853,7 @@ export function MusicEditorPage() {
     if (event.key === 'Delete' || event.key === 'Backspace') {
       if (!selectedId || !track) return
       event.preventDefault()
-      applyLocal(
-        {
-          cuts: removeCutFromList(track.cuts, selectedId),
-          cutMode: 'manual',
-          selectedId: track.cuts.find((cut) => cut.id !== selectedId)?.id ?? null,
-          appliedPreset: track.appliedPreset ?? null,
-        },
-        true,
-      )
+      deleteSelectedCut(selectedId)
       return
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
@@ -996,6 +1003,7 @@ export function MusicEditorPage() {
             setSelectedId(cutId)
             scrubTo(time)
           }}
+          onDeleteCut={(cutId) => deleteSelectedCut(cutId)}
           onChangeCut={(cutId, start, end) => changeCut(cutId, start, end, false)}
           onCommitCut={() => undefined}
           onMoveMarker={(marker, time) => commitMarker(marker, time, false)}
@@ -1025,7 +1033,8 @@ export function MusicEditorPage() {
         <p className="text-sm font-semibold text-text">Corte automático</p>
         <p className="mt-1 text-sm leading-relaxed text-muted">
           Separa trechos com canto e sem canto. Você define o mínimo e o máximo; o Atlas corta
-          conforme a música — sem fatias iguais em sequência.
+          conforme a música — sem fatias iguais em sequência. Depois, clique num trecho e remova
+          com Delete se quiser juntar de novo.
         </p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <div className="w-[120px]">
@@ -1083,19 +1092,30 @@ export function MusicEditorPage() {
               Novo trecho
             </Button>
           </div>
-          <p className="mt-3 text-xs text-muted">Ctrl+B corta. Espaço dá play e pause. Arraste as bordas do trecho para ajustar.</p>
+          <p className="mt-3 text-xs text-muted">
+            Ctrl+B corta. Delete remove o trecho selecionado. Espaço dá play e pause. Arraste as
+            bordas para ajustar.
+          </p>
           {selected ? (
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border-soft pt-4 text-sm text-muted">
               <span>
                 Selecionado: <strong className="text-text">{selected.label}</strong>
               </span>
               <span>{formatTimecode(selected.end - selected.start)}</span>
-              <label className="ml-auto flex items-center gap-2">
+              <label className="flex items-center gap-2 sm:ml-auto">
                 <input type="checkbox" checked={loop} onChange={(event) => setLoop(event.target.checked)} />
                 Repetir
               </label>
               <Button variant="secondary" onClick={() => playSelectedRegion(selected)}>
                 Ouvir corte
+              </Button>
+              <Button
+                variant="ghost"
+                icon={<Trash2 className="h-4 w-4" />}
+                onClick={() => deleteSelectedCut(selected.id)}
+                title="Delete"
+              >
+                Remover
               </Button>
             </div>
           ) : null}
@@ -1275,17 +1295,8 @@ export function MusicEditorPage() {
               <Button
                 variant="ghost"
                 icon={<Trash2 className="h-4 w-4" />}
-                onClick={() => {
-                  applyLocal(
-                    {
-                      cuts: removeCutFromList(track.cuts, cut.id),
-                      cutMode: 'manual',
-                      selectedId: selectedId === cut.id ? track.cuts.find((item) => item.id !== cut.id)?.id ?? null : selectedId,
-                      appliedPreset: track.appliedPreset ?? null,
-                    },
-                    true,
-                  )
-                }}
+                onClick={() => deleteSelectedCut(cut.id)}
+                title="Delete"
               >
                 Remover
               </Button>

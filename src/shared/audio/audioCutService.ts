@@ -200,8 +200,45 @@ export function addManualSelection(
   return { cuts: nextCuts, selectedId: selected?.id ?? cut.id }
 }
 
+/**
+ * Remove um corte. Se ele estiver colado ao vizinho, o vizinho absorve o intervalo
+ * (útil após o corte automático, para juntar trechos sem deixar buraco).
+ */
 export function removeCut(cuts: MusicSegment[], cutId: string): MusicSegment[] {
-  return cuts.filter((cut) => cut.id !== cutId)
+  const sorted = sortCuts(cuts)
+  const index = sorted.findIndex((cut) => cut.id === cutId)
+  if (index < 0) return cuts
+  if (sorted.length <= 1) return []
+
+  const target = sorted[index]
+  const prev = index > 0 ? sorted[index - 1] : null
+  const next = index < sorted.length - 1 ? sorted[index + 1] : null
+  const absorbPrev = Boolean(prev && timesNear(prev.end, target.start))
+  const absorbNext = Boolean(next && timesNear(target.end, next.start))
+
+  if (!absorbPrev && !absorbNext) {
+    return sorted.filter((cut) => cut.id !== cutId)
+  }
+
+  const keepId = absorbPrev && prev ? prev.id : next!.id
+  return sorted
+    .filter((cut) => cut.id !== cutId)
+    .map((cut) => {
+      if (cut.id !== keepId) return cut
+      if (absorbPrev && prev && cut.id === prev.id) {
+        return { ...cut, end: target.end, source: 'manual' as const }
+      }
+      return { ...cut, start: target.start, source: 'manual' as const }
+    })
+}
+
+/** Id do vizinho que fica selecionado depois de remover um corte. */
+export function nextSelectedAfterRemove(cuts: MusicSegment[], cutId: string): string | null {
+  const sorted = sortCuts(cuts)
+  const index = sorted.findIndex((cut) => cut.id === cutId)
+  if (index < 0) return sorted[0]?.id ?? null
+  if (index > 0) return sorted[index - 1]?.id ?? null
+  return sorted[index + 1]?.id ?? null
 }
 
 export function renameCut(cuts: MusicSegment[], cutId: string, label: string): MusicSegment[] {
