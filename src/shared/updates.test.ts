@@ -158,6 +158,8 @@ describe('atualizações', () => {
     const copy = atlasV2UpdateCopy('Mathias Fuhr')
     expect(copy.headline).toContain('Mathias')
     expect(copy.statusAvailable).toContain('2.0')
+    expect(copy.statusInstalled).toContain('Mathias')
+    expect(copy.installedHeadline).toContain('Mathias')
     expect(copy.ctaInstall).toMatch(/2\.0/)
     expect(sidebarUpdateToastMessage('2.0.0', 'Mathias Fuhr')).toContain('Mathias')
     const notice = deriveUpdateNotification({ state: 'available', availableVersion: '2.0.0' }, 'Mathias')

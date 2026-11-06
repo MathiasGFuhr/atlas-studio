@@ -42,10 +42,9 @@ function updateStatusLine(
   switch (status.state) {
     case 'up-to-date':
       if (isAtlasV2Release(status.currentVersion)) {
-        const first = accountName.trim().split(/\s+/)[0]
         return {
-          label: first ? `${first}, você está na era 2.0` : 'Você está na era 2.0',
-          tone: 'ok',
+          label: atlasV2UpdateCopy(accountName).statusInstalled,
+          tone: 'premiere',
         }
       }
       return {
@@ -123,9 +122,13 @@ export function AtlasAiStatusCard({
   const updateLine = updateStatusLine(status, resolvedName)
   const checking = status?.state === 'checking' || busy
   const live = view.kind === 'connected' || view.kind === 'connecting'
-  const premiere =
+  const onV2 = isAtlasV2Release(status?.currentVersion)
+  const premiereIncoming =
     isAtlasV2Release(status?.availableVersion) &&
     (status?.state === 'available' || status?.state === 'ready' || status?.state === 'downloading')
+  const premiereInstalled =
+    onV2 && (status?.state === 'up-to-date' || status?.state === 'idle' || status?.state === 'checking')
+  const premiere = premiereIncoming || premiereInstalled
   const copy = premiere ? atlasV2UpdateCopy(resolvedName) : null
 
   useEffect(() => {
@@ -265,8 +268,12 @@ export function AtlasAiStatusCard({
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-accent">
               {copy.eyebrow}
             </p>
-            <p className="home-greeting mt-1 text-[1.05rem] leading-tight text-text">{copy.headline}</p>
-            <p className="mt-1.5 text-[11px] leading-snug text-muted">{copy.line}</p>
+            <p className="home-greeting mt-1 text-[1.05rem] leading-tight text-text">
+              {premiereInstalled ? copy.installedHeadline : copy.headline}
+            </p>
+            <p className="mt-1.5 text-[11px] leading-snug text-muted">
+              {premiereInstalled ? copy.installedLine : copy.line}
+            </p>
             {status?.state === 'downloading' ? (
               <div className="mt-2.5">
                 <p className="text-[11px] text-accent">{updateLine.label}</p>
@@ -284,6 +291,16 @@ export function AtlasAiStatusCard({
                   />
                 </div>
               </div>
+            ) : premiereInstalled ? (
+              <button
+                type="button"
+                disabled={checking}
+                onClick={() => void check()}
+                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-accent/30 bg-elevated/80 px-2.5 py-2 text-[11px] font-semibold text-accent transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw className={cn('h-3 w-3', checking && 'animate-spin')} />
+                Verificar atualizações
+              </button>
             ) : (
               <button
                 type="button"
@@ -305,11 +322,12 @@ export function AtlasAiStatusCard({
             </p>
             <p
               className={cn(
-                'mt-0.5 truncate text-xs',
+                'mt-0.5 text-xs leading-snug',
                 updateLine.tone === 'ok' && 'text-accent',
                 updateLine.tone === 'warn' && 'text-warning',
                 updateLine.tone === 'busy' && 'text-muted',
                 updateLine.tone === 'muted' && 'text-muted',
+                updateLine.tone === 'premiere' && 'text-accent',
               )}
               title={updateLine.label}
             >

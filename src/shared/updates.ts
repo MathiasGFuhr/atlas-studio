@@ -383,6 +383,9 @@ export type AtlasV2UpdateCopy = {
   statusAvailable: string
   statusReady: string
   statusDownloading: string
+  statusInstalled: string
+  installedHeadline: string
+  installedLine: string
   ctaDownload: string
   ctaInstall: string
   toast: string
@@ -406,6 +409,9 @@ export function atlasV2UpdateCopy(accountName = ''): AtlasV2UpdateCopy {
     statusAvailable: addressed ? `${addressed}, a 2.0 te espera` : 'A 2.0 te espera',
     statusReady: addressed ? `${addressed}, a 2.0 está pronta` : 'A 2.0 está pronta',
     statusDownloading: 'Entrando na era 2.0…',
+    statusInstalled: addressed ? `${addressed}, você está na era 2.0` : 'Você está na era 2.0',
+    installedHeadline: addressed ? `${addressed}, bem-vindo à era 2.0.` : 'Bem-vindo à era 2.0.',
+    installedLine: 'Você está no sistema de criação mais avançado do Atlas.',
     ctaDownload: 'Baixar a 2.0',
     ctaInstall: 'Reiniciar na 2.0',
     toast: addressed
