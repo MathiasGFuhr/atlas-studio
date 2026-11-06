@@ -13,6 +13,7 @@ export function InstrumentalScenesModal({
   choices,
   applying,
   hasConflicts,
+  reason = 'folder',
   onChange,
   onClose,
   onConfirm,
@@ -21,6 +22,8 @@ export function InstrumentalScenesModal({
   choices: Record<number, InstrumentalChoice | undefined>
   applying: boolean
   hasConflicts: boolean
+  /** `empty-lyrics`: cenas já na fila sem trecho; `folder`: áudio sem .txt na pasta. */
+  reason?: 'folder' | 'empty-lyrics'
   onChange: (number: number, choice: InstrumentalChoice) => void
   onClose: () => void
   onConfirm: (replaceExisting: boolean) => void
@@ -91,9 +94,18 @@ export function InstrumentalScenesModal({
       {number === undefined ? null : (
         <div className="flex flex-col gap-4">
           <p className="text-sm leading-relaxed text-muted">
-            A cena {sceneLabel(number)} tem áudio e não tem{' '}
-            <span className="text-text">.txt</span>. Escolha o que está tocando. A próxima cena sem
-            letra abre aqui mesmo.
+            {reason === 'empty-lyrics' ? (
+              <>
+                A cena {sceneLabel(number)} tem áudio e ainda não tem trecho de letra. Escolha o que
+                está tocando (violão, guitarra, banda…). A próxima cena sem letra abre aqui mesmo.
+              </>
+            ) : (
+              <>
+                A cena {sceneLabel(number)} tem áudio e não tem{' '}
+                <span className="text-text">.txt</span>. Escolha o que está tocando. A próxima cena
+                sem letra abre aqui mesmo.
+              </>
+            )}
           </p>
           <div className="flex flex-wrap gap-2">
             {INSTRUMENTAL_PRESETS.map((preset) => {

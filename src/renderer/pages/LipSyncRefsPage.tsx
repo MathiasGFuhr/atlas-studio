@@ -29,6 +29,7 @@ import {
   comfyDurationSeconds,
   joinPromptTexts,
   lastLipSyncFolderSceneNumber,
+  resolveInstrumentalChoice,
   reuseOpenProjectForFolder,
 } from '@shared/lipSyncRefs'
 import { COMFY_DOWNLOAD_SUBDIR, planComfyScenes } from '@shared/comfy'
@@ -117,6 +118,27 @@ type PendingInstrumentalImport = {
   hasConflicts: boolean
   numbers: number[]
   choices: Record<number, InstrumentalChoice>
+}
+
+/** Modal de instrumento para cenas já na fila sem trecho de letra. */
+type PendingSceneInstruments = {
+  numbers: number[]
+  choices: Record<number, InstrumentalChoice>
+}
+
+/** Cenas com áudio e sem letra — precisam escolher instrumento. */
+function emptyLyricSceneNumbers(
+  queue: LipSyncRef[],
+  draftMap: Record<string, Draft>,
+): number[] {
+  return queue
+    .map((item, index) => ({ item, number: index + 1 }))
+    .filter(({ item }) => {
+      if (!item.audioPath.trim()) return false
+      const lyrics = (draftMap[item.id]?.lyrics ?? item.lyrics).trim()
+      return !lyrics
+    })
+    .map(({ number }) => number)
 }
 
 const TEXT_SOFT_LIMIT = 2000
@@ -286,6 +308,10 @@ export function LipSyncRefsPage() {
   const [clearOpen, setClearOpen] = useState(false)
   const [folderImport, setFolderImport] = useState<LipSyncFolderScan | null>(null)
   const [pendingInstrumental, setPendingInstrumental] = useState<PendingInstrumentalImport | null>(null)
+  const [pendingSceneInstruments, setPendingSceneInstruments] = useState<PendingSceneInstruments | null>(
+    null,
+  )
+  const promptedEmptyLyricsKeyRef = useRef('')
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const itemsRef = useRef(items)
   const draftsRef = useRef(drafts)
@@ -741,6 +767,65 @@ export function LipSyncRefsPage() {
     })
   }
 
+  function openInstrumentModalForEmptyScenes(onlyNumber?: number) {
+    if (pendingInstrumental || pendingSceneInstruments || folderImport) return
+    const numbers =
+      onlyNumber != null
+        ? emptyLyricSceneNumbers(visibleItemsRef.current, draftsRef.current).filter(
+            (number) => number === onlyNumber,
+          )
+        : emptyLyricSceneNumbers(visibleItemsRef.current, draftsRef.current)
+    if (numbers.length === 0) return
+    setPendingSceneInstruments({ numbers, choices: {} })
+  }
+
+  async function confirmSceneInstruments() {
+    const pending = pendingSceneInstruments
+    if (!pending) return
+    setBusy(true)
+    try {
+      const queue = visibleItemsRef.current
+      let applied = 0
+      for (const number of pending.numbers) {
+        const choice = pending.choices[number]
+        const resolved = choice
+          ? resolveInstrumentalChoice(choice.presetId, choice.custom)
+          : null
+        if (!resolved) continue
+        const item = queue[number - 1]
+        if (!item) continue
+        const draft = draftsRef.current[item.id]
+        const updated = await api.lipSyncRefs.update(item.id, {
+          label: draft?.label ?? item.label,
+          prompt: draft?.prompt ?? item.prompt,
+          lyrics: resolved.lyrics,
+          projectId: (draft?.projectId || item.projectId) ?? null,
+          ...(resolved.subject ? { subject: resolved.subject } : {}),
+        })
+        if (!updated) continue
+        applied += 1
+        setItems((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)))
+        setDrafts((current) => ({
+          ...current,
+          [updated.id]: toDraft(updated),
+        }))
+      }
+      setPendingSceneInstruments(null)
+      if (applied > 0) {
+        push(
+          applied === 1
+            ? 'Instrumento aplicado na cena.'
+            : `Instrumento aplicado em ${applied} cenas.`,
+          'success',
+        )
+      }
+    } catch (error) {
+      pushError(error, 'Não foi possível aplicar o instrumento.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /**
    * Imagem e áudio N vão para a cena N. O `.txt` da pasta N vira o trecho.
    * Arquivos além da fila criam cenas, inclusive vazias no meio, para manter a numeração.
@@ -933,6 +1018,44 @@ export function LipSyncRefsPage() {
     // A troca de projeto é o gatilho; a pasta vinculada entra sozinha na fila.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachProjectId, loading])
+
+  const pendingInstrumentalRef = useRef(pendingInstrumental)
+  const pendingSceneInstrumentsRef = useRef(pendingSceneInstruments)
+  const folderImportRef = useRef(folderImport)
+  pendingInstrumentalRef.current = pendingInstrumental
+  pendingSceneInstrumentsRef.current = pendingSceneInstruments
+  folderImportRef.current = folderImport
+
+  // Cenas com áudio e sem letra: abre o modal de instrumento (uma vez por conjunto).
+  // Espera o auto-pull da pasta, que pode abrir o mesmo modal pelo fluxo de .txt.
+  useEffect(() => {
+    if (loading || busy || !attachProjectId) return
+    const numbers = emptyLyricSceneNumbers(visibleItems, drafts)
+    if (numbers.length === 0) {
+      promptedEmptyLyricsKeyRef.current = ''
+      return
+    }
+    const key = `${attachProjectId}:${numbers.join(',')}`
+    if (promptedEmptyLyricsKeyRef.current === key) return
+
+    const timer = window.setTimeout(() => {
+      if (
+        pendingInstrumentalRef.current ||
+        pendingSceneInstrumentsRef.current ||
+        folderImportRef.current
+      ) {
+        return
+      }
+      const latest = emptyLyricSceneNumbers(visibleItemsRef.current, draftsRef.current)
+      if (latest.length === 0) return
+      const latestKey = `${attachProjectIdRef.current}:${latest.join(',')}`
+      if (promptedEmptyLyricsKeyRef.current === latestKey) return
+      promptedEmptyLyricsKeyRef.current = latestKey
+      setPendingSceneInstruments({ numbers: latest, choices: {} })
+    }, 900)
+
+    return () => window.clearTimeout(timer)
+  }, [loading, busy, attachProjectId, visibleItems, drafts])
 
   async function chooseAudio(id: string) {
     const item = items.find((entry) => entry.id === id)
@@ -1940,13 +2063,35 @@ export function LipSyncRefsPage() {
                       </div>
 
                       <div className="flex flex-col">
-                        <span className="mb-1.5 block text-xs font-medium text-muted">
-                          Trecho da música desta cena
-                        </span>
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-muted">
+                            Trecho da música desta cena
+                          </span>
+                          {!selectedDraft.lyrics.trim() && selectedItem.audioPath.trim() ? (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition-colors hover:text-accent-hover disabled:opacity-40"
+                              disabled={editsDisabled || busy}
+                              title="Escolher violão, guitarra, banda…"
+                              onClick={() =>
+                                openInstrumentModalForEmptyScenes(
+                                  Number.parseInt(selectedNumber, 10) || undefined,
+                                )
+                              }
+                            >
+                              <Music2 className="h-3.5 w-3.5" />
+                              Escolher instrumento
+                            </button>
+                          ) : null}
+                        </div>
                         <textarea
                           value={selectedDraft.lyrics}
                           onChange={(event) => patchDraft(selectedItem.id, { lyrics: event.target.value })}
-                          placeholder="Trecho da música desta cena…"
+                          placeholder={
+                            selectedItem.audioPath.trim()
+                              ? 'Sem letra? Escolha o instrumento acima…'
+                              : 'Trecho da música desta cena…'
+                          }
                           spellCheck={false}
                           className="h-32 w-full resize-none overflow-y-auto rounded-xl border border-border bg-bg/50 px-3 py-2 text-sm leading-relaxed text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
                         />
@@ -1954,6 +2099,10 @@ export function LipSyncRefsPage() {
                           {selectedProject?.songLyrics?.trim() ? (
                             <p className="text-[10px] text-muted-2">
                               O trecho selecionado na letra acima vem para esta cena e some de lá.
+                            </p>
+                          ) : !selectedDraft.lyrics.trim() && selectedItem.audioPath.trim() ? (
+                            <p className="text-[10px] text-muted-2">
+                              Trechos sem letra usam o seletor de instrumento (violão, guitarra, banda…).
                             </p>
                           ) : (
                             <span />
@@ -2147,6 +2296,26 @@ export function LipSyncRefsPage() {
           setPendingInstrumental(null)
         }}
         onConfirm={(replaceExisting) => void confirmInstrumentalImport(replaceExisting)}
+      />
+
+      <InstrumentalScenesModal
+        numbers={pendingSceneInstruments?.numbers ?? []}
+        choices={pendingSceneInstruments?.choices ?? {}}
+        applying={busy}
+        hasConflicts={false}
+        reason="empty-lyrics"
+        onChange={(number, choice) =>
+          setPendingSceneInstruments((current) =>
+            current
+              ? { ...current, choices: { ...current.choices, [number]: choice } }
+              : current,
+          )
+        }
+        onClose={() => {
+          if (busy) return
+          setPendingSceneInstruments(null)
+        }}
+        onConfirm={() => void confirmSceneInstruments()}
       />
 
       <Modal
