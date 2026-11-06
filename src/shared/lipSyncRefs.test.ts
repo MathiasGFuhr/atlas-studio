@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyInstrumentalChoices,
   comfyDurationSeconds,
   joinPromptTexts,
   lastLipSyncFolderSceneNumber,
   matchNumberedFiles,
   matchNumberedImages,
+  mergeRootAndFolderClips,
+  resolveInstrumentalChoice,
   reuseOpenProjectForFolder,
   sameLipSyncFolder,
   sceneNumberFromFileName,
+  takeSceneFolderClip,
 } from './lipSyncRefs'
 
 function files(...names: string[]) {
@@ -84,6 +88,76 @@ describe('lastLipSyncFolderSceneNumber', () => {
         audios: [{ number: 1, fileName: '1.mp3', path: 'C:/1.mp3', duration: 4 }],
       }),
     ).toBe(3)
+  })
+})
+
+describe('takeSceneFolderClip', () => {
+  it('prefere o áudio com o mesmo nome do txt', () => {
+    const clip = takeSceneFolderClip({
+      audios: [
+        { fileName: 'outro.mp3', path: 'C:/01/outro.mp3' },
+        { fileName: 'What Am I Saving It.wav', path: 'C:/01/What Am I Saving It.wav' },
+      ],
+      texts: [
+        { fileName: 'What Am I Saving It.txt', path: 'C:/01/What Am I Saving It.txt', text: '  verso  ' },
+      ],
+    })
+    expect(clip.audio?.fileName).toBe('What Am I Saving It.wav')
+    expect(clip.excerpt?.text).toBe('  verso  ')
+    expect(clip.ignored).toEqual(['outro.mp3'])
+  })
+})
+
+describe('mergeRootAndFolderClips', () => {
+  it('áudio da raiz sem txt entra como instrumental', () => {
+    const merged = mergeRootAndFolderClips({
+      rootAudios: [{ number: 4, fileName: '4.mp3', path: 'C:/4.mp3' }],
+      folders: [],
+    })
+    expect(merged.audios[0]?.excerpt).toBeNull()
+    expect(merged.excerpts).toEqual([])
+  })
+
+  it('txt numerado na raiz acompanha o áudio da mesma cena', () => {
+    const merged = mergeRootAndFolderClips({
+      rootAudios: [{ number: 4, fileName: '4.mp3', path: 'C:/4.mp3' }],
+      rootTexts: [{ number: 4, fileName: '4.txt', path: 'C:/4.txt', text: 'verso' }],
+      folders: [],
+    })
+    expect(merged.audios[0]?.excerpt).toBe('verso')
+  })
+})
+
+describe('resolveInstrumentalChoice', () => {
+  it('grava o nome do instrumento e marca banda quando a opção é de banda', () => {
+    expect(resolveInstrumentalChoice('violao', '')).toEqual({ lyrics: 'Violão', subject: null })
+    expect(resolveInstrumentalChoice('banda-cantor', '')).toEqual({
+      lyrics: 'Banda + cantor sem cantar',
+      subject: 'band',
+    })
+  })
+
+  it('outro só vale com texto', () => {
+    expect(resolveInstrumentalChoice('outro', '  ')).toBeNull()
+    expect(resolveInstrumentalChoice('outro', 'sanfona')).toEqual({ lyrics: 'sanfona', subject: null })
+  })
+})
+
+describe('applyInstrumentalChoices', () => {
+  it('troca o instrumental pelo texto escolhido', () => {
+    const scan = {
+      folder: 'C:/musica',
+      matches: [],
+      ignored: [],
+      ignoredAudios: [],
+      excerpts: [],
+      audios: [
+        { number: 2, fileName: 'solo.wav', path: 'C:/02/solo.wav', duration: null, excerpt: null },
+      ],
+    }
+    const applied = applyInstrumentalChoices(scan, { 2: { presetId: 'banda', custom: '' } })
+    expect(applied.scan.audios[0]?.excerpt).toBe('Banda')
+    expect(applied.subjects).toEqual({ 2: 'band' })
   })
 })
 

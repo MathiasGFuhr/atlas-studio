@@ -3,9 +3,13 @@ import path from 'node:path'
 import type { LipSyncFolderScan } from '../../../shared/lipSyncRefs'
 import {
   LIPSYNC_AUDIO_EXTENSIONS,
+  LIPSYNC_EXCERPT_EXTENSIONS,
   LIPSYNC_IMAGE_EXTENSIONS,
   matchNumberedFiles,
   matchNumberedImages,
+  mergeRootAndFolderClips,
+  sceneNumberFromFileName,
+  takeSceneFolderClip,
 } from '../../../shared/lipSyncRefs'
 import { probeAudioDuration } from '../audio/audioProbe'
 
@@ -18,8 +22,21 @@ function filesWithExtension(root: string, extensions: string[]) {
     .map((entry) => ({ fileName: entry.name, path: path.join(root, entry.name) }))
 }
 
+function numberedDirectories(root: string) {
+  return fs
+    .readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => ({ fileName: entry.name, path: path.join(root, entry.name) }))
+}
+
+function readExcerpt(filePath: string): string {
+  return fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').trim()
+}
+
 /**
- * Só o nível de cima da pasta: a subpasta `Lipsync` (arquivo das cenas salvas) fica de fora.
+ * Raiz: `1.png` e `1.mp3`.
+ * Pasta `01` ou `1`: o áudio de dentro (qualquer nome) e o `.txt` do trecho.
+ * A subpasta `lipsync` não é número, então fica de fora.
  * As durações dos áudios ficam null aqui; `scanLipSyncFolderWithDurations` as preenche.
  */
 export function scanLipSyncFolder(folder: string): LipSyncFolderScan {
@@ -28,12 +45,40 @@ export function scanLipSyncFolder(folder: string): LipSyncFolderScan {
     throw new Error('Pasta não encontrada.')
   }
   const images = matchNumberedImages(filesWithExtension(root, LIPSYNC_IMAGE_EXTENSIONS))
-  const audios = matchNumberedFiles(filesWithExtension(root, LIPSYNC_AUDIO_EXTENSIONS))
+  const rootAudios = matchNumberedFiles(filesWithExtension(root, LIPSYNC_AUDIO_EXTENSIONS))
+  const rootTexts = matchNumberedFiles(
+    filesWithExtension(root, LIPSYNC_EXCERPT_EXTENSIONS)
+      .map((file) => ({ ...file, text: readExcerpt(file.path) }))
+      .filter((file) => file.text),
+  )
+  const folders = matchNumberedFiles(numberedDirectories(root))
+  const clips = folders.matches.map((entry) => {
+    const texts = filesWithExtension(entry.path, LIPSYNC_EXCERPT_EXTENSIONS).map((file) => ({
+      ...file,
+      text: readExcerpt(file.path),
+    }))
+    return {
+      number: entry.number,
+      ...takeSceneFolderClip({
+        audios: filesWithExtension(entry.path, LIPSYNC_AUDIO_EXTENSIONS),
+        texts,
+      }),
+    }
+  })
+  const merged = mergeRootAndFolderClips({
+    rootAudios: rootAudios.matches,
+    rootTexts: rootTexts.matches,
+    folders: clips,
+  })
+  const duplicateFolders = folders.ignored.filter((name) => sceneNumberFromFileName(name) !== null)
   return {
     folder: root,
     ...images,
-    audios: audios.matches.map((entry) => ({ ...entry, duration: null })),
-    ignoredAudios: audios.ignored,
+    audios: merged.audios,
+    ignoredAudios: [...rootAudios.ignored, ...duplicateFolders, ...merged.ignoredAudios].sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true }),
+    ),
+    excerpts: merged.excerpts,
   }
 }
 

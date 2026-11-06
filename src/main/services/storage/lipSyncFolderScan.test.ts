@@ -50,6 +50,81 @@ describe('scanLipSyncFolder', () => {
       [3, '3.flac'],
     ])
     expect(scan.ignoredAudios).toEqual(['musica-inteira.mp3'])
+    expect(scan.excerpts).toEqual([])
+  })
+
+  it('puxa o áudio e o txt de dentro da pasta numerada', () => {
+    touch('1.png')
+    const scene = path.join(root, '01')
+    fs.mkdirSync(scene)
+    fs.writeFileSync(path.join(scene, 'What Am I Saving It.mp3'), '')
+    fs.writeFileSync(path.join(scene, 'What Am I Saving It.txt'), '\uFEFFverso um\r\nverso dois\r\n')
+    const instrumental = path.join(root, '02')
+    fs.mkdirSync(instrumental)
+    fs.writeFileSync(path.join(instrumental, 'solo.wav'), '')
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.matches.map((entry) => entry.fileName)).toEqual(['1.png'])
+    expect(scan.audios.map((entry) => [entry.number, entry.fileName, entry.excerpt])).toEqual([
+      [1, 'What Am I Saving It.mp3', 'verso um\nverso dois'],
+      [2, 'solo.wav', null],
+    ])
+    expect(scan.audios[0]?.path).toBe(path.join(scene, 'What Am I Saving It.mp3'))
+    expect(scan.excerpts).toEqual([])
+  })
+
+  it('o áudio da pasta vence o arquivo numerado da raiz', () => {
+    touch('1.mp3')
+    const scene = path.join(root, '01')
+    fs.mkdirSync(scene)
+    fs.writeFileSync(path.join(scene, 'dentro.wav'), '')
+    fs.writeFileSync(path.join(scene, 'dentro.txt'), 'trecho')
+    fs.writeFileSync(path.join(scene, 'extra.mp3'), '')
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.audios.map((entry) => [entry.fileName, entry.excerpt])).toEqual([['dentro.wav', 'trecho']])
+    expect(scan.ignoredAudios).toEqual(['1.mp3', 'extra.mp3'])
+  })
+
+  it('encaixa o txt da pasta no áudio numerado da raiz', () => {
+    touch('1.mp3')
+    const scene = path.join(root, '1')
+    fs.mkdirSync(scene)
+    fs.writeFileSync(path.join(scene, 'letra.txt'), 'só a letra')
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.audios.map((entry) => [entry.fileName, entry.origin, entry.excerpt])).toEqual([
+      ['1.mp3', 'root', 'só a letra'],
+    ])
+  })
+
+  it('mp3 solto na raiz, sem txt, fica instrumental', () => {
+    touch('4.MP3')
+    const scene = path.join(root, '1')
+    fs.mkdirSync(scene)
+    fs.writeFileSync(path.join(scene, '1.MP3'), '')
+    fs.writeFileSync(path.join(scene, '1.txt'), 'letra da um')
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.audios.map((entry) => [entry.number, entry.excerpt])).toEqual([
+      [1, 'letra da um'],
+      [4, null],
+    ])
+  })
+
+  it('txt sem áudio ainda abre a cena', () => {
+    const scene = path.join(root, '03')
+    fs.mkdirSync(scene)
+    fs.writeFileSync(path.join(scene, 'letra.txt'), 'fala')
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.audios).toEqual([])
+    expect(scan.excerpts.map((entry) => [entry.number, entry.text])).toEqual([[3, 'fala']])
   })
 
   it('falha quando a pasta não existe', () => {

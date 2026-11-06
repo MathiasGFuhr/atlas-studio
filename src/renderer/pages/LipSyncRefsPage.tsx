@@ -17,9 +17,15 @@ import {
   Trash2,
   Users,
 } from 'lucide-react'
-import type { LipSyncFolderScan, LipSyncRef, LipSyncSubject } from '@shared/lipSyncRefs'
+import type {
+  InstrumentalChoice,
+  LipSyncFolderScan,
+  LipSyncRef,
+  LipSyncSubject,
+} from '@shared/lipSyncRefs'
 import {
   LIPSYNC_SUBJECT_LABEL,
+  applyInstrumentalChoices,
   comfyDurationSeconds,
   joinPromptTexts,
   lastLipSyncFolderSceneNumber,
@@ -49,6 +55,7 @@ import { environmentBreadcrumb } from '../lib/environments'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { SongLyricsPanel } from '../components/SongLyricsPanel'
 import { ApplyAllScenesPromptModal } from '../components/lipsync/ApplyAllScenesPromptModal'
+import { InstrumentalScenesModal } from '../components/lipsync/InstrumentalScenesModal'
 import { NumberedPromptsModal } from '../components/lipsync/NumberedPromptsModal'
 import { cn } from '../lib/utils'
 
@@ -86,6 +93,30 @@ function isDirty(item: LipSyncRef, draft: Draft): boolean {
 
 function sceneNumber(index: number): string {
   return String(index + 1).padStart(2, '0')
+}
+
+function folderExcerptByScene(scan: LipSyncFolderScan): Map<number, string> {
+  const excerpts = new Map<number, string>()
+  for (const excerpt of scan.excerpts ?? []) {
+    const text = excerpt.text.trim()
+    if (text) excerpts.set(excerpt.number, text)
+  }
+  for (const audio of scan.audios) {
+    if (typeof audio.excerpt === 'string' && audio.excerpt.trim()) excerpts.set(audio.number, audio.excerpt.trim())
+  }
+  return excerpts
+}
+
+type PendingInstrumentalImport = {
+  scan: LipSyncFolderScan
+  replaceExisting: boolean
+  projectId: string | null
+  queue: LipSyncRef[]
+  quiet?: boolean
+  /** Cenas que já têm imagem ou áudio: o último passo pergunta se substitui. */
+  hasConflicts: boolean
+  numbers: number[]
+  choices: Record<number, InstrumentalChoice>
 }
 
 const TEXT_SOFT_LIMIT = 2000
@@ -254,6 +285,7 @@ export function LipSyncRefsPage() {
   const [busy, setBusy] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
   const [folderImport, setFolderImport] = useState<LipSyncFolderScan | null>(null)
+  const [pendingInstrumental, setPendingInstrumental] = useState<PendingInstrumentalImport | null>(null)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const itemsRef = useRef(items)
   const draftsRef = useRef(drafts)
@@ -567,7 +599,19 @@ export function LipSyncRefsPage() {
   }
 
   function countFolderScenes(scan: LipSyncFolderScan): number {
-    return new Set([...scan.matches, ...scan.audios].map((entry) => entry.number)).size
+    return new Set([...scan.matches, ...scan.audios, ...(scan.excerpts ?? [])].map((entry) => entry.number)).size
+  }
+
+  function scenesNeedingInstrument(scan: LipSyncFolderScan, queue: LipSyncRef[], replaceExisting: boolean): number[] {
+    return scan.audios
+      .filter((audio) => audio.excerpt === null)
+      .filter((audio) => {
+        const item = queue[audio.number - 1]
+        if (!item) return true
+        const lyrics = (draftsRef.current[item.id]?.lyrics ?? item.lyrics).trim()
+        return replaceExisting || !lyrics
+      })
+      .map((audio) => audio.number)
   }
 
   async function bindFolderToProject(folder: string, project: Project | undefined): Promise<Project> {
@@ -626,19 +670,32 @@ export function LipSyncRefsPage() {
           }),
       )
       const target = await bindFolderToProject(scan.folder, reuseCurrent ? project : undefined)
-      if (scan.matches.length === 0 && scan.audios.length === 0) {
+      if (scan.matches.length === 0 && scan.audios.length === 0 && (scan.excerpts?.length ?? 0) === 0) {
         push(
-          `${target.name} vinculado à pasta, mas não há imagem ou áudio com nome só de número (1.png, 1.mp3…).`,
+          `${target.name} vinculado à pasta, mas não há 1.png, 1.mp3 nem pasta 01 com áudio ou .txt.`,
           'error',
         )
         return
       }
       const queue = reuseCurrent ? currentScenes : []
+      const withoutLyrics = scan.audios.filter((audio) => audio.excerpt === null).map((audio) => audio.number)
+      if (withoutLyrics.length > 0) {
+        setPendingInstrumental({
+          scan,
+          replaceExisting: true,
+          projectId: target.id,
+          queue,
+          hasConflicts: reuseCurrent && countFolderConflicts(scan) > 0,
+          numbers: withoutLyrics,
+          choices: {},
+        })
+        return
+      }
       if (reuseCurrent && countFolderConflicts(scan) > 0) {
         setFolderImport(scan)
         return
       }
-      await applyFolderImport(scan, true, { projectId: target.id, queue })
+      await startFolderImport(scan, true, { projectId: target.id, queue })
     } catch (error) {
       skipAutoPullRef.current = false
       pushError(error, 'Não foi possível ler a pasta.')
@@ -647,20 +704,64 @@ export function LipSyncRefsPage() {
     }
   }
 
+  async function startFolderImport(
+    scan: LipSyncFolderScan,
+    replaceExisting: boolean,
+    options?: { projectId?: string | null; queue?: LipSyncRef[]; quiet?: boolean },
+  ) {
+    const queue = options?.queue ?? visibleItemsRef.current
+    const numbers = scenesNeedingInstrument(scan, queue, replaceExisting)
+    if (numbers.length === 0) {
+      await applyFolderImport(scan, replaceExisting, options)
+      return
+    }
+    setFolderImport(null)
+    setPendingInstrumental({
+      scan,
+      replaceExisting,
+      projectId: options?.projectId !== undefined ? options.projectId : currentProjectId() || null,
+      queue,
+      quiet: options?.quiet,
+      hasConflicts: false,
+      numbers,
+      choices: {},
+    })
+  }
+
+  async function confirmInstrumentalImport(replaceExisting: boolean) {
+    const pending = pendingInstrumental
+    if (!pending) return
+    const resolved = applyInstrumentalChoices(pending.scan, pending.choices)
+    setPendingInstrumental(null)
+    await applyFolderImport(resolved.scan, pending.hasConflicts ? replaceExisting : pending.replaceExisting, {
+      projectId: pending.projectId,
+      queue: pending.queue,
+      quiet: pending.quiet,
+      subjects: resolved.subjects,
+    })
+  }
+
   /**
-   * Imagem e áudio N vão para a cena N. Arquivos além da fila criam cenas, inclusive vazias no
-   * meio, para manter a numeração (15 áudios `1.mp3`…`15.mp3` abrem 15 cenas).
+   * Imagem e áudio N vão para a cena N. O `.txt` da pasta N vira o trecho.
+   * Arquivos além da fila criam cenas, inclusive vazias no meio, para manter a numeração.
    */
   async function applyFolderImport(
     scan: LipSyncFolderScan,
     replaceExisting: boolean,
-    options?: { projectId?: string | null; queue?: LipSyncRef[]; quiet?: boolean },
+    options?: {
+      projectId?: string | null
+      queue?: LipSyncRef[]
+      quiet?: boolean
+      subjects?: Record<number, LipSyncSubject>
+    },
   ) {
     setFolderImport(null)
     const projectId = options?.projectId !== undefined ? options.projectId : currentProjectId() || null
     const queue = options?.queue ?? visibleItemsRef.current
     const scenes = [...queue]
     const byNumber = new Map(scan.matches.map((match) => [match.number, match]))
+    const excerpts = folderExcerptByScene(scan)
+    const subjects = options?.subjects ?? {}
     const lastNumber = lastLipSyncFolderSceneNumber(scan)
     const withoutScene: string[] = []
     let applied = 0
@@ -668,6 +769,7 @@ export function LipSyncRefsPage() {
     let kept = 0
     let keptAudios = 0
     let created = 0
+    let excerptsApplied = 0
     const failed: string[] = []
     setBusy(true)
     try {
@@ -699,12 +801,14 @@ export function LipSyncRefsPage() {
           scenes.push(
             await api.lipSyncRefs.create({
               projectId,
-              subject: 'singer',
+              subject: subjects[number] ?? 'singer',
               imagePath: match?.path,
               label: match ? undefined : String(number),
+              lyrics: excerpts.get(number),
             }),
           )
           if (match) applied += 1
+          if (excerpts.get(number)?.trim()) excerptsApplied += 1
           created += 1
         } catch {
           // Parar aqui: seguir criaria as próximas cenas com o número errado.
@@ -731,9 +835,40 @@ export function LipSyncRefsPage() {
         }
       }
 
+      for (const [number, text] of excerpts) {
+        const item = scenes[number - 1]
+        if (!item || !text) continue
+        const draft = draftsRef.current[item.id]
+        const current = (draft?.lyrics ?? item.lyrics).trim()
+        const subject = subjects[number]
+        const writeLyrics = replaceExisting ? current !== text : !current
+        const writeSubject = Boolean(subject) && subject !== item.subject && (!current || replaceExisting)
+        if (!writeLyrics && !writeSubject) continue
+        try {
+          const updated = await api.lipSyncRefs.update(item.id, {
+            label: draft?.label ?? item.label,
+            prompt: draft?.prompt ?? item.prompt,
+            lyrics: writeLyrics ? text : (draft?.lyrics ?? item.lyrics),
+            projectId: projectId || (draft?.projectId ?? item.projectId) || null,
+            ...(writeSubject ? { subject } : {}),
+          })
+          if (!updated) continue
+          scenes[number - 1] = updated
+          const previous = draftsRef.current[updated.id] ?? toDraft(updated)
+          draftsRef.current = {
+            ...draftsRef.current,
+            [updated.id]: { ...previous, lyrics: updated.lyrics, projectId: updated.projectId ?? previous.projectId },
+          }
+          if (writeLyrics) excerptsApplied += 1
+        } catch {
+          failed.push(`trecho ${sceneNumber(number - 1)}`)
+        }
+      }
+      setDrafts(draftsRef.current)
+
       await refresh()
 
-      const changed = applied + audiosApplied + created
+      const changed = applied + audiosApplied + created + excerptsApplied
       if (options?.quiet && changed === 0) return
 
       const parts: string[] = []
@@ -742,6 +877,9 @@ export function LipSyncRefsPage() {
       }
       if (scan.audios.length > 0) {
         parts.push(audiosApplied === 1 ? '1 áudio aplicado' : `${audiosApplied} áudios aplicados`)
+      }
+      if (excerptsApplied > 0) {
+        parts.push(excerptsApplied === 1 ? '1 trecho aplicado' : `${excerptsApplied} trechos aplicados`)
       }
       if (created > 0) parts.push(created === 1 ? '1 cena criada' : `${created} cenas criadas`)
       if (kept > 0) parts.push(kept === 1 ? '1 card com imagem mantido' : `${kept} cards com imagem mantidos`)
@@ -777,8 +915,8 @@ export function LipSyncRefsPage() {
     try {
       const scan = await api.lipSyncRefs.scanFolder(folder)
       if (seq !== pullSeq.current) return
-      if (scan.matches.length === 0 && scan.audios.length === 0) return
-      await applyFolderImport(scan, false, { projectId, queue, quiet: true })
+      if (scan.matches.length === 0 && scan.audios.length === 0 && (scan.excerpts?.length ?? 0) === 0) return
+      await startFolderImport(scan, false, { projectId, queue, quiet: true })
     } catch (error) {
       if (seq !== pullSeq.current) return
       pushError(error, 'Não foi possível puxar a pasta deste projeto.')
@@ -1386,7 +1524,7 @@ export function LipSyncRefsPage() {
               type="button"
               variant="secondary"
               icon={<FolderInput className="h-4 w-4" />}
-              title="Cria o projeto com o nome da pasta e puxa 1.png, 1.mp3…"
+              title="Cria o projeto com o nome da pasta e puxa 1.png, 1.mp3 ou a pasta 01"
               onClick={() => void importFromFolder()}
             >
               Puxar da pasta
@@ -1478,7 +1616,7 @@ export function LipSyncRefsPage() {
                 className={toolbarButtonClass}
                 icon={<FolderInput className="h-3.5 w-3.5" />}
                 disabled={busy}
-                title="Cria um projeto com o nome da pasta escolhida. Não reaproveita outro projeto já feito. 1.png e 1.mp3 viram a cena 1."
+                title="Cria um projeto com o nome da pasta escolhida. Não reaproveita outro projeto já feito. 1.png, 1.mp3 ou a pasta 01 viram a cena 1."
                 onClick={() => void importFromFolder()}
               >
                 Puxar da pasta
@@ -1723,7 +1861,7 @@ export function LipSyncRefsPage() {
                             </span>
                           ) : (
                             <span className="text-muted">
-                              Sem áudio. Use “Puxar da pasta” com 1.mp3, 2.mp3… ou escolha um arquivo.
+                              Sem áudio. Use “Puxar da pasta” com 1.mp3 ou a pasta 01, ou escolha um arquivo.
                             </span>
                           )}
                         </span>
@@ -1992,6 +2130,25 @@ export function LipSyncRefsPage() {
         onClose={() => setClearOpen(false)}
       />
 
+      <InstrumentalScenesModal
+        numbers={pendingInstrumental?.numbers ?? []}
+        choices={pendingInstrumental?.choices ?? {}}
+        applying={busy}
+        hasConflicts={pendingInstrumental?.hasConflicts ?? false}
+        onChange={(number, choice) =>
+          setPendingInstrumental((current) =>
+            current
+              ? { ...current, choices: { ...current.choices, [number]: choice } }
+              : current,
+          )
+        }
+        onClose={() => {
+          if (busy) return
+          setPendingInstrumental(null)
+        }}
+        onConfirm={(replaceExisting) => void confirmInstrumentalImport(replaceExisting)}
+      />
+
       <Modal
         open={folderImport !== null}
         title="Substituir imagens e áudios das cenas?"
@@ -2002,10 +2159,10 @@ export function LipSyncRefsPage() {
               <Button variant="secondary" onClick={() => setFolderImport(null)}>
                 Cancelar
               </Button>
-              <Button variant="secondary" onClick={() => void applyFolderImport(folderImport, false)}>
+              <Button variant="secondary" onClick={() => void startFolderImport(folderImport, false)}>
                 Só cards vazios
               </Button>
-              <Button onClick={() => void applyFolderImport(folderImport, true)}>Substituir</Button>
+              <Button onClick={() => void startFolderImport(folderImport, true)}>Substituir</Button>
             </>
           ) : null
         }
@@ -2019,7 +2176,7 @@ export function LipSyncRefsPage() {
                 ? `1 das ${total} cenas encontradas já tem imagem ou áudio.`
                 : `${conflicts} das ${total} cenas encontradas já têm imagem ou áudio.`
             })()}{' '}
-            Prompt e trecho de cada cena não mudam.
+            O .txt da pasta entra no trecho da cena. O prompt não muda.
             <span className="mt-2 block truncate text-xs text-muted-2" title={folderImport.folder}>
               {folderImport.folder}
             </span>
