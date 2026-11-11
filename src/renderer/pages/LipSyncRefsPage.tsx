@@ -54,7 +54,6 @@ import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { environmentBreadcrumb } from '../lib/environments'
 import { notifyProjectsChanged } from '../lib/projectEvents'
-import { SongLyricsPanel } from '../components/SongLyricsPanel'
 import { ApplyAllScenesPromptModal } from '../components/lipsync/ApplyAllScenesPromptModal'
 import { InstrumentalScenesModal } from '../components/lipsync/InstrumentalScenesModal'
 import { NumberedPromptsModal } from '../components/lipsync/NumberedPromptsModal'
@@ -342,7 +341,6 @@ export function LipSyncRefsPage() {
   const refreshSeq = useRef(0)
   const pullSeq = useRef(0)
   const skipAutoPullRef = useRef(false)
-  const skipSceneScrollRef = useRef(false)
   const pushErrorRef = useRef(pushError)
   pushErrorRef.current = pushError
 
@@ -1218,16 +1216,6 @@ export function LipSyncRefsPage() {
     }
   }
 
-  async function saveSongLyrics(lyrics: string) {
-    const projectId = currentProjectId()
-    if (!projectId) throw new Error('Escolha um projeto.')
-    const updated = await api.projects.update(projectId, { songLyrics: lyrics })
-    if (!updated) throw new Error('Projeto não encontrado.')
-    setProjects((current) => current.map((project) => (project.id === updated.id ? updated : project)))
-    notifyProjectsChanged()
-    push('Letra da música salva.', 'success')
-  }
-
   function sceneExcerptTexts(): string[] {
     return visibleItems.map((item) => drafts[item.id]?.lyrics ?? item.lyrics ?? '')
   }
@@ -1411,10 +1399,6 @@ export function LipSyncRefsPage() {
 
   useEffect(() => {
     if (!selectedId) return
-    if (skipSceneScrollRef.current) {
-      skipSceneScrollRef.current = false
-      return
-    }
     document.getElementById(`lipsync-board-${selectedId}`)?.scrollIntoView({
       inline: 'nearest',
       block: 'nearest',
@@ -1575,57 +1559,6 @@ export function LipSyncRefsPage() {
     })
   }
 
-  async function assignExcerptToSelectedScene(excerpt: string, remaining: string): Promise<boolean> {
-    const text = excerpt.replace(/\r\n/g, '\n').trim()
-    if (!text) {
-      push('Selecione um trecho da letra.')
-      return false
-    }
-    const item = visibleItems.find((entry) => entry.id === selectedId) ?? null
-    if (!item) {
-      push('Escolha a cena na lista à esquerda.')
-      return false
-    }
-    const number = sceneNumber(indexById.get(item.id) ?? 0)
-    const draft = draftsRef.current[item.id] ?? toDraft(item)
-    const nextDraft = { ...draft, lyrics: text }
-    setDrafts((current) => ({ ...current, [item.id]: nextDraft }))
-    try {
-      const updated = await api.lipSyncRefs.update(item.id, {
-        label: nextDraft.label,
-        prompt: nextDraft.prompt,
-        lyrics: nextDraft.lyrics,
-        projectId: nextDraft.projectId || null,
-      })
-      if (!updated) return false
-      setItems((current) => current.map((entry) => (entry.id === item.id ? updated : entry)))
-      setDrafts((current) => ({ ...current, [item.id]: toDraft(updated) }))
-
-      const projectId = currentProjectId()
-      if (projectId) {
-        const project = await api.projects.update(projectId, { songLyrics: remaining })
-        if (project) {
-          setProjects((current) =>
-            current.map((entry) => (entry.id === project.id ? project : entry)),
-          )
-        }
-      }
-
-      const next = visibleItems[(indexById.get(item.id) ?? -1) + 1]
-      if (next) {
-        skipSceneScrollRef.current = true
-        setSelectedId(next.id)
-        push(`Trecho na cena ${number}. Próxima: ${sceneNumber(indexById.get(next.id) ?? 0)}.`, 'success')
-      } else {
-        push(`Trecho enviado para a cena ${number}.`, 'success')
-      }
-      return true
-    } catch (error) {
-      pushError(error, 'Não foi possível enviar o trecho.')
-      return false
-    }
-  }
-
   const toolbarButtonClass = 'h-9 px-3 py-0 text-xs'
   const editsDisabled = busy || projectLocked
 
@@ -1770,22 +1703,6 @@ export function LipSyncRefsPage() {
               </Button>
             </div>
           </div>
-
-          {selectedProject ? (
-            <div className="mb-3 shrink-0">
-              <SongLyricsPanel
-                key={selectedProject.id}
-                lyrics={selectedProject.songLyrics ?? ''}
-                disabled={editsDisabled}
-                collapsible
-                assignTarget={selectedItem ? { number: selectedNumber } : null}
-                onSave={saveSongLyrics}
-                onAssign={assignExcerptToSelectedScene}
-                onCopySceneExcerpts={copyAllExcerpts}
-                hasSceneExcerpts={hasSceneExcerpts}
-              />
-            </div>
-          ) : null}
 
           <div className="flex min-h-[560px] flex-1 gap-3">
             <aside className="flex w-[272px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
@@ -2102,11 +2019,7 @@ export function LipSyncRefsPage() {
                           className="h-32 w-full resize-none overflow-y-auto rounded-xl border border-border bg-bg/50 px-3 py-2 text-sm leading-relaxed text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"
                         />
                         <div className="mt-1 flex items-center justify-between gap-2">
-                          {selectedProject?.songLyrics?.trim() ? (
-                            <p className="text-[10px] text-muted-2">
-                              O trecho selecionado na letra acima vem para esta cena e some de lá.
-                            </p>
-                          ) : !selectedDraft.lyrics.trim() && selectedItem.audioPath.trim() ? (
+                          {!selectedDraft.lyrics.trim() && selectedItem.audioPath.trim() ? (
                             <p className="text-[10px] text-muted-2">
                               Trechos sem letra usam o seletor de instrumento (violão, guitarra, banda…).
                             </p>
