@@ -34,8 +34,8 @@ function readExcerpt(filePath: string): string {
 }
 
 /**
- * Raiz: `1.png` e `1.mp3`.
- * Pasta `01` ou `1`: o áudio de dentro (qualquer nome) e o `.txt` do trecho.
+ * Raiz: `1.png`, `1.mp3`, `Trecho 1.png` e `Trecho 1.mp3`.
+ * Pasta `01`, `1` ou `Trecho 01`: o áudio de dentro (qualquer nome) e o `.txt` do trecho.
  * A subpasta `lipsync` não é número, então fica de fora.
  * As durações dos áudios ficam null aqui; `scanLipSyncFolderWithDurations` as preenche.
  */

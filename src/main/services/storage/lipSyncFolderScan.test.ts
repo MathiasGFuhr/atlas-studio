@@ -53,6 +53,26 @@ describe('scanLipSyncFolder', () => {
     expect(scan.excerpts).toEqual([])
   })
 
+  it('aceita arquivos e pastas Trecho N e mantém a ordem numérica', () => {
+    touch('Trecho 10.PNG', 'Trecho 2.webp', 'Trecho 1.MP3', 'Trecho 2.wav')
+    const scene = path.join(root, 'Trecho 03')
+    fs.mkdirSync(scene)
+    fs.writeFileSync(path.join(scene, 'parte.mp3'), '')
+    fs.writeFileSync(path.join(scene, 'parte.txt'), 'verso da cena três')
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.matches.map((entry) => [entry.number, entry.fileName])).toEqual([
+      [2, 'Trecho 2.webp'],
+      [10, 'Trecho 10.PNG'],
+    ])
+    expect(scan.audios.map((entry) => [entry.number, entry.fileName, entry.excerpt])).toEqual([
+      [1, 'Trecho 1.MP3', null],
+      [2, 'Trecho 2.wav', null],
+      [3, 'parte.mp3', 'verso da cena três'],
+    ])
+  })
+
   it('puxa o áudio e o txt de dentro da pasta numerada', () => {
     touch('1.png')
     const scene = path.join(root, '01')

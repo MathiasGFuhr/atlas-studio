@@ -25,10 +25,17 @@ describe('sceneNumberFromFileName', () => {
     expect(sceneNumberFromFileName('12.webp')).toBe(12)
   })
 
-  it('rejeita nomes com qualquer outro texto', () => {
+  it('aceita o prefixo Trecho em arquivos e pastas', () => {
+    expect(sceneNumberFromFileName('Trecho 1.png')).toBe(1)
+    expect(sceneNumberFromFileName('trecho 02.MP3')).toBe(2)
+    expect(sceneNumberFromFileName('TRECHO 15')).toBe(15)
+  })
+
+  it('rejeita outros prefixos e sufixos', () => {
     expect(sceneNumberFromFileName('cena_2.jpg')).toBeNull()
     expect(sceneNumberFromFileName('3_v2.png')).toBeNull()
     expect(sceneNumberFromFileName('Cena 12 - final.webp')).toBeNull()
+    expect(sceneNumberFromFileName('Trecho 3 final.png')).toBeNull()
     expect(sceneNumberFromFileName('capa.png')).toBeNull()
   })
 
@@ -43,6 +50,18 @@ describe('matchNumberedImages', () => {
     const { matches, ignored } = matchNumberedImages(files('10.png', '2.png', '1.png'))
     expect(matches.map((entry) => entry.number)).toEqual([1, 2, 10])
     expect(matches[0]?.path).toBe('C:/musica/1.png')
+    expect(ignored).toEqual([])
+  })
+
+  it('ordena numericamente imagens com nome Trecho', () => {
+    const { matches, ignored } = matchNumberedImages(
+      files('Trecho 10.png', 'Trecho 2.webp', 'Trecho 01.jpg'),
+    )
+    expect(matches.map((entry) => [entry.number, entry.fileName])).toEqual([
+      [1, 'Trecho 01.jpg'],
+      [2, 'Trecho 2.webp'],
+      [10, 'Trecho 10.png'],
+    ])
     expect(ignored).toEqual([])
   })
 

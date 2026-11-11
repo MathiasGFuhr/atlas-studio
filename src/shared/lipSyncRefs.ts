@@ -213,11 +213,15 @@ function fileStem(fileName: string): string {
   return dot > 0 ? fileName.slice(0, dot) : fileName
 }
 
-/** Só nomes que são apenas o número: `1.png`, `2.jpg`. `cena_1.png` e `1_v2.png` não contam. */
+/**
+ * Aceita o número sozinho ou após `Trecho`: `1.png`, `Trecho 2.jpg`, pasta `Trecho 03`.
+ * Outros prefixos/sufixos (`cena_1.png`, `1_v2.png`) continuam fora para evitar associações acidentais.
+ */
 export function sceneNumberFromFileName(fileName: string): number | null {
   const stem = fileStem(fileName).trim()
-  if (!/^\d+$/.test(stem)) return null
-  const value = Number(stem)
+  const match = stem.match(/^(?:trecho\s+)?(\d+)$/i)
+  if (!match) return null
+  const value = Number(match[1])
   if (!Number.isInteger(value) || value < 1 || value > LIPSYNC_MAX_SCENE_NUMBER) return null
   return value
 }
