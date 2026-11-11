@@ -31,11 +31,18 @@ describe('sceneNumberFromFileName', () => {
     expect(sceneNumberFromFileName('TRECHO 15')).toBe(15)
   })
 
+  it('aceita o formato exportado "01 - Trecho 1"', () => {
+    expect(sceneNumberFromFileName('01 - Trecho 1.mp3')).toBe(1)
+    expect(sceneNumberFromFileName('02 – trecho 2.wav')).toBe(2)
+    expect(sceneNumberFromFileName('15 — TRECHO 15.txt')).toBe(15)
+  })
+
   it('rejeita outros prefixos e sufixos', () => {
     expect(sceneNumberFromFileName('cena_2.jpg')).toBeNull()
     expect(sceneNumberFromFileName('3_v2.png')).toBeNull()
     expect(sceneNumberFromFileName('Cena 12 - final.webp')).toBeNull()
     expect(sceneNumberFromFileName('Trecho 3 final.png')).toBeNull()
+    expect(sceneNumberFromFileName('03 - Trecho 4.mp3')).toBeNull()
     expect(sceneNumberFromFileName('capa.png')).toBeNull()
   })
 

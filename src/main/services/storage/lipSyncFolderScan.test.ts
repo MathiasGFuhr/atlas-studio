@@ -73,6 +73,21 @@ describe('scanLipSyncFolder', () => {
     ])
   })
 
+  it('associa áudio e texto no formato "01 - Trecho 1" à imagem numerada', () => {
+    touch('1.png', '2.png', '01 - Trecho 1.mp3', '02 - Trecho 2.wav')
+    fs.writeFileSync(path.join(root, '01 - Trecho 1.txt'), 'primeiro verso')
+    fs.writeFileSync(path.join(root, '02 - Trecho 2.txt'), 'segundo verso')
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.matches.map((entry) => entry.number)).toEqual([1, 2])
+    expect(scan.audios.map((entry) => [entry.number, entry.fileName, entry.excerpt])).toEqual([
+      [1, '01 - Trecho 1.mp3', 'primeiro verso'],
+      [2, '02 - Trecho 2.wav', 'segundo verso'],
+    ])
+    expect(scan.ignoredAudios).toEqual([])
+  })
+
   it('puxa o áudio e o txt de dentro da pasta numerada', () => {
     touch('1.png')
     const scene = path.join(root, '01')

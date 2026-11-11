@@ -1906,8 +1906,8 @@ export function LipSyncRefsPage() {
                             </span>
                           ) : (
                             <span className="text-muted">
-                              Sem áudio. Use “Puxar da pasta” com 1.mp3, Trecho 1.mp3, pasta 01 ou
-                              pasta Trecho 01; ou escolha um arquivo.
+                              Sem áudio. Use “Puxar da pasta” com 1.mp3, Trecho 1.mp3,
+                              01 - Trecho 1.mp3, pasta 01 ou pasta Trecho 01; ou escolha um arquivo.
                             </span>
                           )}
                         </span>

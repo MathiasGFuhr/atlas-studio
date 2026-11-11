@@ -214,14 +214,18 @@ function fileStem(fileName: string): string {
 }
 
 /**
- * Aceita o número sozinho ou após `Trecho`: `1.png`, `Trecho 2.jpg`, pasta `Trecho 03`.
+ * Aceita o número sozinho, após `Trecho` ou no formato exportado dos cortes:
+ * `1.png`, `Trecho 2.jpg`, `01 - Trecho 1.mp3`, pasta `Trecho 03`.
  * Outros prefixos/sufixos (`cena_1.png`, `1_v2.png`) continuam fora para evitar associações acidentais.
  */
 export function sceneNumberFromFileName(fileName: string): number | null {
   const stem = fileStem(fileName).trim()
-  const match = stem.match(/^(?:trecho\s+)?(\d+)$/i)
-  if (!match) return null
-  const value = Number(match[1])
+  const simple = stem.match(/^(?:trecho\s+)?(\d+)$/i)
+  const exportedCut = stem.match(/^(\d+)\s*[-–—]\s*trecho\s+(\d+)$/i)
+  if (!simple && !exportedCut) return null
+
+  const value = Number(simple?.[1] ?? exportedCut?.[1])
+  if (exportedCut && value !== Number(exportedCut[2])) return null
   if (!Number.isInteger(value) || value < 1 || value > LIPSYNC_MAX_SCENE_NUMBER) return null
   return value
 }
