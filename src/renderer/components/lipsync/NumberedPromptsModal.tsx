@@ -46,16 +46,17 @@ export function NumberedPromptsModal({
         <p className="text-sm text-muted">
           Cole a lista <span className="font-medium text-text">1- 2- 3-</span> ou o documento de
           direção (<span className="font-medium text-text">CENA</span> /{' '}
-          <span className="font-medium text-text">CORTE</span>, com ou sem ```). O bloco{' '}
-          <span className="font-medium text-text">ComfyUI</span> entra na cena com letra. No corte
-          de banda ou instrumental, sem Comfy, entra o bloco{' '}
+          <span className="font-medium text-text">CORTE</span>, inclusive{' '}
+          <span className="font-medium text-text">1- CENA 01</span>, com ou sem ```). Somente o
+          bloco <span className="font-medium text-text">ComfyUI</span> entra no campo de prompt.
+          No corte de banda ou instrumental, sem Comfy, entra o bloco{' '}
           <span className="font-medium text-text">Veo</span>. Flow fica de fora.
         </p>
         <textarea
           value={text}
           onChange={(event) => onChange(event.target.value)}
           placeholder={
-            'CORTE 01 — Título\nCOMFYUI — ANIMAÇÃO…\nAnimate this supplied frame…\n\nCORTE 02 — …'
+            '1- CENA 01 — Título\nComfyUI\n```\nAnimate this supplied frame…\n```\n\n2- CENA 02 — …'
           }
           spellCheck={false}
           className="h-56 w-full resize-none overflow-y-auto rounded-xl border border-border bg-bg/50 px-3 py-2 font-mono text-[13px] leading-relaxed text-text placeholder:text-muted-2 focus:border-accent/60 focus:outline-none"

@@ -4,15 +4,16 @@ export type ImportedScenePrompt = { number: number; text: string }
 
 /**
  * Cabeçalho de cena/corte, com ou sem markdown:
- * CENA 01 | CORTE 08 | SCENE 3 | CUT 12 | ## Corte #04 | **CENA 01**
+ * CENA 01 | 1- CENA 01 | CORTE 08 | SCENE 3 | CUT 12 | ## Corte #04 | **CENA 01**
  */
 const SCENE_HEADER_CORE = '(?:CENA|CORTE|SCENE|CUT)'
+const SCENE_HEADER_PREFIX = '(?:#{1,6}\\s*)?(?:\\d+\\s*[-.)]\\s*)?'
 const SCENE_HEADER_LINE = new RegExp(
-  `^(?:#{1,6}\\s*)?(?:\\*{1,2}|_{1,2})?${SCENE_HEADER_CORE}(?:\\*{1,2}|_{1,2})?\\s*#?\\s*(\\d+)\\b`,
+  `^${SCENE_HEADER_PREFIX}(?:\\*{1,2}|_{1,2})?${SCENE_HEADER_CORE}(?:\\*{1,2}|_{1,2})?\\s*#?\\s*(\\d+)\\b`,
   'im',
 )
 const SCENE_HEADER_GLOBAL = new RegExp(
-  `^(?:#{1,6}\\s*)?(?:\\*{1,2}|_{1,2})?${SCENE_HEADER_CORE}(?:\\*{1,2}|_{1,2})?\\s*#?\\s*(\\d+)\\b`,
+  `^${SCENE_HEADER_PREFIX}(?:\\*{1,2}|_{1,2})?${SCENE_HEADER_CORE}(?:\\*{1,2}|_{1,2})?\\s*#?\\s*(\\d+)\\b`,
   'gim',
 )
 
@@ -46,7 +47,7 @@ const NEXT_SECTION = new RegExp(
   [
     String.raw`(?:^|\n)\s*(?:\d+\.\s*)?(?:COMFY\s*UI|(?:GOOGLE\s+)?FLOW|VEO(?:\s*\d+)?|KLING|RUNWAY)\b`,
     String.raw`^(?:={3,}|#{2,})\s*$`,
-    String.raw`^(?:#{1,6}\s*)?(?:\*{1,2}|_{1,2})?${SCENE_HEADER_CORE}(?:\*{1,2}|_{1,2})?\s*#?\s*\d+\b`,
+    String.raw`^${SCENE_HEADER_PREFIX}(?:\*{1,2}|_{1,2})?${SCENE_HEADER_CORE}(?:\*{1,2}|_{1,2})?\s*#?\s*\d+\b`,
   ].join('|'),
   'im',
 )

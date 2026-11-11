@@ -144,6 +144,40 @@ describe('parseScenePromptsForImport', () => {
     ])
   })
 
+  it('lê documento com cabeçalhos "1- CENA 01" e extrai somente os blocos ComfyUI', () => {
+    const doc = [
+      'DANIEL DE JESUS — SHOW DE CINCO MÚSICAS',
+      'Flow: imagem inicial | ComfyUI: animação de todos os cortes',
+      ...Array.from({ length: 15 }, (_, index) => {
+        const number = index + 1
+        const padded = String(number).padStart(2, '0')
+        return `${number}- CENA ${padded} — Direção do corte ${padded}
+Direção: texto que não deve entrar no campo.
+Referências: [cantor] [banda] [cenario]
+
+FLOW — IMAGEM
+\`\`\`
+FLOW cena ${number} não deve entrar
+\`\`\`
+
+ComfyUI
+\`\`\`
+LIPSYNC cena ${number} deve entrar sozinho
+\`\`\``
+      }),
+    ].join('\n\n')
+
+    const parsed = parseScenePromptsForImport(doc)
+    expect(parsed).toHaveLength(15)
+    expect(parsed.map((entry) => entry.number)).toEqual(
+      Array.from({ length: 15 }, (_, index) => index + 1),
+    )
+    expect(parsed.every((entry) => entry.text === `LIPSYNC cena ${entry.number} deve entrar sozinho`)).toBe(
+      true,
+    )
+    expect(parsed.some((entry) => /FLOW|Direção:|Referências:/i.test(entry.text))).toBe(false)
+  })
+
   it('lê documento CORTE sem fence, ignora FLOW e usa Veo no corte sem Comfy', () => {
     expect(looksLikeDirectionDoc(CORTE_SAMPLE)).toBe(true)
     const extracted = extractComfyPromptsFromDirectionDoc(CORTE_SAMPLE)
