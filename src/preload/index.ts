@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AdjustScriptRequest,
   AppSettings,
@@ -90,6 +90,16 @@ import type {
   LipSyncSubject,
 } from '../shared/lipSyncRefs'
 import type {
+  FlowCreateProgress,
+  FlowExtensionStatus,
+  FlowGenerationCard,
+  FlowProject,
+  FlowProjectCreateInput,
+  FlowProjectPatch,
+  FlowReference,
+  FlowReferenceUpdateInput,
+} from '../shared/flowProjects'
+import type {
   ComfyBatchView,
   ComfyConfig,
   ComfyConfigPatch,
@@ -97,8 +107,45 @@ import type {
   ComfyDiscoverResult,
   ComfyStartResult,
 } from '../shared/comfy'
+import type {
+  RunpodInfraStatus,
+  RunpodPodLifecycleState,
+  RunpodStartPodRequest,
+  RunpodStartPreview,
+  RunpodStopPodRequest,
+  RunpodStopPodResult,
+} from '../shared/runpod'
+import type {
+  ComfyConnectConfirmRequest,
+  ComfyConnectConfirmResult,
+  ComfyConnectPrepareResult,
+  ComfyConnectRefreshResult,
+} from '../shared/comfyConnect'
+import type { LipsyncControlledTestPlan } from '../shared/lipsyncControlledTest'
+import type { ComfyGpuRecoveryConfirmRequest } from '../shared/comfyGpuRecovery'
+import type { GpuRecoveryValidationBundle } from '../shared/gpuRecoveryValidation'
+import type { LtxEnvironmentPlan, LtxEnvironmentPrepStatus } from '../shared/ltxEnvironment'
+import type { ExportLtxWorkflowResult, LtxPhase4ValidationStatus } from '../shared/ltxPhase4'
+import type { LtxControlledValidationPlan } from '../shared/ltxControlledValidation'
+import type { LtxAutoDetectResult } from '../shared/ltxAutoDetect'
+import type { LtxDetectionBootResult } from '../shared/ltxDetectionSnapshot'
 import type { WorkspaceCapabilities } from '../shared/workspaceCapabilities'
 import type { AgentModelSnapshot, AgentModelsBundle, AgentProviderId } from '../shared/agents/types'
+import type {
+  EditorAspect,
+  EditorAsset,
+  EditorAssetOrigin,
+  EditorAudioAlignResult,
+  EditorExportProgress,
+  EditorExportRequest,
+  EditorLipsyncGroup,
+  EditorProject,
+  EditorProjectChangedEvent,
+  EditorProjectPatch,
+  EditorWaveform,
+} from '../shared/editor/types'
+
+type EditorImportResult = { assets: EditorAsset[]; errors: string[] }
 
 const api = {
   projects: {
@@ -576,6 +623,76 @@ const api = {
     scanFolder: (folder: string) =>
       ipcRenderer.invoke(IPC.lipSyncRefs.scanFolder, folder) as Promise<LipSyncFolderScan>,
   },
+  flowProjects: {
+    list: (filters?: { query?: string }) =>
+      ipcRenderer.invoke(IPC.flowProjects.list, filters) as Promise<FlowProject[]>,
+    get: (id: string) => ipcRenderer.invoke(IPC.flowProjects.get, id) as Promise<FlowProject | null>,
+    create: (input: FlowProjectCreateInput) =>
+      ipcRenderer.invoke(IPC.flowProjects.create, input) as Promise<FlowProject>,
+    update: (id: string, patch: FlowProjectPatch) =>
+      ipcRenderer.invoke(IPC.flowProjects.update, id, patch) as Promise<FlowProject>,
+    retryLink: (id: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.retryLink, id) as Promise<FlowProject>,
+    remove: (id: string) => ipcRenderer.invoke(IPC.flowProjects.remove, id) as Promise<boolean>,
+    openLocal: (id: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.openLocal, id) as Promise<boolean>,
+    openRemote: (id: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.openRemote, id) as Promise<boolean>,
+    extensionStatus: () =>
+      ipcRenderer.invoke(IPC.flowProjects.extensionStatus) as Promise<FlowExtensionStatus>,
+    listReferences: (projectId: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.listReferences, projectId) as Promise<FlowReference[]>,
+    addReferences: (projectId: string, filePaths: string[]) =>
+      ipcRenderer.invoke(IPC.flowProjects.addReferences, projectId, filePaths) as Promise<
+        FlowReference[]
+      >,
+    updateReference: (id: string, patch: FlowReferenceUpdateInput) =>
+      ipcRenderer.invoke(IPC.flowProjects.updateReference, id, patch) as Promise<FlowReference | null>,
+    removeReference: (id: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.removeReference, id) as Promise<boolean>,
+    syncReferences: (projectId: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.syncReferences, projectId) as Promise<{
+        uploaded: number
+        reused: number
+      }>,
+    syncPrompt: (projectId: string, options?: { submit?: boolean; promptOverride?: string }) =>
+      ipcRenderer.invoke(IPC.flowProjects.syncPrompt, projectId, options) as Promise<{
+        mentions: number
+        submitted: boolean
+        verified: boolean
+      }>,
+    resumeGeneration: (projectId: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.resumeGeneration, projectId) as Promise<FlowProject>,
+    listGenerationCards: (projectId: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.listGenerationCards, projectId) as Promise<
+        FlowGenerationCard[]
+      >,
+    importGenerationCards: (projectId: string, source: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.importGenerationCards, projectId, source) as Promise<
+        FlowGenerationCard[]
+      >,
+    addGenerationCard: (projectId: string, prompt: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.addGenerationCard, projectId, prompt) as Promise<
+        FlowGenerationCard
+      >,
+    updateGenerationCard: (id: string, patch: { prompt?: string }) =>
+      ipcRenderer.invoke(IPC.flowProjects.updateGenerationCard, id, patch) as Promise<
+        FlowGenerationCard | null
+      >,
+    removeGenerationCard: (id: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.removeGenerationCard, id) as Promise<boolean>,
+    prepareGenerationCard: (cardId: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.prepareGenerationCard, cardId) as Promise<FlowGenerationCard>,
+    generateGenerationCard: (cardId: string) =>
+      ipcRenderer.invoke(IPC.flowProjects.generateGenerationCard, cardId) as Promise<FlowGenerationCard>,
+    onProgress: (callback: (event: FlowCreateProgress) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: FlowCreateProgress) => callback(data)
+      ipcRenderer.on(IPC.flowProjects.progress, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.flowProjects.progress, listener)
+      }
+    },
+  },
   comfy: {
     getConfig: () => ipcRenderer.invoke(IPC.comfy.getConfig) as Promise<ComfyConfig>,
     saveConfig: (patch: ComfyConfigPatch) =>
@@ -584,6 +701,78 @@ const api = {
     testConnection: (baseUrl?: string) =>
       ipcRenderer.invoke(IPC.comfy.testConnection, baseUrl) as Promise<ComfyConnectionInfo>,
     discoverUrl: () => ipcRenderer.invoke(IPC.comfy.discoverUrl) as Promise<ComfyDiscoverResult>,
+    getRunpodStatus: (options?: { force?: boolean }) =>
+      ipcRenderer.invoke(IPC.comfy.getRunpodStatus, options) as Promise<RunpodInfraStatus>,
+    getCachedRunpodStatus: () =>
+      ipcRenderer.invoke(IPC.comfy.getCachedRunpodStatus) as Promise<RunpodInfraStatus | null>,
+    previewRunpodStart: (podId: string) =>
+      ipcRenderer.invoke(IPC.comfy.previewRunpodStart, podId) as Promise<RunpodStartPreview>,
+    startRunpodPod: (request: RunpodStartPodRequest) =>
+      ipcRenderer.invoke(IPC.comfy.startRunpodPod, request) as Promise<RunpodPodLifecycleState>,
+    stopRunpodPod: (request: RunpodStopPodRequest) =>
+      ipcRenderer.invoke(IPC.comfy.stopRunpodPod, request) as Promise<RunpodStopPodResult>,
+    cleanupSupersededRunpodPods: (options?: { dryRun?: boolean; keepPodId?: string | null }) =>
+      ipcRenderer.invoke(IPC.comfy.cleanupSupersededRunpodPods, options) as Promise<{
+        dryRun: boolean
+        candidates: Array<{ id: string; name: string; status: string }>
+        terminated: Array<{ id: string; name: string }>
+        failed: Array<{ id: string; name: string; error: string }>
+        message: string
+      }>,
+    getRunpodLifecycle: () =>
+      ipcRenderer.invoke(IPC.comfy.getRunpodLifecycle) as Promise<RunpodPodLifecycleState | null>,
+    prepareComfyConnect: () =>
+      ipcRenderer.invoke(IPC.comfy.prepareComfyConnect) as Promise<ComfyConnectPrepareResult>,
+    confirmComfyConnect: (request: ComfyConnectConfirmRequest) =>
+      ipcRenderer.invoke(IPC.comfy.confirmComfyConnect, request) as Promise<ComfyConnectConfirmResult>,
+    confirmComfyGpuRecovery: (request: ComfyGpuRecoveryConfirmRequest) =>
+      ipcRenderer.invoke(IPC.comfy.confirmComfyGpuRecovery, request) as Promise<ComfyConnectConfirmResult>,
+    refreshComfyConnectStatus: () =>
+      ipcRenderer.invoke(IPC.comfy.refreshComfyConnectStatus) as Promise<ComfyConnectRefreshResult>,
+    prepareLipsyncControlledTest: (options?: { projectId?: string | null; refId?: string | null }) =>
+      ipcRenderer.invoke(IPC.comfy.prepareLipsyncControlledTest, options) as Promise<LipsyncControlledTestPlan>,
+    prepareGpuRecoveryValidation: (options?: { projectId?: string | null; refId?: string | null }) =>
+      ipcRenderer.invoke(IPC.comfy.prepareGpuRecoveryValidation, options) as Promise<GpuRecoveryValidationBundle>,
+    getLtxEnvironment: () =>
+      ipcRenderer.invoke(IPC.comfy.getLtxEnvironment) as Promise<LtxEnvironmentPlan>,
+    saveLtxEnvironment: (patch: Partial<LtxEnvironmentPlan>) =>
+      ipcRenderer.invoke(IPC.comfy.saveLtxEnvironment, patch) as Promise<LtxEnvironmentPlan>,
+    diagnoseLtxEnvironment: () =>
+      ipcRenderer.invoke(IPC.comfy.diagnoseLtxEnvironment) as Promise<LtxEnvironmentPrepStatus>,
+    exportLtxWorkflow: () =>
+      ipcRenderer.invoke(IPC.comfy.exportLtxWorkflow) as Promise<ExportLtxWorkflowResult>,
+    validateLtxPhase4: () =>
+      ipcRenderer.invoke(IPC.comfy.validateLtxPhase4) as Promise<LtxPhase4ValidationStatus>,
+    prepareLtxControlledValidation: () =>
+      ipcRenderer.invoke(IPC.comfy.prepareLtxControlledValidation) as Promise<LtxControlledValidationPlan>,
+    detectLtxEnvironment: (options?: { forceFullScan?: boolean }) =>
+      ipcRenderer.invoke(IPC.comfy.detectLtxEnvironment, options) as Promise<LtxAutoDetectResult>,
+    getSavedLtxDetection: () =>
+      ipcRenderer.invoke(IPC.comfy.getSavedLtxDetection) as Promise<{
+        detection: LtxAutoDetectResult | null
+        savedAt: string | null
+        inventoryVerifiedAt: string | null
+      }>,
+    bootstrapLtxEnvironment: (options?: { forceFullScan?: boolean }) =>
+      ipcRenderer.invoke(IPC.comfy.bootstrapLtxEnvironment, options) as Promise<LtxDetectionBootResult>,
+    getRunpodS3Status: () =>
+      ipcRenderer.invoke(IPC.comfy.getRunpodS3Status) as Promise<{
+        configured: boolean
+        accessKeyPreview: string | null
+      }>,
+    saveRunpodS3Credentials: (creds: { accessKeyId: string; secretAccessKey: string } | null) =>
+      ipcRenderer.invoke(IPC.comfy.saveRunpodS3Credentials, creds) as Promise<{
+        configured: boolean
+        accessKeyPreview: string | null
+      }>,
+    saveRunpodS3CredentialsAndBootstrap: (
+      creds: { accessKeyId: string; secretAccessKey: string } | null,
+    ) =>
+      ipcRenderer.invoke(IPC.comfy.saveRunpodS3CredentialsAndBootstrap, creds) as Promise<{
+        configured: boolean
+        accessKeyPreview: string | null
+        boot: LtxDetectionBootResult | null
+      }>,
     start: (projectId: string | null, refIds?: string[] | null) =>
       ipcRenderer.invoke(IPC.comfy.start, projectId, refIds) as Promise<ComfyStartResult>,
     list: () => ipcRenderer.invoke(IPC.comfy.list) as Promise<ComfyBatchView[]>,
@@ -593,6 +782,55 @@ const api = {
     cancel: (batchId: string) => ipcRenderer.invoke(IPC.comfy.cancel, batchId) as Promise<ComfyBatchView | null>,
     retryFailed: (batchId: string) =>
       ipcRenderer.invoke(IPC.comfy.retryFailed, batchId) as Promise<ComfyBatchView | null>,
+  },
+  editor: {
+    list: () => ipcRenderer.invoke(IPC.editor.list) as Promise<EditorProject[]>,
+    get: (id: string) =>
+      ipcRenderer.invoke(IPC.editor.get, id) as Promise<{ project: EditorProject; assets: EditorAsset[] } | null>,
+    create: (input: { name: string; aspect: EditorAspect; channelId: string }) =>
+      ipcRenderer.invoke(IPC.editor.create, input) as Promise<EditorProject>,
+    update: (id: string, patch: EditorProjectPatch) =>
+      ipcRenderer.invoke(IPC.editor.update, id, patch) as Promise<EditorProject | null>,
+    remove: (id: string) => ipcRenderer.invoke(IPC.editor.remove, id) as Promise<boolean>,
+    listAssets: (projectId: string) =>
+      ipcRenderer.invoke(IPC.editor.listAssets, projectId) as Promise<EditorAsset[]>,
+    importFiles: (projectId: string) =>
+      ipcRenderer.invoke(IPC.editor.importFiles, projectId) as Promise<EditorImportResult>,
+    addFiles: (projectId: string, paths: string[], origin?: EditorAssetOrigin) =>
+      ipcRenderer.invoke(IPC.editor.addFiles, projectId, paths, origin) as Promise<EditorImportResult>,
+    removeAsset: (assetId: string) => ipcRenderer.invoke(IPC.editor.removeAsset, assetId) as Promise<boolean>,
+    setAssetOrigin: (assetId: string, origin: EditorAssetOrigin) =>
+      ipcRenderer.invoke(IPC.editor.setAssetOrigin, assetId, origin) as Promise<EditorAsset | null>,
+    waveform: (assetId: string) =>
+      ipcRenderer.invoke(IPC.editor.waveform, assetId) as Promise<EditorWaveform | null>,
+    listLipsync: () => ipcRenderer.invoke(IPC.editor.listLipsync) as Promise<EditorLipsyncGroup[]>,
+    alignToMusic: (projectId: string, assetIds: string[]) =>
+      ipcRenderer.invoke(IPC.editor.alignToMusic, projectId, assetIds) as Promise<EditorAudioAlignResult>,
+    export: (request: EditorExportRequest) =>
+      ipcRenderer.invoke(IPC.editor.export, request) as Promise<string | null>,
+    /** Caminho real de um arquivo arrastado do Explorer (File.path não existe mais no Electron 32+). */
+    pathForFile: (file: File) => webUtils.getPathForFile(file),
+    onAssetChanged: (callback: (asset: EditorAsset) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: EditorAsset) => callback(data)
+      ipcRenderer.on(IPC.editor.assetChanged, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.editor.assetChanged, listener)
+      }
+    },
+    onExportProgress: (callback: (event: EditorExportProgress) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: EditorExportProgress) => callback(data)
+      ipcRenderer.on(IPC.editor.exportProgress, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.editor.exportProgress, listener)
+      }
+    },
+    onProjectChanged: (callback: (event: EditorProjectChangedEvent) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: EditorProjectChangedEvent) => callback(data)
+      ipcRenderer.on(IPC.editor.projectChanged, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.editor.projectChanged, listener)
+      }
+    },
   },
   system: {
     copyText: (text: string) => ipcRenderer.invoke(IPC.system.copyText, text) as Promise<boolean>,

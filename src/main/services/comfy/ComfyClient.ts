@@ -21,8 +21,37 @@ export type ComfyHistoryEntry = {
 
 export type ComfyQueueState = { running: string[]; pending: string[] }
 
+/** Snapshot bruto de /system_stats (inventário Fase 4 — somente leitura). */
+export type ComfySystemStatsRaw = {
+  system?: {
+    os?: string
+    python_version?: string
+    embedded_python?: boolean
+    comfyui_version?: string
+    pytorch_version?: string
+    argv?: string[]
+  }
+  devices?: Array<{
+    name?: string
+    type?: string
+    index?: number
+    vram_total?: number
+    vram_free?: number
+    torch_vram_total?: number
+    torch_vram_free?: number
+  }>
+}
+
 export interface ComfyApi {
   systemStats(): Promise<ComfyConnectionInfo>
+  /** GET /system_stats bruto — inventário; sem mutação. */
+  systemStatsRaw(): Promise<ComfySystemStatsRaw>
+  /** class_types registrados no ComfyUI (GET /object_info). */
+  listObjectInfoClassTypes(): Promise<string[]>
+  /** GET /models/{folder} — lista nomes; somente leitura. */
+  listModels(folder: string): Promise<string[]>
+  /** GET /models — tipos de pasta disponíveis. */
+  listModelFolders(): Promise<string[]>
   upload(localPath: string, remoteName: string): Promise<string>
   queuePrompt(workflow: ComfyApiWorkflow, clientId: string): Promise<string>
   history(promptId: string): Promise<ComfyHistoryEntry | null>
@@ -81,11 +110,12 @@ export class ComfyClient implements ComfyApi {
     return (await response.json()) as T
   }
 
+  async systemStatsRaw(): Promise<ComfySystemStatsRaw> {
+    return this.json<ComfySystemStatsRaw>('/system_stats')
+  }
+
   async systemStats(): Promise<ComfyConnectionInfo> {
-    const stats = await this.json<{
-      system?: { comfyui_version?: string }
-      devices?: Array<{ name?: string; vram_total?: number }>
-    }>('/system_stats')
+    const stats = await this.systemStatsRaw()
     const device = stats.devices?.[0]
     const vram = device?.vram_total ? Math.round((device.vram_total / 1024 ** 3) * 10) / 10 : undefined
     return {
@@ -94,6 +124,30 @@ export class ComfyClient implements ComfyApi {
       gpu: device?.name?.replace(/^cuda:\d+\s*/, '').replace(/\s*:\s*cudaMallocAsync$/, ''),
       vramTotalGb: vram,
       comfyVersion: stats.system?.comfyui_version,
+    }
+  }
+
+  async listObjectInfoClassTypes(): Promise<string[]> {
+    const data = await this.json<Record<string, unknown>>('/object_info')
+    return Object.keys(data).filter(Boolean).sort()
+  }
+
+  async listModelFolders(): Promise<string[]> {
+    const data = await this.json<unknown>('/models')
+    if (!Array.isArray(data)) return []
+    return data.map(String).filter(Boolean).sort()
+  }
+
+  async listModels(folder: string): Promise<string[]> {
+    const safe = folder.replace(/[^\w.-]+/g, '')
+    if (!safe) return []
+    try {
+      const data = await this.json<unknown>(`/models/${encodeURIComponent(safe)}`)
+      if (!Array.isArray(data)) return []
+      return data.map(String).filter(Boolean).sort()
+    } catch (error) {
+      if (error instanceof ComfyUnreachableError) throw error
+      return []
     }
   }
 

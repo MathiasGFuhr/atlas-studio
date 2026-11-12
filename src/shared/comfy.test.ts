@@ -261,6 +261,19 @@ describe('pickRunpodComfyPod', () => {
     ).toEqual({ id: 'abc123xyz', name: 'GPU', port: 8188 })
   })
 
+  it('aceita ports configuradas no formato REST v2', () => {
+    expect(
+      pickRunpodComfyPod([
+        {
+          id: 'v2pod',
+          name: 'Comfy',
+          status: 'RUNNING',
+          ports: ['8188/http', '22/tcp'],
+        },
+      ]),
+    ).toEqual({ id: 'v2pod', name: 'Comfy', port: 8188 })
+  })
+
   it('lê o id da URL antiga do proxy', () => {
     expect(podIdFromComfyUrl('https://cdde0r2vynph2r-8188.proxy.runpod.net/')).toBe('cdde0r2vynph2r')
   })
@@ -273,8 +286,17 @@ describe('normalizeComfyConfig', () => {
       queueSize: 10,
       durationPadding: 0,
     })
-    expect(normalizeComfyConfig(null)).toMatchObject({ queueSize: 5, durationPadding: 1, trimToAudio: false })
+    expect(normalizeComfyConfig(null)).toMatchObject({
+      queueSize: 5,
+      durationPadding: 1,
+      trimToAudio: false,
+      runpodAutoInfraEnabled: false,
+      runpodDryRunStarts: true,
+      runpodPreferredPodId: '',
+    })
     expect(normalizeComfyConfig({ trimToAudio: true }).trimToAudio).toBe(true)
+    expect(normalizeComfyConfig({ runpodAutoInfraEnabled: true }).runpodAutoInfraEnabled).toBe(true)
+    expect(normalizeComfyConfig({ runpodDryRunStarts: false }).runpodDryRunStarts).toBe(false)
     expect(normalizeComfyBaseUrl('http://localhost:8188//')).toBe('http://localhost:8188')
   })
 })

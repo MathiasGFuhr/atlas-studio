@@ -34,9 +34,32 @@ export type ComfyConfig = {
   workflowMapping: ComfyWorkflowMapping | null
   /** A chave em si nunca vai para o renderer. */
   hasRunpodApiKey: boolean
+  /**
+   * Gerenciador automático de infraestrutura RunPod (Fases 2+).
+   * Sempre false por padrão — não liga GPU na abertura do Atlas.
+   */
+  runpodAutoInfraEnabled: boolean
+  /** Pod preferido para start/monitoramento (Fase 2). */
+  runpodPreferredPodId: string
+  /**
+   * Quando true (padrão), "Iniciar Pod" só simula o fluxo sem POST de cobrança.
+   * Desligue explicitamente + confirme custo para start real.
+   */
+  runpodDryRunStarts: boolean
 }
 
-export type ComfyConfigPatch = Partial<Pick<ComfyConfig, 'baseUrl' | 'queueSize' | 'durationPadding' | 'trimToAudio'>> & {
+export type ComfyConfigPatch = Partial<
+  Pick<
+    ComfyConfig,
+    | 'baseUrl'
+    | 'queueSize'
+    | 'durationPadding'
+    | 'trimToAudio'
+    | 'runpodAutoInfraEnabled'
+    | 'runpodPreferredPodId'
+    | 'runpodDryRunStarts'
+  >
+> & {
   /** Vazio remove a chave salva. `undefined` não mexe. */
   runpodApiKey?: string
 }
@@ -46,7 +69,15 @@ export const COMFY_RUNPOD_PORT = 8188
 export type RunpodPodCandidate = {
   id: string
   name: string
+  /** GraphQL / v1. */
   desiredStatus?: string | null
+  /** REST v2. */
+  status?: string | null
+  /** Portas configuradas no pod v2, ex.: "8188/http". */
+  ports?: string[] | null
+  gpuType?: string | null
+  dataCenterId?: string | null
+  costPerHr?: number | null
   runtime?: { ports?: Array<{ privatePort?: number; type?: string | null }> | null } | null
 }
 
@@ -63,6 +94,9 @@ export const DEFAULT_COMFY_CONFIG: ComfyConfig = {
   workflowName: '',
   workflowMapping: null,
   hasRunpodApiKey: false,
+  runpodAutoInfraEnabled: false,
+  runpodPreferredPodId: '',
+  runpodDryRunStarts: true,
 }
 
 export type ComfyJobStatus =
@@ -176,6 +210,10 @@ export function normalizeComfyConfig(input: Partial<ComfyConfig> | null | undefi
     workflowName: String(input?.workflowName ?? ''),
     workflowMapping: input?.workflowMapping ?? null,
     hasRunpodApiKey: Boolean(input?.hasRunpodApiKey),
+    runpodAutoInfraEnabled: Boolean(input?.runpodAutoInfraEnabled),
+    runpodPreferredPodId: String(input?.runpodPreferredPodId ?? '').trim(),
+    // Padrão seguro: dry-run ligado se o campo ainda não existir no JSON antigo.
+    runpodDryRunStarts: input?.runpodDryRunStarts === undefined ? true : Boolean(input.runpodDryRunStarts),
   }
 }
 
@@ -189,6 +227,14 @@ export function podIdFromComfyUrl(url: string): string | null {
 }
 
 function runpodHttpPorts(pod: RunpodPodCandidate): number[] {
+  const fromConfig = (pod.ports ?? [])
+    .map((entry) => {
+      const [port, type] = entry.split('/')
+      if (type && type.toLowerCase() !== 'http') return NaN
+      return Number(port)
+    })
+    .filter((port) => Number.isFinite(port) && port > 0)
+  if (fromConfig.length > 0) return fromConfig
   return (pod.runtime?.ports ?? [])
     .filter((port) => !port.type || port.type.toLowerCase() === 'http')
     .map((port) => Number(port.privatePort))
@@ -196,7 +242,8 @@ function runpodHttpPorts(pod: RunpodPodCandidate): number[] {
 }
 
 function isRunpodPodRunning(pod: RunpodPodCandidate): boolean {
-  if (pod.desiredStatus) return pod.desiredStatus.toUpperCase() === 'RUNNING'
+  const status = (pod.status ?? pod.desiredStatus ?? '').toUpperCase()
+  if (status) return status === 'RUNNING'
   return Boolean(pod.runtime)
 }
 

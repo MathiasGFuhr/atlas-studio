@@ -202,6 +202,54 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyMusicTrackCaptions,
   },
+  {
+    version: 38,
+    name: 'google-flow-projects',
+    backup: false,
+    up: applyGoogleFlowProjects,
+  },
+  {
+    version: 39,
+    name: 'google-flow-references',
+    backup: false,
+    up: applyGoogleFlowReferences,
+  },
+  {
+    version: 40,
+    name: 'google-flow-project-prompt',
+    backup: false,
+    up: applyGoogleFlowProjectPrompt,
+  },
+  {
+    version: 41,
+    name: 'google-flow-image-settings',
+    backup: false,
+    up: applyGoogleFlowImageSettings,
+  },
+  {
+    version: 42,
+    name: 'google-flow-refs-sync-and-cards',
+    backup: false,
+    up: applyGoogleFlowRefsSyncAndCards,
+  },
+  {
+    version: 43,
+    name: 'video-editor-projects',
+    backup: false,
+    up: applyVideoEditorProjects,
+  },
+  {
+    version: 44,
+    name: 'editor-music-link',
+    backup: false,
+    up: applyEditorMusicLink,
+  },
+  {
+    version: 45,
+    name: 'editor-channel-link',
+    backup: false,
+    up: applyEditorChannelLink,
+  },
 ]
 
 /** Versão lógica do schema: sempre o último passo de SCHEMA_STEPS. */
@@ -445,6 +493,211 @@ function applyMusicTrackCaptions(database: AppDatabase): SchemaStepResult {
   }
   ensureColumn(database, 'music_tracks', 'captions_json', "TEXT NOT NULL DEFAULT '[]'")
   ensureColumn(database, 'music_tracks', 'captions_language', 'TEXT')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+/** Projetos Google Flow — vínculo local/remoto sem misturar com projetos musicais. */
+function applyGoogleFlowProjects(database: AppDatabase): SchemaStepResult {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS google_flow_projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      local_folder_path TEXT NOT NULL,
+      remote_url TEXT,
+      remote_id TEXT,
+      account_hint TEXT,
+      sync_status TEXT NOT NULL,
+      last_error TEXT,
+      create_in_flow INTEGER NOT NULL DEFAULT 1,
+      operation_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_google_flow_projects_updated ON google_flow_projects(updated_at DESC)',
+  )
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_google_flow_projects_remote ON google_flow_projects(remote_id)',
+  )
+  database.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_google_flow_projects_operation ON google_flow_projects(operation_id)',
+  )
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+/** Imagens de referência por projeto Flow (anexo local no Atlas). */
+function applyGoogleFlowReferences(database: AppDatabase): SchemaStepResult {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS google_flow_references (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      image_path TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_google_flow_references_project ON google_flow_references(project_id, sort_order, created_at)',
+  )
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+/** Prompt local do projeto Flow (ainda sem envio automático ao Google Flow). */
+function applyGoogleFlowProjectPrompt(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'google_flow_projects')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'google_flow_projects', 'prompt', "TEXT NOT NULL DEFAULT ''")
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+/** Modelo e quantidade de saídas do compositor de imagem no Flow. */
+function applyGoogleFlowImageSettings(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'google_flow_projects')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(
+    database,
+    'google_flow_projects',
+    'image_model',
+    "TEXT NOT NULL DEFAULT 'nano-banana-2.1'",
+  )
+  ensureColumn(database, 'google_flow_projects', 'image_outputs', 'INTEGER NOT NULL DEFAULT 3')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+/** Sync de referências no Flow + pausa de geração + cards de imagem. */
+function applyGoogleFlowRefsSyncAndCards(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  const names = new Set(tables.map((item) => item.name))
+
+  if (names.has('google_flow_projects')) {
+    ensureColumn(database, 'google_flow_projects', 'generation_paused', 'INTEGER NOT NULL DEFAULT 0')
+  }
+
+  if (names.has('google_flow_references')) {
+    ensureColumn(database, 'google_flow_references', 'flow_upload_key', 'TEXT')
+    ensureColumn(database, 'google_flow_references', 'flow_file_name', 'TEXT')
+    ensureColumn(
+      database,
+      'google_flow_references',
+      'sync_status',
+      "TEXT NOT NULL DEFAULT 'local'",
+    )
+    ensureColumn(database, 'google_flow_references', 'synced_at', 'TEXT')
+    ensureColumn(database, 'google_flow_references', 'last_sync_error', 'TEXT')
+  }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS google_flow_generation_cards (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      number INTEGER NOT NULL DEFAULT 1,
+      prompt TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      last_error TEXT,
+      prep_log_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_google_flow_generation_cards_project ON google_flow_generation_cards(project_id, number, created_at)',
+  )
+
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyEditorMusicLink(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'editor_projects')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'editor_projects', 'music_project_id', 'TEXT')
+  ensureColumn(database, 'editor_projects', 'music_track_id', 'TEXT')
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_editor_projects_music ON editor_projects(music_project_id)',
+  )
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyEditorChannelLink(database: AppDatabase): SchemaStepResult {
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+    name: string
+  }>
+  if (!tables.some((item) => item.name === 'editor_projects')) {
+    return { historyCreated: 0, musicCreated: 0 }
+  }
+  ensureColumn(database, 'editor_projects', 'channel_id', 'TEXT')
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_editor_projects_channel ON editor_projects(channel_id)',
+  )
+  // Projetos já ligados a música herdam o cantor do projeto de música.
+  try {
+    database.exec(`
+      UPDATE editor_projects
+      SET channel_id = (
+        SELECT p.channel_id FROM projects p WHERE p.id = editor_projects.music_project_id
+      )
+      WHERE (channel_id IS NULL OR TRIM(channel_id) = '')
+        AND music_project_id IS NOT NULL
+        AND TRIM(music_project_id) != ''
+    `)
+  } catch {
+    /* projetos/channels podem não existir neste banco de teste */
+  }
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyVideoEditorProjects(database: AppDatabase): SchemaStepResult {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS editor_projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      timeline_json TEXT NOT NULL DEFAULT '{}',
+      last_export_path TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS editor_assets (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      origin TEXT NOT NULL DEFAULT 'file',
+      name TEXT NOT NULL,
+      source_path TEXT NOT NULL,
+      duration REAL NOT NULL DEFAULT 0,
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
+      fps REAL NOT NULL DEFAULT 0,
+      has_audio INTEGER NOT NULL DEFAULT 0,
+      proxy_status TEXT NOT NULL DEFAULT 'none',
+      proxy_path TEXT,
+      thumbs_path TEXT,
+      thumbs_count INTEGER NOT NULL DEFAULT 0,
+      thumbs_tile_width INTEGER NOT NULL DEFAULT 0,
+      waveform_path TEXT,
+      created_at TEXT NOT NULL
+    )
+  `)
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_editor_assets_project ON editor_assets(project_id, created_at)',
+  )
   return { historyCreated: 0, musicCreated: 0 }
 }
 

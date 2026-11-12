@@ -34,6 +34,12 @@ export type ComfyQueueDeps = {
   trimOutput?: (videoPath: string, audioPath: string) => Promise<unknown>
   /** Destino ao vivo: a pasta lipsync vinculada ao projeto, nunca um caminho antigo. */
   resolveOutputDir?: (batch: ComfyBatch) => string
+  /** Depois do MP4 salvo (e trim opcional): Editor / sync / outros consumidores. */
+  onVideoDownloaded?: (info: {
+    batch: ComfyBatch
+    job: StoredComfyJob
+    outputPath: string
+  }) => void | Promise<void>
 }
 
 function errorMessage(error: unknown): string {
@@ -51,6 +57,7 @@ export class ComfyQueueService {
   private readonly log: NonNullable<ComfyQueueDeps['log']>
   private readonly trimOutput: NonNullable<ComfyQueueDeps['trimOutput']>
   private readonly resolveOutputDir: (batch: ComfyBatch) => string
+  private readonly onVideoDownloaded: NonNullable<ComfyQueueDeps['onVideoDownloaded']>
   private readonly clientId = randomUUID()
   private readonly downloads = new Map<string, Promise<void>>()
   private timer: ReturnType<typeof setInterval> | null = null
@@ -62,6 +69,7 @@ export class ComfyQueueService {
     this.log = deps.log ?? (() => {})
     this.trimOutput = deps.trimOutput ?? (async () => undefined)
     this.resolveOutputDir = deps.resolveOutputDir ?? ((batch) => batch.outputDir)
+    this.onVideoDownloaded = deps.onVideoDownloaded ?? (async () => undefined)
   }
 
   /** Ao abrir o Atlas: envios interrompidos no meio voltam para a fila e o lote continua. */
@@ -413,6 +421,16 @@ export class ComfyQueueService {
         }
         this.store.updateJob(job.id, { status: 'done', outputPath: saved, error: null })
         this.log('comfy.job.downloaded', { batchId: batch.id, scene: job.sceneNumber, dest: saved })
+        try {
+          await this.onVideoDownloaded({ batch, job, outputPath: saved })
+        } catch (error) {
+          this.log('comfy.job.editor_ingest_failed', {
+            batchId: batch.id,
+            scene: job.sceneNumber,
+            dest: saved,
+            message: errorMessage(error),
+          })
+        }
       })
       .catch((error: unknown) => {
         // Falha de rede: continua em "downloading" e tenta no próximo ciclo; o arquivo segue no pod.

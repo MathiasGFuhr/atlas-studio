@@ -3,10 +3,11 @@ import { cn } from '../lib/utils'
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode
-  padding?: 'sm' | 'md' | 'lg'
+  padding?: 'none' | 'sm' | 'md' | 'lg'
 }
 
 const paddings = {
+  none: 'p-0',
   sm: 'p-4',
   md: 'p-5',
   lg: 'p-6',

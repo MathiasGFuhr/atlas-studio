@@ -34,7 +34,12 @@ import {
 } from '@shared/lipSyncRefs'
 import { COMFY_DOWNLOAD_SUBDIR, planComfyScenes } from '@shared/comfy'
 import type { CustomPrompt } from '@shared/quickPrompts'
-import { parseScenePromptsForImport } from '@shared/scenePromptImport'
+import {
+  looksLikeDirectionDoc,
+  looksLikeFlowDirectionDoc,
+  parseFlowPromptsForImport,
+  parseScenePromptsForImport,
+} from '@shared/scenePromptImport'
 import { formatNumberedSceneTexts } from '@shared/songLyrics'
 import type { Channel, Project } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
@@ -54,6 +59,7 @@ import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { environmentBreadcrumb } from '../lib/environments'
 import { notifyProjectsChanged } from '../lib/projectEvents'
+import { readFlowSource, writeFlowSource } from '../lib/flowPromptSource'
 import { ApplyAllScenesPromptModal } from '../components/lipsync/ApplyAllScenesPromptModal'
 import { InstrumentalScenesModal } from '../components/lipsync/InstrumentalScenesModal'
 import { NumberedPromptsModal } from '../components/lipsync/NumberedPromptsModal'
@@ -112,6 +118,33 @@ function folderExcerptByScene(scan: LipSyncFolderScan): Map<number, string> {
     if (typeof audio.excerpt === 'string' && audio.excerpt.trim()) excerpts.set(audio.number, audio.excerpt.trim())
   }
   return excerpts
+}
+
+/** ComfyUI do documento de direção; o `prompt.txt` da pasta da cena passa por cima. */
+function folderPromptByScene(scan: LipSyncFolderScan): Map<number, string> {
+  const prompts = new Map<number, string>()
+  const doc = scan.directionDoc?.text ?? ''
+  if (doc && looksLikeDirectionDoc(doc)) {
+    for (const entry of parseScenePromptsForImport(doc)) {
+      const text = entry.text.trim()
+      if (text) prompts.set(entry.number, text)
+    }
+  }
+  for (const prompt of scan.prompts ?? []) {
+    const text = prompt.text.trim()
+    if (text) prompts.set(prompt.number, text)
+  }
+  return prompts
+}
+
+function isFolderScanEmpty(scan: LipSyncFolderScan): boolean {
+  return (
+    scan.matches.length === 0 &&
+    scan.audios.length === 0 &&
+    (scan.excerpts?.length ?? 0) === 0 &&
+    (scan.prompts?.length ?? 0) === 0 &&
+    !scan.directionDoc
+  )
 }
 
 type PendingInstrumentalImport = {
@@ -630,7 +663,11 @@ export function LipSyncRefsPage() {
   }
 
   function countFolderScenes(scan: LipSyncFolderScan): number {
-    return new Set([...scan.matches, ...scan.audios, ...(scan.excerpts ?? [])].map((entry) => entry.number)).size
+    return new Set(
+      [...scan.matches, ...scan.audios, ...(scan.excerpts ?? []), ...(scan.prompts ?? [])].map(
+        (entry) => entry.number,
+      ),
+    ).size
   }
 
   function scenesNeedingInstrument(scan: LipSyncFolderScan, queue: LipSyncRef[], replaceExisting: boolean): number[] {
@@ -701,7 +738,7 @@ export function LipSyncRefsPage() {
           }),
       )
       const target = await bindFolderToProject(scan.folder, reuseCurrent ? project : undefined)
-      if (scan.matches.length === 0 && scan.audios.length === 0 && (scan.excerpts?.length ?? 0) === 0) {
+      if (isFolderScanEmpty(scan)) {
         push(
           `${target.name} vinculado à pasta, mas não há 1.png, 1.mp3 nem pasta 01 com áudio ou .txt.`,
           'error',
@@ -849,6 +886,7 @@ export function LipSyncRefsPage() {
     const scenes = [...queue]
     const byNumber = new Map(scan.matches.map((match) => [match.number, match]))
     const excerpts = folderExcerptByScene(scan)
+    const prompts = folderPromptByScene(scan)
     const subjects = options?.subjects ?? {}
     const lastNumber = lastLipSyncFolderSceneNumber(scan)
     const withoutScene: string[] = []
@@ -858,6 +896,7 @@ export function LipSyncRefsPage() {
     let keptAudios = 0
     let created = 0
     let excerptsApplied = 0
+    let promptsApplied = 0
     const failed: string[] = []
     setBusy(true)
     try {
@@ -893,10 +932,12 @@ export function LipSyncRefsPage() {
               imagePath: match?.path,
               label: match ? undefined : String(number),
               lyrics: excerpts.get(number),
+              prompt: prompts.get(number),
             }),
           )
           if (match) applied += 1
           if (excerpts.get(number)?.trim()) excerptsApplied += 1
+          if (prompts.get(number)) promptsApplied += 1
           created += 1
         } catch {
           // Parar aqui: seguir criaria as próximas cenas com o número errado.
@@ -952,11 +993,48 @@ export function LipSyncRefsPage() {
           failed.push(`trecho ${sceneNumber(number - 1)}`)
         }
       }
+
+      for (const [number, text] of prompts) {
+        const item = scenes[number - 1]
+        if (!item) continue
+        const draft = draftsRef.current[item.id]
+        const current = (draft?.prompt ?? item.prompt).trim()
+        if (replaceExisting ? current === text : current) continue
+        try {
+          const updated = await api.lipSyncRefs.update(item.id, {
+            label: draft?.label ?? item.label,
+            prompt: text,
+            lyrics: draft?.lyrics ?? item.lyrics,
+            projectId: projectId || (draft?.projectId ?? item.projectId) || null,
+          })
+          if (!updated) continue
+          scenes[number - 1] = updated
+          const previous = draftsRef.current[updated.id] ?? toDraft(updated)
+          draftsRef.current = {
+            ...draftsRef.current,
+            [updated.id]: { ...previous, prompt: updated.prompt, projectId: updated.projectId ?? previous.projectId },
+          }
+          promptsApplied += 1
+        } catch {
+          failed.push(`prompt ${sceneNumber(number - 1)}`)
+        }
+      }
       setDrafts(draftsRef.current)
+
+      // Na abertura automática do projeto não apaga o que o usuário já colou em Prompts Flow.
+      let flowPrompts = 0
+      const doc = scan.directionDoc
+      if (doc && looksLikeFlowDirectionDoc(doc.text)) {
+        const currentFlow = readFlowSource()
+        if (currentFlow !== doc.text && (!options?.quiet || !currentFlow.trim())) {
+          writeFlowSource(doc.text)
+          flowPrompts = parseFlowPromptsForImport(doc.text).length
+        }
+      }
 
       await refresh()
 
-      const changed = applied + audiosApplied + created + excerptsApplied
+      const changed = applied + audiosApplied + created + excerptsApplied + promptsApplied + flowPrompts
       if (options?.quiet && changed === 0) return
 
       const parts: string[] = []
@@ -968,6 +1046,16 @@ export function LipSyncRefsPage() {
       }
       if (excerptsApplied > 0) {
         parts.push(excerptsApplied === 1 ? '1 trecho aplicado' : `${excerptsApplied} trechos aplicados`)
+      }
+      if (promptsApplied > 0) {
+        parts.push(promptsApplied === 1 ? '1 prompt aplicado' : `${promptsApplied} prompts aplicados`)
+      }
+      if (flowPrompts > 0) {
+        parts.push(
+          flowPrompts === 1
+            ? '1 prompt Flow em Prompts Flow'
+            : `${flowPrompts} prompts Flow em Prompts Flow`,
+        )
       }
       if (created > 0) parts.push(created === 1 ? '1 cena criada' : `${created} cenas criadas`)
       if (kept > 0) parts.push(kept === 1 ? '1 card com imagem mantido' : `${kept} cards com imagem mantidos`)
@@ -1003,7 +1091,7 @@ export function LipSyncRefsPage() {
     try {
       const scan = await api.lipSyncRefs.scanFolder(folder)
       if (seq !== pullSeq.current) return
-      if (scan.matches.length === 0 && scan.audios.length === 0 && (scan.excerpts?.length ?? 0) === 0) return
+      if (isFolderScanEmpty(scan)) return
       await startFolderImport(scan, false, { projectId, queue, quiet: true })
     } catch (error) {
       if (seq !== pullSeq.current) return
@@ -1585,7 +1673,7 @@ export function LipSyncRefsPage() {
               type="button"
               variant="secondary"
               icon={<FolderInput className="h-4 w-4" />}
-              title="Cria o projeto com o nome da pasta e puxa 1.png, 1.mp3 ou a pasta 01"
+              title="Cria o projeto com o nome da pasta e puxa 1.png, 1.mp3 ou a pasta 01 (áudio, trecho .txt e prompt.txt)"
               onClick={() => void importFromFolder()}
             >
               Puxar da pasta
@@ -1677,7 +1765,7 @@ export function LipSyncRefsPage() {
                 className={toolbarButtonClass}
                 icon={<FolderInput className="h-3.5 w-3.5" />}
                 disabled={busy}
-                title="Cria um projeto com o nome da pasta escolhida. Não reaproveita outro projeto já feito. 1.png, 1.mp3 ou a pasta 01 viram a cena 1."
+                title="Cria um projeto com o nome da pasta escolhida. Não reaproveita outro projeto já feito. 1.png, 1.mp3 ou a pasta 01 viram a cena 1. Na pasta 01, o .txt é o trecho e o prompt.txt é o prompt de lipsync. O documento do ChatGPT (.txt ou .md) na pasta preenche os prompts Comfy das cenas e a página Prompts Flow."
                 onClick={() => void importFromFolder()}
               >
                 Puxar da pasta

@@ -35,16 +35,25 @@ export function chatDockMaxWidth(viewportWidth: number): number {
   )
 }
 
-export function chatDockMaxHeight(viewportHeight: number): number {
+export function chatDockMaxHeight(viewportHeight: number, bottomClearance = 0): number {
+  const clearance = Math.max(0, bottomClearance)
   return Math.max(
     1,
-    Math.min(Math.floor(viewportHeight * VIEWPORT_HEIGHT_RATIO), viewportHeight - CHAT_DOCK_VERTICAL_MARGIN),
+    Math.min(
+      Math.floor(viewportHeight * VIEWPORT_HEIGHT_RATIO),
+      viewportHeight - CHAT_DOCK_VERTICAL_MARGIN - clearance,
+    ),
   )
 }
 
-export function clampChatDockSize(width: number, height: number, viewport: ViewportSize): ChatDockSize {
+export function clampChatDockSize(
+  width: number,
+  height: number,
+  viewport: ViewportSize,
+  bottomClearance = 0,
+): ChatDockSize {
   const maxWidth = chatDockMaxWidth(viewport.width)
-  const maxHeight = chatDockMaxHeight(viewport.height)
+  const maxHeight = chatDockMaxHeight(viewport.height, bottomClearance)
   const minWidth = Math.min(CHAT_DOCK_MIN_WIDTH, maxWidth)
   const minHeight = Math.min(CHAT_DOCK_MIN_HEIGHT, maxHeight)
 
@@ -62,10 +71,12 @@ export function normalizeChatDockSize(
   width: unknown,
   height: unknown,
   viewport: ViewportSize,
+  bottomClearance = 0,
 ): ChatDockSize {
   return clampChatDockSize(
     finiteNumber(width, CHAT_DOCK_DEFAULT_WIDTH),
     finiteNumber(height, CHAT_DOCK_DEFAULT_HEIGHT),
     viewport,
+    bottomClearance,
   )
 }

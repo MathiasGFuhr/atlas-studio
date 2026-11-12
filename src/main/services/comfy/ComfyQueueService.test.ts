@@ -88,6 +88,10 @@ class FakeComfy implements ComfyApi {
     this.guard()
     return { ok: true, message: 'ok' }
   }
+  async listObjectInfoClassTypes() {
+    this.guard()
+    return ['LoadImage', 'LoadAudio', 'SaveVideo', 'TextGenerateLTX2Prompt']
+  }
   async upload(_localPath: string, remoteName: string) {
     this.guard()
     this.uploads.push(remoteName)

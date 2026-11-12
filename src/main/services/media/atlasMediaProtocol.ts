@@ -8,6 +8,8 @@ import { parseByteRange } from '../../../shared/mediaRange'
 import { lipSyncRefRepository } from '../../repositories/lipSyncRefRepository'
 import { projectRepository } from '../../repositories/projectRepository'
 import { shortsRepository } from '../../repositories/shortsRepository'
+import { editorRepository } from '../../repositories/editorRepository'
+import { isInsideEditorRoot } from '../editor/editorMedia'
 import { getUserDataPath } from '../../paths'
 import { ATLAS_MEDIA_SCHEME, isAllowedImagePath } from './localImageUrl'
 import { getImageThumbnail, parseThumbWidth } from './imageThumbnails'
@@ -76,6 +78,12 @@ function isAudioFile(filePath: string): boolean {
 function isAllowedMediaPath(resolved: string): boolean {
   if (isInsideRoot(resolved, shortsRoot()) || isInsideRoot(resolved, musicRoot())) return true
   if (isAllowedImagePath(resolved)) return true
+  if (isInsideEditorRoot(resolved)) return true
+  try {
+    if (editorRepository.isKnownSourcePath(resolved)) return true
+  } catch {
+    /* repositório ainda não pronto */
+  }
   if (isAudioFile(resolved) && isInsideRoot(resolved, lipsyncRefsRoot())) return true
   if (isAudioFile(resolved)) {
     try {

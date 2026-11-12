@@ -141,6 +141,121 @@ function seedLegacyContent(db: AppDatabase) {
   ).run(at, at)
 }
 
+describe('projetos Google Flow', () => {
+  it('cria a tabela google_flow_projects na versão 38', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    const result = migrateSchema(db)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    const tables = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>
+    ).map((row) => row.name)
+    expect(tables).toContain('google_flow_projects')
+    const columns = (
+      db.prepare('PRAGMA table_info(google_flow_projects)').all() as Array<{ name: string }>
+    ).map((column) => column.name)
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'name',
+        'local_folder_path',
+        'remote_url',
+        'remote_id',
+        'account_hint',
+        'sync_status',
+        'last_error',
+        'create_in_flow',
+        'operation_id',
+        'created_at',
+        'updated_at',
+      ]),
+    )
+  })
+
+  it('cria a tabela google_flow_references na versão 39', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    const result = migrateSchema(db)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    const tables = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>
+    ).map((row) => row.name)
+    expect(tables).toContain('google_flow_references')
+    const columns = (
+      db.prepare('PRAGMA table_info(google_flow_references)').all() as Array<{ name: string }>
+    ).map((column) => column.name)
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        'id',
+        'project_id',
+        'label',
+        'image_path',
+        'sort_order',
+        'created_at',
+        'updated_at',
+      ]),
+    )
+  })
+
+  it('adiciona image_model e image_outputs em google_flow_projects na versão 41', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    const result = migrateSchema(db)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    const columns = (
+      db.prepare('PRAGMA table_info(google_flow_projects)').all() as Array<{ name: string }>
+    ).map((column) => column.name)
+    expect(columns).toEqual(expect.arrayContaining(['image_model', 'image_outputs', 'prompt']))
+  })
+
+  it('adiciona sync de refs, generation_paused e cards na versão 42', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    const result = migrateSchema(db)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    const projectCols = (
+      db.prepare('PRAGMA table_info(google_flow_projects)').all() as Array<{ name: string }>
+    ).map((column) => column.name)
+    expect(projectCols).toContain('generation_paused')
+    const refCols = (
+      db.prepare('PRAGMA table_info(google_flow_references)').all() as Array<{ name: string }>
+    ).map((column) => column.name)
+    expect(refCols).toEqual(
+      expect.arrayContaining([
+        'flow_upload_key',
+        'flow_file_name',
+        'sync_status',
+        'synced_at',
+        'last_sync_error',
+      ]),
+    )
+    const tables = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+        name: string
+      }>
+    ).map((row) => row.name)
+    expect(tables).toContain('google_flow_generation_cards')
+  })
+
+  it('cria as tabelas do editor de vídeo na versão 43', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    migrateSchema(db)
+    const tables = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+        name: string
+      }>
+    ).map((row) => row.name)
+    expect(tables).toEqual(expect.arrayContaining(['editor_projects', 'editor_assets']))
+    const assetCols = (
+      db.prepare('PRAGMA table_info(editor_assets)').all() as Array<{ name: string }>
+    ).map((column) => column.name)
+    expect(assetCols).toEqual(
+      expect.arrayContaining(['source_path', 'proxy_status', 'thumbs_path', 'waveform_path']),
+    )
+  })
+})
+
 describe('legenda da faixa', () => {
   it('cria as colunas de legenda mesmo quando o banco já passou da versão 25', async () => {
     const db = await createLegacyDatabase()

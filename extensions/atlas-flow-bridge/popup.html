@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Atlas Flow Bridge</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-width: 300px;
+        background: #12151a;
+        color: #e8edf2;
+      }
+      main {
+        padding: 14px 16px 16px;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-weight: 650;
+      }
+      .sub {
+        margin: 0 0 12px;
+        font-size: 11px;
+        color: #9aa7b5;
+      }
+      .banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .ok {
+        border: 1px solid rgba(53, 191, 155, 0.45);
+        background: rgba(53, 191, 155, 0.12);
+        color: #35bf9b;
+      }
+      .bad {
+        border: 1px solid rgba(248, 113, 113, 0.35);
+        background: rgba(239, 68, 68, 0.12);
+        color: #f87171;
+      }
+      p {
+        margin: 0 0 10px;
+        font-size: 12px;
+        line-height: 1.45;
+        color: #9aa7b5;
+      }
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        padding: 9px 12px;
+        background: #35bf9b;
+        color: #04140f;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button.secondary {
+        margin-top: 8px;
+        background: #1c222b;
+        color: #e8edf2;
+        border: 1px solid #2a3340;
+      }
+      button.finish {
+        margin-bottom: 8px;
+        background: #f59e0b;
+        color: #1a0f00;
+      }
+      button:hover {
+        filter: brightness(1.05);
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: default;
+        filter: none;
+      }
+      code {
+        font-size: 11px;
+        color: #c7d2de;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Atlas Flow Bridge</h1>
+      <p class="sub">Automação do Google Flow em segundo plano</p>
+      <div id="status" class="banner bad">Verificando…</div>
+      <p id="detail">Procure o Atlas Studio em execução.</p>
+      <button id="open-flow" class="finish" type="button">Abrir aba do Flow</button>
+      <button id="reconnect" type="button">Reconectar ao Atlas</button>
+      <button id="reset" class="secondary" type="button">Liberar fila travada</button>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -127,6 +127,24 @@ export type LipSyncFolderScan = {
   ignoredAudios: string[]
   /** `.txt` de uma pasta numerada que não tinha áudio nem `N.mp3` na raiz. */
   excerpts: LipSyncNumberedExcerpt[]
+  /** `.txt` com "prompt" no nome, dentro da pasta numerada: prompt de lipsync da cena. */
+  prompts: LipSyncNumberedExcerpt[]
+  /** Documento de direção (CENA + ComfyUI/FLOW) solto na raiz; o mais recente vence. */
+  directionDoc: LipSyncDirectionDoc | null
+}
+
+export type LipSyncDirectionDoc = {
+  fileName: string
+  path: string
+  text: string
+}
+
+/** Formatos de texto que o ChatGPT baixa e o Atlas lê como documento de direção. */
+export const LIPSYNC_DIRECTION_DOC_EXTENSIONS = ['.txt', '.md']
+
+/** `prompt.txt`, `Prompt lipsync.txt`… Os outros `.txt` da pasta da cena são o trecho. */
+export function isLipSyncPromptFileName(fileName: string): boolean {
+  return stemKey(fileName).includes('prompt')
 }
 
 export type InstrumentalPreset = {
@@ -282,12 +300,16 @@ export function joinPromptTexts(texts: string[]): string {
 
 /** Último número de cena definido pela pasta (imagem, áudio ou `.txt`). `1.mp3`…`15.mp3` → 15. */
 export function lastLipSyncFolderSceneNumber(
-  scan: Pick<LipSyncFolderScan, 'matches' | 'audios'> & { excerpts?: LipSyncNumberedExcerpt[] },
+  scan: Pick<LipSyncFolderScan, 'matches' | 'audios'> & {
+    excerpts?: LipSyncNumberedExcerpt[]
+    prompts?: LipSyncNumberedExcerpt[]
+  },
 ): number {
   const lastImage = scan.matches[scan.matches.length - 1]?.number ?? 0
   const lastAudio = scan.audios[scan.audios.length - 1]?.number ?? 0
   const lastExcerpt = Math.max(0, ...(scan.excerpts ?? []).map((entry) => entry.number))
-  return Math.max(lastImage, lastAudio, lastExcerpt)
+  const lastPrompt = Math.max(0, ...(scan.prompts ?? []).map((entry) => entry.number))
+  return Math.max(lastImage, lastAudio, lastExcerpt, lastPrompt)
 }
 
 function stemKey(fileName: string): string {

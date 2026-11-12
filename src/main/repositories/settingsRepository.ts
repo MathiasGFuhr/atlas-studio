@@ -62,6 +62,9 @@ const DEFAULTS: AppSettings = {
   contentAreasMusicEnabled: true,
   chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
   chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
+  chatFabHidden: false,
+  chatFabX: null,
+  chatFabY: null,
   musicExportFolder: '',
   worldClocks: DEFAULT_WORLD_CLOCKS.map((clock) => ({ ...clock })),
 }

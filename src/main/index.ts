@@ -72,22 +72,46 @@ function createWindow() {
 
   splashController?.attachMain(mainWindow)
 
-  mainWindow.once('ready-to-show', () => {
+  let revealTimer: ReturnType<typeof setTimeout> | null = null
+  let revealed = false
+  const revealMainWindow = () => {
+    if (revealed || mainWindow.isDestroyed()) return
+    revealed = true
+    if (revealTimer) {
+      clearTimeout(revealTimer)
+      revealTimer = null
+    }
     if (splashController?.isActive) {
       splashController.notifyMainReady()
       return
     }
     mainWindow.show()
     mainWindow.focus()
+  }
+
+  mainWindow.once('ready-to-show', revealMainWindow)
+  mainWindow.webContents.once('did-finish-load', revealMainWindow)
+  mainWindow.webContents.on('did-fail-load', (_event, code, description, validatedURL) => {
+    console.error('[atlas] renderer did-fail-load', { code, description, validatedURL })
   })
 
+  // Em desenvolvimento, falhas do serviço de rede do Chromium podem impedir
+  // o ready-to-show mesmo com o renderer carregado. Nunca deixe a janela oculta.
   if (process.env.VITE_DEV_SERVER_URL) {
-    void mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+    revealTimer = setTimeout(revealMainWindow, 3000)
+  }
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    // vite-plugin-electron + base './' pode gerar "http://localhost:5173./"
+    const raw = process.env.VITE_DEV_SERVER_URL
+    const devUrl = raw.replace(/\.\/?$/, '/')
+    void mainWindow.loadURL(devUrl)
   } else {
     void mainWindow.loadFile(path.join(getMainDir(), '../dist/index.html'))
   }
 
   mainWindow.on('closed', () => {
+    if (revealTimer) clearTimeout(revealTimer)
     setMainWindow(null)
   })
 }

@@ -60,6 +60,9 @@ export function seedIfEmpty(db: AppDatabase, workspaceRoot: string) {
     contentAreasMusicEnabled: true,
     chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
     chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
+    chatFabHidden: false,
+    chatFabX: null,
+    chatFabY: null,
     musicExportFolder: '',
     worldClocks: DEFAULT_WORLD_CLOCKS.map((clock) => ({ ...clock })),
   }

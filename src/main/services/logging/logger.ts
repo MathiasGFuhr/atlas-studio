@@ -26,7 +26,7 @@ function sanitize(value: unknown): unknown {
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(value)) {
-      if (/secret|token|password|authorization|apiKey/i.test(k)) {
+      if (/secret|token|password|authorization|api[_-]?key|runpodApiKey/i.test(k)) {
         out[k] = '[redacted]'
       } else if (k === 'prompt' || k === 'skillMarkdown' || k === 'content') {
         out[k] = typeof v === 'string' ? `[omitted ${v.length} chars]` : '[omitted]'

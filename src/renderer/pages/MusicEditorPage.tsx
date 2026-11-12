@@ -211,21 +211,10 @@ export function MusicEditorPage() {
         })
         const nextAnalysis = clipAnalysisToAudible(analyzeMusic(mono, sampleRate))
         const audibleMono = sliceSamplesToDuration(mono, sampleRate, nextAnalysis.duration)
-        let nextTrack = { ...current, duration: nextAnalysis.duration }
-        const generated = current.cutMode !== 'manual'
-        if (generated) {
-          nextTrack = {
-            ...nextTrack,
-            cutMode: 'manual',
-            appliedPreset: null,
-            cuts: [],
-            selectedId: null,
-          }
-        } else {
-          nextTrack = {
-            ...nextTrack,
-            cuts: fitCutsToExactDuration(nextTrack.cuts, nextTrack.duration),
-          }
+        let nextTrack = {
+          ...current,
+          duration: nextAnalysis.duration,
+          cuts: fitCutsToExactDuration(current.cuts, nextAnalysis.duration),
         }
         const lastCutEnd = nextTrack.cuts.reduce((max, cut) => Math.max(max, cut.end), 0)
         if (
@@ -241,15 +230,7 @@ export function MusicEditorPage() {
             : nextAnalysis
         const editorialSamples = sliceSamplesToDuration(audibleMono, sampleRate, nextTrack.duration)
         const durationChanged = Math.abs((current.duration || 0) - nextTrack.duration) > 0.05
-        if (generated) {
-          await api.music.update(id, {
-            duration: nextTrack.duration,
-            cutMode: 'manual',
-            cuts: [],
-            appliedPreset: null,
-            selectedId: null,
-          })
-        } else if (durationChanged) {
+        if (durationChanged) {
           await api.music.update(id, { duration: nextTrack.duration, cuts: nextTrack.cuts })
         }
         if (cancelled) return
@@ -913,12 +894,7 @@ export function MusicEditorPage() {
       />
 
       <div data-tour="page-actions" className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl border border-border-soft bg-card px-4 py-3">
-        <Button
-          variant="ghost"
-          onClick={() =>
-            navigate(track.projectId ? `/musica/projetos/${track.projectId}` : '/musica/faixas')
-          }
-        >
+        <Button variant="ghost" onClick={() => navigate('/musica/faixas')}>
           ← Voltar
         </Button>
         <Button

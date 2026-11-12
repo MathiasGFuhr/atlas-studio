@@ -183,6 +183,8 @@ describe('applyInstrumentalChoices', () => {
       ignored: [],
       ignoredAudios: [],
       excerpts: [],
+      prompts: [],
+      directionDoc: null,
       audios: [
         { number: 2, fileName: 'solo.wav', path: 'C:/02/solo.wav', duration: null, excerpt: null },
       ],

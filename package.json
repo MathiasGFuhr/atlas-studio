@@ -1,7 +1,7 @@
 {
   "name": "atlas-studio",
   "productName": "Atlas Studio",
-  "version": "2.0.13",
+  "version": "2.0.14",
   "description": "Atlas Studio ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ProduÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o musical com IA",
   "private": true,
   "main": "dist-electron/main.js",
@@ -33,10 +33,19 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
+    "@tsparticles/react": "^4.5.4",
+    "@tsparticles/slim": "^4.5.4",
+    "animejs": "^4.5.0",
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.3.0",
+    "gl-transitions": "^3.2.0",
+    "gsap": "^3.15.1",
+    "lottie-react": "^3.1.2",
     "lucide-react": "^0.544.0",
+    "motion": "^14.12.0",
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.23.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.8.2",
@@ -90,6 +99,10 @@
       {
         "from": "resources/sql-wasm.wasm",
         "to": "sql-wasm.wasm"
+      },
+      {
+        "from": "extensions/atlas-flow-bridge",
+        "to": "atlas-flow-bridge"
       },
       {
         "from": "build/icon.ico",

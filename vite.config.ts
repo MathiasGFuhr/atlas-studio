@@ -35,9 +35,10 @@ function copySplashPlugin(): Plugin {
   }
 }
 
-export default defineConfig({
-  // Relativo obrigatório para loadFile() no Electron empacotado
-  base: './',
+export default defineConfig(({ command }) => ({
+  // Em serve, '/' evita VITE_DEV_SERVER_URL inválida (…5173./) do vite-plugin-electron.
+  // No build, './' continua obrigatório para loadFile() no Electron empacotado.
+  base: command === 'serve' ? '/' : './',
   plugins: [
     react(),
     tailwindcss(),
@@ -88,6 +89,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: '127.0.0.1',
     // Não abrir o navegador — o Atlas Studio real é a janela Electron.
     open: false,
     watch: {
@@ -95,4 +97,4 @@ export default defineConfig({
       ignored: ['**/release/**', '**/release-*/**'],
     },
   },
-})
+}))

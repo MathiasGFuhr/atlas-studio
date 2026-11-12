@@ -1,3 +1,4 @@
+import { safeStorage } from 'electron'
 import { getDb } from '../../db/database'
 import type {
   ComfyApiWorkflow,
@@ -9,6 +10,17 @@ import type {
   ComfyOutputFile,
 } from '../../../shared/comfy'
 import { normalizeComfyConfig } from '../../../shared/comfy'
+import {
+  decodeRunpodSecret,
+  encodeRunpodSecret,
+  type RunpodSecretCodec,
+} from './runpod/runpodSecretStore'
+import {
+  decodeRunpodS3Secrets,
+  encodeRunpodS3Secrets,
+  type RunpodS3SecretBundle,
+} from './runpod/runpodS3SecretStore'
+import type { RunpodS3Credentials } from './runpod/RunpodS3Client'
 
 export type ComfyJobPatch = Partial<
   Pick<ComfyJob, 'status' | 'promptId' | 'outputPath' | 'error' | 'attempts'>
@@ -30,7 +42,21 @@ export interface ComfyStore {
 
 const CONFIG_KEY = 'comfyConfig'
 const WORKFLOW_KEY = 'comfyWorkflowJson'
+/** Legacy plaintext — migrado para encrypted quando safeStorage estiver disponível. */
 const RUNPOD_API_KEY = 'comfyRunpodApiKey'
+const RUNPOD_API_KEY_ENC = 'comfyRunpodApiKeyEnc'
+
+function runpodSecretCodec(): RunpodSecretCodec | null {
+  try {
+    return {
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+      encryptString: (plain) => safeStorage.encryptString(plain),
+      decryptString: (buffer) => safeStorage.decryptString(buffer),
+    }
+  } catch {
+    return null
+  }
+}
 
 type BatchRow = {
   id: string
@@ -116,15 +142,21 @@ function mapJob(row: JobRow): StoredComfyJob {
   }
 }
 
+const RUNPOD_S3_CREDS = 'comfyRunpodS3Creds'
+const RUNPOD_S3_CREDS_ENC = 'comfyRunpodS3CredsEnc'
+
 export const sqliteComfyStore: ComfyStore & {
   saveConfig(config: ComfyConfig): ComfyConfig
   saveWorkflow(workflow: ComfyApiWorkflow): void
   getRunpodApiKey(): string
   saveRunpodApiKey(apiKey: string): void
+  getRunpodS3Credentials(): RunpodS3Credentials | null
+  saveRunpodS3Credentials(creds: RunpodS3SecretBundle | null): void
+  hasRunpodS3Credentials(): boolean
 } = {
   getConfig() {
     const raw = readSetting(CONFIG_KEY)
-    const hasRunpodApiKey = Boolean(readSetting(RUNPOD_API_KEY)?.trim())
+    const hasRunpodApiKey = Boolean(this.getRunpodApiKey())
     if (!raw) return normalizeComfyConfig({ hasRunpodApiKey })
     try {
       return normalizeComfyConfig({ ...(JSON.parse(raw) as Partial<ComfyConfig>), hasRunpodApiKey })
@@ -144,22 +176,74 @@ export const sqliteComfyStore: ComfyStore & {
         trimToAudio: next.trimToAudio,
         workflowName: next.workflowName,
         workflowMapping: next.workflowMapping,
+        runpodAutoInfraEnabled: next.runpodAutoInfraEnabled,
+        runpodPreferredPodId: next.runpodPreferredPodId,
+        runpodDryRunStarts: next.runpodDryRunStarts,
       }),
     )
     return next
   },
 
   getRunpodApiKey() {
-    return readSetting(RUNPOD_API_KEY)?.trim() ?? ''
+    const decoded = decodeRunpodSecret(
+      readSetting(RUNPOD_API_KEY_ENC),
+      readSetting(RUNPOD_API_KEY),
+      runpodSecretCodec(),
+    )
+    if (decoded.shouldMigrateToEncrypted && decoded.apiKey) {
+      this.saveRunpodApiKey(decoded.apiKey)
+    }
+    return decoded.apiKey
   },
 
   saveRunpodApiKey(apiKey) {
-    const value = apiKey.trim()
-    if (!value) {
-      getDb().prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_API_KEY)
+    const encoded = encodeRunpodSecret(apiKey, runpodSecretCodec())
+    const db = getDb()
+    if (encoded.mode === 'absent') {
+      db.prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_API_KEY)
+      db.prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_API_KEY_ENC)
       return
     }
-    writeSetting(RUNPOD_API_KEY, value)
+    if (encoded.mode === 'encrypted') {
+      writeSetting(RUNPOD_API_KEY_ENC, encoded.value)
+      db.prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_API_KEY)
+      return
+    }
+    writeSetting(RUNPOD_API_KEY, encoded.value)
+    db.prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_API_KEY_ENC)
+  },
+
+  getRunpodS3Credentials() {
+    const decoded = decodeRunpodS3Secrets(
+      readSetting(RUNPOD_S3_CREDS_ENC),
+      readSetting(RUNPOD_S3_CREDS),
+      runpodSecretCodec(),
+    )
+    if (decoded.shouldMigrateToEncrypted && decoded.credentials) {
+      this.saveRunpodS3Credentials(decoded.credentials)
+    }
+    return decoded.credentials
+  },
+
+  saveRunpodS3Credentials(creds) {
+    const encoded = encodeRunpodS3Secrets(creds, runpodSecretCodec())
+    const db = getDb()
+    if (encoded.mode === 'absent') {
+      db.prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_S3_CREDS)
+      db.prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_S3_CREDS_ENC)
+      return
+    }
+    if (encoded.mode === 'encrypted') {
+      writeSetting(RUNPOD_S3_CREDS_ENC, encoded.value)
+      db.prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_S3_CREDS)
+      return
+    }
+    writeSetting(RUNPOD_S3_CREDS, encoded.value)
+    db.prepare('DELETE FROM settings WHERE key = ?').run(RUNPOD_S3_CREDS_ENC)
+  },
+
+  hasRunpodS3Credentials() {
+    return Boolean(this.getRunpodS3Credentials())
   },
 
   getWorkflow() {

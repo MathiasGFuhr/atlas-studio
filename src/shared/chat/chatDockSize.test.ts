@@ -33,6 +33,11 @@ describe('clampChatDockSize', () => {
     expect(next.height).toBeLessThanOrEqual(600 - 120)
   })
 
+  it('reserva espaço inferior (timeline) ao limitar a altura', () => {
+    const next = clampChatDockSize(540, 720, desktop, 320)
+    expect(next.height).toBeLessThanOrEqual(desktop.height - CHAT_DOCK_VERTICAL_MARGIN - 320)
+  })
+
   it('não exige mínimo maior que o máximo da viewport', () => {
     const tiny = { width: 320, height: 400 }
     const next = clampChatDockSize(540, 720, tiny)

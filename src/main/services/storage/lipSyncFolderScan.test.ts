@@ -162,6 +162,55 @@ describe('scanLipSyncFolder', () => {
     expect(scan.excerpts.map((entry) => [entry.number, entry.text])).toEqual([[3, 'fala']])
   })
 
+  it('separa o prompt.txt do trecho dentro da pasta da cena', () => {
+    const scene = path.join(root, '01')
+    fs.mkdirSync(scene)
+    fs.writeFileSync(path.join(scene, 'refrao.mp3'), '')
+    fs.writeFileSync(path.join(scene, 'refrao.txt'), 'trecho cantado')
+    fs.writeFileSync(path.join(scene, 'prompt.txt'), '\uFEFFcantor no palco\r\n')
+    const onlyPrompt = path.join(root, '02')
+    fs.mkdirSync(onlyPrompt)
+    fs.writeFileSync(path.join(onlyPrompt, 'Prompt lipsync.txt'), 'close no rosto')
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.audios.map((entry) => [entry.number, entry.fileName, entry.excerpt])).toEqual([
+      [1, 'refrao.mp3', 'trecho cantado'],
+    ])
+    expect(scan.excerpts).toEqual([])
+    expect(scan.prompts.map((entry) => [entry.number, entry.text])).toEqual([
+      [1, 'cantor no palco'],
+      [2, 'close no rosto'],
+    ])
+  })
+
+  it('acha o documento de direção solto na raiz', () => {
+    touch('1.png', 'notas.txt')
+    fs.writeFileSync(path.join(root, 'leia-me.md'), 'sem cenas aqui')
+    const doc = [
+      '1- CENA 01 — Abertura',
+      'FLOW — IMAGEM',
+      '```',
+      'flow da cena 1',
+      '```',
+      'ComfyUI',
+      '```',
+      'comfy da cena 1',
+      '```',
+    ].join('\n')
+    fs.writeFileSync(path.join(root, 'Direção do clipe.md'), doc)
+
+    const scan = scanLipSyncFolder(root)
+
+    expect(scan.directionDoc?.fileName).toBe('Direção do clipe.md')
+    expect(scan.directionDoc?.text).toBe(doc)
+  })
+
+  it('sem documento de direção, directionDoc fica null', () => {
+    touch('1.png', 'notas.txt')
+    expect(scanLipSyncFolder(root).directionDoc).toBeNull()
+  })
+
   it('falha quando a pasta não existe', () => {
     expect(() => scanLipSyncFolder(path.join(root, 'nao-existe'))).toThrow('Pasta não encontrada.')
   })

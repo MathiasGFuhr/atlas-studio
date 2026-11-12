@@ -7,29 +7,11 @@ import { PageShell } from '../components/PageShell'
 import { useToast } from '../components/Toast'
 import { getAtlasApi } from '../lib/api'
 import { environmentBreadcrumb } from '../lib/environments'
+import { readFlowSource, writeFlowSource } from '../lib/flowPromptSource'
 import { cn } from '../lib/utils'
-
-const FLOW_SOURCE_STORAGE_KEY = 'atlas.flow.prompts.source'
 
 function sceneLabel(number: number): string {
   return `Cena ${String(number).padStart(2, '0')}`
-}
-
-function readFlowSource(): string {
-  try {
-    return window.localStorage.getItem(FLOW_SOURCE_STORAGE_KEY) ?? ''
-  } catch {
-    return ''
-  }
-}
-
-function writeFlowSource(value: string): void {
-  try {
-    if (value) window.localStorage.setItem(FLOW_SOURCE_STORAGE_KEY, value)
-    else window.localStorage.removeItem(FLOW_SOURCE_STORAGE_KEY)
-  } catch {
-    // armazenamento cheio ou indisponível: a sessão atual continua na memória
-  }
 }
 
 /**

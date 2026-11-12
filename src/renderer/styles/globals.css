@@ -700,3 +700,66 @@ select:focus-visible {
 .sidebar-channel-menu::-webkit-scrollbar-thumb:hover {
   background: var(--color-border-strong);
 }
+
+/* —— React Bits–inspired effect overlays (preview) —— */
+@keyframes atlas-bits-aurora {
+  0%, 100% { transform: translate3d(-2%, -1%, 0) scale(1); opacity: 0.75; }
+  50% { transform: translate3d(3%, 2%, 0) scale(1.06); opacity: 1; }
+}
+@keyframes atlas-bits-veil {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(4%, -3%, 0) rotate(2deg); }
+}
+@keyframes atlas-bits-particles {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-3%, 4%, 0); }
+}
+@keyframes atlas-bits-silk {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+@keyframes atlas-bits-plasma {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.12) rotate(8deg); }
+}
+@keyframes atlas-bits-rays {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes atlas-bits-blinds {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-12px); }
+}
+@keyframes atlas-bits-pixels {
+  0%, 100% { transform: scale(1); filter: hue-rotate(0deg); }
+  50% { transform: scale(1.08); filter: hue-rotate(40deg); }
+}
+@keyframes atlas-bits-liquid {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(4%, -2%, 0) scale(1.05); }
+  66% { transform: translate3d(-3%, 3%, 0) scale(0.98); }
+}
+@keyframes atlas-bits-prism {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes atlas-bits-radar {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes atlas-bits-crt {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.75; }
+}
+@keyframes atlas-bits-bends {
+  0%, 100% { filter: hue-rotate(0deg); }
+  50% { filter: hue-rotate(50deg); }
+}
+@keyframes atlas-bits-lines {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-18px); }
+}
+@keyframes atlas-bits-rings {
+  0%, 100% { transform: scale(0.92); opacity: 0.45; }
+  50% { transform: scale(1.12); opacity: 0.7; }
+}

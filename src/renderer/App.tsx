@@ -17,6 +17,10 @@ import { ChatDock } from './components/chat/ChatDock'
 import { TeamChatIncoming } from './components/team/TeamChatIncoming'
 import { getAtlasApi } from './lib/api'
 import { openAtlasChat } from './lib/chatEvents'
+import {
+  getFabBottomClearance,
+  subscribeFabBottomClearance,
+} from './lib/fabClearance'
 import { useCodexAuth } from './hooks/useCodexAuth'
 import { WorkspaceCapabilitiesProvider } from './hooks/useWorkspaceCapabilities'
 import { AppUpdateProvider } from './hooks/useAppUpdate'
@@ -28,6 +32,25 @@ import { version as appVersion } from '../../package.json'
 import { AtlasLogo } from './components/AtlasLogo'
 import { shouldShowWelcome, WelcomeSplash } from './components/WelcomeSplash'
 import { shouldShowPremiereV2, WelcomePremiereV2 } from './components/WelcomePremiereV2'
+
+function AppVersionBadge({ version }: { version: string }) {
+  const [bottom, setBottom] = useState(() => 12 + getFabBottomClearance())
+  useEffect(() => {
+    const sync = () => setBottom(12 + getFabBottomClearance())
+    sync()
+    return subscribeFabBottomClearance(sync)
+  }, [])
+  return (
+    <div
+      role="status"
+      aria-label="Versão do aplicativo"
+      className="pointer-events-none fixed right-20 z-[40] text-[11px] tabular-nums tracking-wide text-muted"
+      style={{ bottom }}
+    >
+      v{version}
+    </div>
+  )
+}
 
 /*
  * Páginas fora da Home viram chunks separados: o bundle inicial fica menor e
@@ -48,6 +71,8 @@ const pageLoaders = {
   musicEditor: () => import('./pages/MusicEditorPage'),
   shortsStudio: () => import('./pages/ShortsStudioPage'),
   shortsProjects: () => import('./pages/ShortsProjectsPage'),
+  editorProjects: () => import('./pages/EditorProjectsPage'),
+  editor: () => import('./pages/EditorPage'),
   tasks: () => import('./pages/TasksPage'),
   teamChat: () => import('./pages/TeamChatPage'),
   financeiro: () => import('./pages/FinanceiroPage'),
@@ -83,6 +108,10 @@ const ShortsStudioPage = lazy(() =>
 const ShortsProjectsPage = lazy(() =>
   pageLoaders.shortsProjects().then((m) => ({ default: m.ShortsProjectsPage })),
 )
+const EditorProjectsPage = lazy(() =>
+  pageLoaders.editorProjects().then((m) => ({ default: m.EditorProjectsPage })),
+)
+const EditorPage = lazy(() => pageLoaders.editor().then((m) => ({ default: m.EditorPage })))
 const TasksPage = lazy(() => pageLoaders.tasks().then((m) => ({ default: m.TasksPage })))
 const TeamChatPage = lazy(() => pageLoaders.teamChat().then((m) => ({ default: m.TeamChatPage })))
 const FinanceiroPage = lazy(() =>
@@ -266,6 +295,8 @@ export default function App() {
                 <Route path="/canais/:id" element={<ChannelCalendarPage />} />
                 <Route path="/shorts" element={<ShortsProjectsPage />} />
                 <Route path="/shorts/:jobId" element={<ShortsStudioPage />} />
+                <Route path="/editor" element={<EditorProjectsPage />} />
+                <Route path="/editor/:id" element={<EditorPage />} />
                 <Route path="/tarefas" element={<TasksPage />} />
                 <Route path="/financeiro" element={<FinanceiroPage />} />
                 <Route path="/equipe" element={<TeamChatPage account={session.user} />} />
@@ -311,13 +342,7 @@ export default function App() {
         <ChatDock />
         <ComfyQueueDock />
         <TeamChatIncoming accountId={session.user.id} />
-        <div
-          role="status"
-          aria-label="Versão do aplicativo"
-          className="pointer-events-none fixed bottom-3 right-20 z-[40] text-[11px] tabular-nums tracking-wide text-muted"
-        >
-          v{appVersion}
-        </div>
+        <AppVersionBadge version={appVersion} />
 
         {premiereOpen && tourChecked ? (
           <WelcomePremiereV2

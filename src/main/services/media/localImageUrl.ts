@@ -8,7 +8,7 @@ export const ATLAS_MEDIA_SCHEME = 'atlas-media'
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 
 /** Pastas do userData cujas imagens o renderer pode carregar via atlas-media. */
-const IMAGE_ROOTS = ['lipsync-refs', 'channels']
+const IMAGE_ROOTS = ['lipsync-refs', 'channels', 'flow-refs']
 
 export function toAtlasMediaUrl(filePath: string): string {
   return `${ATLAS_MEDIA_SCHEME}://local/?p=${encodeURIComponent(path.resolve(filePath))}`

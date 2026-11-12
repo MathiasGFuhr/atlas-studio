@@ -1,8 +1,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { LipSyncFolderScan } from '../../../shared/lipSyncRefs'
+import type {
+  LipSyncDirectionDoc,
+  LipSyncFolderScan,
+  LipSyncNumberedExcerpt,
+} from '../../../shared/lipSyncRefs'
 import {
+  isLipSyncPromptFileName,
   LIPSYNC_AUDIO_EXTENSIONS,
+  LIPSYNC_DIRECTION_DOC_EXTENSIONS,
   LIPSYNC_EXCERPT_EXTENSIONS,
   LIPSYNC_IMAGE_EXTENSIONS,
   matchNumberedFiles,
@@ -11,6 +17,7 @@ import {
   sceneNumberFromFileName,
   takeSceneFolderClip,
 } from '../../../shared/lipSyncRefs'
+import { looksLikeDirectionDoc, looksLikeFlowDirectionDoc } from '../../../shared/scenePromptImport'
 import { probeAudioDuration } from '../audio/audioProbe'
 
 const PROBE_CONCURRENCY = 4
@@ -33,6 +40,17 @@ function readExcerpt(filePath: string): string {
   return fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').trim()
 }
 
+/** `.txt`/`.md` sem número na raiz que tenha CENA + bloco ComfyUI ou FLOW. */
+function findDirectionDoc(root: string): LipSyncDirectionDoc | null {
+  const candidates = filesWithExtension(root, LIPSYNC_DIRECTION_DOC_EXTENSIONS)
+    .filter((file) => sceneNumberFromFileName(file.fileName) === null)
+    .map((file) => ({ ...file, text: readExcerpt(file.path), mtime: fs.statSync(file.path).mtimeMs }))
+    .filter((file) => looksLikeDirectionDoc(file.text) || looksLikeFlowDirectionDoc(file.text))
+    .sort((a, b) => b.mtime - a.mtime)
+  const doc = candidates[0]
+  return doc ? { fileName: doc.fileName, path: doc.path, text: doc.text } : null
+}
+
 /**
  * Raiz: `1.png`, `1.mp3`, `Trecho 1.mp3` e `01 - Trecho 1.mp3`.
  * Pasta `01`, `1` ou `Trecho 01`: o áudio de dentro (qualquer nome) e o `.txt` do trecho.
@@ -52,16 +70,25 @@ export function scanLipSyncFolder(folder: string): LipSyncFolderScan {
       .filter((file) => file.text),
   )
   const folders = matchNumberedFiles(numberedDirectories(root))
+  const prompts: LipSyncNumberedExcerpt[] = []
   const clips = folders.matches.map((entry) => {
-    const texts = filesWithExtension(entry.path, LIPSYNC_EXCERPT_EXTENSIONS).map((file) => ({
+    const allTexts = filesWithExtension(entry.path, LIPSYNC_EXCERPT_EXTENSIONS).map((file) => ({
       ...file,
       text: readExcerpt(file.path),
     }))
+    const promptFile = allTexts
+      .filter((file) => isLipSyncPromptFileName(file.fileName) && file.text)
+      .sort(
+        (a, b) =>
+          a.fileName.length - b.fileName.length ||
+          a.fileName.localeCompare(b.fileName, undefined, { numeric: true }),
+      )[0]
+    if (promptFile) prompts.push({ number: entry.number, ...promptFile })
     return {
       number: entry.number,
       ...takeSceneFolderClip({
         audios: filesWithExtension(entry.path, LIPSYNC_AUDIO_EXTENSIONS),
-        texts,
+        texts: allTexts.filter((file) => !isLipSyncPromptFileName(file.fileName)),
       }),
     }
   })
@@ -79,6 +106,8 @@ export function scanLipSyncFolder(folder: string): LipSyncFolderScan {
       a.localeCompare(b, undefined, { numeric: true }),
     ),
     excerpts: merged.excerpts,
+    prompts: prompts.sort((a, b) => a.number - b.number),
+    directionDoc: findDirectionDoc(root),
   }
 }
 

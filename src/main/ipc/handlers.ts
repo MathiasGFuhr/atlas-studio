@@ -20,16 +20,45 @@ import type {
 } from '../../shared/types'
 import { projectRepository } from '../repositories/projectRepository'
 import type { ComfyConfigPatch } from '../../shared/comfy'
+import type { RunpodStartPodRequest, RunpodStopPodRequest } from '../../shared/runpod'
+import type { ComfyConnectConfirmRequest } from '../../shared/comfyConnect'
+import type { ComfyGpuRecoveryConfirmRequest } from '../../shared/comfyGpuRecovery'
+import type { LtxEnvironmentPlan } from '../../shared/ltxEnvironment'
 import {
   comfyQueueService,
+  confirmComfyConnect,
+  confirmComfyGpuRecovery,
   discoverComfyUrl,
   getComfyConfig,
+  exportLtxWorkflow,
+  getLtxEnvPlan,
+  getLtxEnvironmentStatus,
+  getCachedRunpodInfraStatus,
+  getRunpodInfraStatus,
+  getRunpodPodLifecycle,
   importComfyWorkflow,
   latestComfyView,
   listComfyViews,
+  bootstrapLtxEnvironmentAuto,
+  detectLtxEnvironmentAuto,
+  getRunpodS3CredentialStatus,
+  getSavedLtxDetection,
+  prepareComfyConnect,
+  prepareLipsyncControlledTest,
+  prepareGpuRecoveryValidation,
+  prepareLtxControlledValidationPlan,
+  previewRunpodPodStart,
+  stopRunpodExistingPod,
+  cleanupSupersededRunpodPodsForAccount,
+  refreshComfyConnectStatus,
   saveComfyConfig,
+  saveLtxEnvPlan,
+  saveRunpodS3CredentialBundle,
+  saveRunpodS3CredentialsAndBootstrap,
   startComfyBatch,
+  startRunpodExistingPod,
   testComfyConnection,
+  validateLtxPhase4Environment,
 } from '../services/comfy'
 import {
   createProjectFolder,
@@ -71,6 +100,13 @@ import {
   type LipSyncSubject,
 } from '../../shared/lipSyncRefs'
 import { lipSyncRefRepository } from '../repositories/lipSyncRefRepository'
+import type {
+  FlowProjectCreateInput,
+  FlowProjectPatch,
+  FlowReferenceUpdateInput,
+} from '../../shared/flowProjects'
+import { flowProjectService } from '../services/flow/FlowProjectService'
+import { flowReferenceRepository } from '../repositories/flowReferenceRepository'
 import { musicRepository } from '../repositories/musicRepository'
 import { transcribeLocalAudio } from '../services/shorts/transcribeLocal'
 import {
@@ -144,6 +180,7 @@ import {
   installAppUpdate,
   scheduleAutoCheck,
 } from '../services/updates/AppUpdateService'
+import { registerEditorHandlers } from './editorHandlers'
 import path from 'node:path'
 import fs from 'node:fs'
 
@@ -1244,6 +1281,74 @@ export function registerIpcHandlers(deps: {
     lipSyncRefRepository.scanFolder(folder),
   )
 
+  ipcMain.handle(IPC.flowProjects.list, (_e, filters?: { query?: string }) =>
+    flowProjectService.list(filters),
+  )
+  ipcMain.handle(IPC.flowProjects.get, (_e, id: string) => flowProjectService.get(id))
+  ipcMain.handle(IPC.flowProjects.create, (_e, input: FlowProjectCreateInput) =>
+    flowProjectService.create(input),
+  )
+  ipcMain.handle(IPC.flowProjects.update, (_e, id: string, patch: FlowProjectPatch) =>
+    flowProjectService.update(id, patch ?? {}),
+  )
+  ipcMain.handle(IPC.flowProjects.retryLink, (_e, id: string) => flowProjectService.retryLink(id))
+  ipcMain.handle(IPC.flowProjects.remove, (_e, id: string) => flowProjectService.remove(id))
+  ipcMain.handle(IPC.flowProjects.openLocal, (_e, id: string) => flowProjectService.openLocal(id))
+  ipcMain.handle(IPC.flowProjects.openRemote, (_e, id: string) => flowProjectService.openRemote(id))
+  ipcMain.handle(IPC.flowProjects.extensionStatus, () => flowProjectService.getExtensionStatus())
+  ipcMain.handle(IPC.flowProjects.listReferences, (_e, projectId: string) =>
+    flowReferenceRepository.listByProject(projectId),
+  )
+  ipcMain.handle(IPC.flowProjects.addReferences, (_e, projectId: string, filePaths: string[]) =>
+    flowReferenceRepository.addFromFiles(projectId, filePaths ?? []),
+  )
+  ipcMain.handle(
+    IPC.flowProjects.updateReference,
+    (_e, id: string, patch: FlowReferenceUpdateInput) => flowReferenceRepository.update(id, patch ?? {}),
+  )
+  ipcMain.handle(IPC.flowProjects.removeReference, (_e, id: string) =>
+    flowReferenceRepository.remove(id),
+  )
+  ipcMain.handle(IPC.flowProjects.syncReferences, (_e, projectId: string) =>
+    flowProjectService.syncReferences(projectId),
+  )
+  ipcMain.handle(
+    IPC.flowProjects.syncPrompt,
+    (_e, projectId: string, options?: { submit?: boolean; promptOverride?: string }) =>
+      flowProjectService.syncPrompt(projectId, options),
+  )
+  ipcMain.handle(IPC.flowProjects.resumeGeneration, (_e, projectId: string) =>
+    flowProjectService.resumeGeneration(projectId),
+  )
+  ipcMain.handle(IPC.flowProjects.listGenerationCards, (_e, projectId: string) =>
+    flowProjectService.listGenerationCards(projectId),
+  )
+  ipcMain.handle(IPC.flowProjects.importGenerationCards, (_e, projectId: string, source: string) =>
+    flowProjectService.importGenerationCards(projectId, source),
+  )
+  ipcMain.handle(IPC.flowProjects.addGenerationCard, (_e, projectId: string, prompt: string) =>
+    flowProjectService.addGenerationCard(projectId, prompt),
+  )
+  ipcMain.handle(
+    IPC.flowProjects.updateGenerationCard,
+    (_e, id: string, patch: { prompt?: string }) =>
+      flowProjectService.updateGenerationCard(id, patch ?? {}),
+  )
+  ipcMain.handle(IPC.flowProjects.removeGenerationCard, (_e, id: string) =>
+    flowProjectService.removeGenerationCard(id),
+  )
+  ipcMain.handle(IPC.flowProjects.prepareGenerationCard, (_e, cardId: string) =>
+    flowProjectService.prepareGenerationCard(cardId),
+  )
+  ipcMain.handle(IPC.flowProjects.generateGenerationCard, (_e, cardId: string) =>
+    flowProjectService.generateGenerationCard(cardId),
+  )
+  flowProjectService.onProgress((event) => {
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(IPC.flowProjects.progress, event)
+  })
+  flowProjectService.recoverInterrupted()
+
   ipcMain.handle(IPC.comfy.getConfig, () => getComfyConfig())
   ipcMain.handle(IPC.comfy.saveConfig, (_e, patch: ComfyConfigPatch) => saveComfyConfig(patch))
   ipcMain.handle(IPC.comfy.importWorkflow, async () => {
@@ -1258,6 +1363,71 @@ export function registerIpcHandlers(deps: {
   })
   ipcMain.handle(IPC.comfy.testConnection, (_e, baseUrl?: string) => testComfyConnection(baseUrl))
   ipcMain.handle(IPC.comfy.discoverUrl, () => discoverComfyUrl())
+  ipcMain.handle(IPC.comfy.getRunpodStatus, (_e, options?: { force?: boolean }) =>
+    getRunpodInfraStatus(options),
+  )
+  ipcMain.handle(IPC.comfy.getCachedRunpodStatus, () => getCachedRunpodInfraStatus())
+  ipcMain.handle(IPC.comfy.previewRunpodStart, (_e, podId: string) => previewRunpodPodStart(podId))
+  ipcMain.handle(IPC.comfy.startRunpodPod, (_e, request: RunpodStartPodRequest) =>
+    startRunpodExistingPod(request),
+  )
+  ipcMain.handle(IPC.comfy.stopRunpodPod, (_e, request: RunpodStopPodRequest) =>
+    stopRunpodExistingPod(request),
+  )
+  ipcMain.handle(
+    IPC.comfy.cleanupSupersededRunpodPods,
+    (_e, options?: { dryRun?: boolean; keepPodId?: string | null }) =>
+      cleanupSupersededRunpodPodsForAccount(options),
+  )
+  ipcMain.handle(IPC.comfy.getRunpodLifecycle, () => getRunpodPodLifecycle())
+  ipcMain.handle(IPC.comfy.prepareComfyConnect, () => prepareComfyConnect())
+  ipcMain.handle(IPC.comfy.confirmComfyConnect, (_e, request: ComfyConnectConfirmRequest) =>
+    confirmComfyConnect(request),
+  )
+  ipcMain.handle(IPC.comfy.confirmComfyGpuRecovery, (_e, request: ComfyGpuRecoveryConfirmRequest) =>
+    confirmComfyGpuRecovery(request),
+  )
+  ipcMain.handle(IPC.comfy.refreshComfyConnectStatus, () => refreshComfyConnectStatus())
+  ipcMain.handle(
+    IPC.comfy.prepareLipsyncControlledTest,
+    (_e, options?: { projectId?: string | null; refId?: string | null }) =>
+      prepareLipsyncControlledTest(options),
+  )
+  ipcMain.handle(
+    IPC.comfy.prepareGpuRecoveryValidation,
+    (_e, options?: { projectId?: string | null; refId?: string | null }) =>
+      prepareGpuRecoveryValidation(options),
+  )
+  ipcMain.handle(IPC.comfy.getLtxEnvironment, () => getLtxEnvPlan())
+  ipcMain.handle(IPC.comfy.saveLtxEnvironment, (_e, patch: Partial<LtxEnvironmentPlan>) =>
+    saveLtxEnvPlan(patch),
+  )
+  ipcMain.handle(IPC.comfy.diagnoseLtxEnvironment, () => getLtxEnvironmentStatus())
+  ipcMain.handle(IPC.comfy.exportLtxWorkflow, () => exportLtxWorkflow())
+  ipcMain.handle(IPC.comfy.validateLtxPhase4, () => validateLtxPhase4Environment())
+  ipcMain.handle(IPC.comfy.prepareLtxControlledValidation, () => prepareLtxControlledValidationPlan())
+  ipcMain.handle(IPC.comfy.detectLtxEnvironment, (_e, options?: { forceFullScan?: boolean }) =>
+    detectLtxEnvironmentAuto(options),
+  )
+  ipcMain.handle(IPC.comfy.getSavedLtxDetection, () => getSavedLtxDetection())
+  ipcMain.handle(IPC.comfy.bootstrapLtxEnvironment, (_e, options?: { forceFullScan?: boolean }) =>
+    bootstrapLtxEnvironmentAuto(options),
+  )
+  ipcMain.handle(IPC.comfy.getRunpodS3Status, () => getRunpodS3CredentialStatus())
+  ipcMain.handle(
+    IPC.comfy.saveRunpodS3Credentials,
+    (
+      _e,
+      creds: { accessKeyId: string; secretAccessKey: string } | null,
+    ) => saveRunpodS3CredentialBundle(creds),
+  )
+  ipcMain.handle(
+    IPC.comfy.saveRunpodS3CredentialsAndBootstrap,
+    (
+      _e,
+      creds: { accessKeyId: string; secretAccessKey: string } | null,
+    ) => saveRunpodS3CredentialsAndBootstrap(creds),
+  )
   ipcMain.handle(IPC.comfy.start, (_e, projectId: string | null, refIds?: string[] | null) =>
     startComfyBatch(projectId, refIds),
   )
@@ -1335,4 +1505,6 @@ export function registerIpcHandlers(deps: {
     if (error) throw new Error(error)
     return true
   })
+
+  registerEditorHandlers(getMainWindow)
 }

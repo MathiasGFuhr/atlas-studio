@@ -78,6 +78,19 @@ import type {
   LipSyncRefUpdateInput,
   LipSyncSubject,
 } from '../src/shared/lipSyncRefs'
+import type {
+  FlowExtensionStatus,
+  FlowProject,
+  FlowProjectCreateInput,
+  FlowProjectPatch,
+  FlowReference,
+  FlowReferenceUpdateInput,
+} from '../src/shared/flowProjects'
+import {
+  labelFromImagePath,
+  validateFlowProjectCreateInput,
+  validateFlowReferenceLabel,
+} from '../src/shared/flowProjects'
 import { DEFAULT_COMFY_CONFIG } from '../src/shared/comfy'
 
 /**
@@ -111,6 +124,8 @@ const teamMessages: TeamChatMessage[] = []
 const teamRoomsHiddenForMe = new Set<string>()
 const teamRoomsClearedBefore = new Map<string, string>()
 const lipSyncRefs: LipSyncRef[] = []
+const flowProjects: FlowProject[] = []
+const flowReferences: FlowReference[] = []
 const teamChatListeners = {
   message: new Set<(message: TeamChatMessage) => void>(),
   presence: new Set<(peers: TeamChatPeer[]) => void>(),
@@ -185,6 +200,9 @@ const settings: AppSettings = {
   contentAreasMusicEnabled: true,
   chatPanelWidth: CHAT_DOCK_DEFAULT_WIDTH,
   chatPanelHeight: CHAT_DOCK_DEFAULT_HEIGHT,
+  chatFabHidden: false,
+  chatFabX: null,
+  chatFabY: null,
   musicExportFolder: '',
   worldClocks: DEFAULT_WORLD_CLOCKS.map((clock) => ({ ...clock })),
 }
@@ -911,6 +929,32 @@ export const mockApi = {
       throw new Error('Envio ao LipSync indisponível no modo mock. Use o Electron.')
     },
   },
+  editor: {
+    list: async () => [],
+    get: async () => null,
+    create: async () => {
+      throw new Error('Editor de vídeo indisponível no modo mock. Use o Electron.')
+    },
+    update: async () => null,
+    remove: async () => false,
+    listAssets: async () => [],
+    importFiles: async () => ({ assets: [], errors: ['Importação indisponível no modo mock.'] }),
+    addFiles: async () => ({ assets: [], errors: ['Importação indisponível no modo mock.'] }),
+    removeAsset: async () => false,
+    setAssetOrigin: async () => null,
+    waveform: async () => null,
+    listLipsync: async () => [],
+    alignToMusic: async () => ({
+      placements: [],
+      skipped: [],
+      musicAssetId: '',
+    }),
+    export: async () => null,
+    pathForFile: () => '',
+    onAssetChanged: () => () => {},
+    onExportProgress: () => () => {},
+    onProjectChanged: () => () => {},
+  },
   shorts: {
     list: async () => [] as ShortsJob[],
     get: async () => null,
@@ -1420,6 +1464,203 @@ export const mockApi = {
       return archived
     },
   },
+  flowProjects: {
+    list: async (filters?: { query?: string }) => {
+      const q = filters?.query?.trim().toLowerCase()
+      return flowProjects.filter((project) => {
+        if (!q) return true
+        return (
+          project.name.toLowerCase().includes(q) ||
+          project.localFolderPath.toLowerCase().includes(q) ||
+          (project.remoteId?.toLowerCase().includes(q) ?? false)
+        )
+      })
+    },
+    get: async (id: string) => flowProjects.find((project) => project.id === id) ?? null,
+    create: async (input: FlowProjectCreateInput) => {
+      const validated = validateFlowProjectCreateInput({
+        name: input.name,
+        localFolderPath: input.localFolderPath,
+        folderExists: true,
+      })
+      if (!validated.ok) throw new Error(validated.error)
+      const now = new Date().toISOString()
+      const project: FlowProject = {
+        id: crypto.randomUUID(),
+        name: validated.name,
+        localFolderPath: validated.localFolderPath,
+        remoteUrl: null,
+        remoteId: null,
+        accountHint: null,
+        syncStatus: input.createInFlow === false ? 'local_created' : 'sync_failed',
+        lastError:
+          input.createInFlow === false
+            ? null
+            : 'Vínculo com Google Flow disponível apenas no app Electron com a extensão.',
+        createInFlow: input.createInFlow !== false,
+        operationId: crypto.randomUUID(),
+        prompt: '',
+        imageModel: 'nano-banana-2.1',
+        imageOutputs: 3,
+        generationPaused: false,
+        createdAt: now,
+        updatedAt: now,
+      }
+      flowProjects.unshift(project)
+      return project
+    },
+    update: async (id: string, patch: FlowProjectPatch) => {
+      const project = flowProjects.find((item) => item.id === id)
+      if (!project) throw new Error('Projeto Flow não encontrado.')
+      if (patch.name !== undefined) project.name = patch.name.trim()
+      if (patch.localFolderPath !== undefined) project.localFolderPath = patch.localFolderPath.trim()
+      if (patch.remoteUrl !== undefined) project.remoteUrl = patch.remoteUrl?.trim() || null
+      if (patch.remoteId !== undefined) project.remoteId = patch.remoteId?.trim() || null
+      if (patch.accountHint !== undefined) project.accountHint = patch.accountHint?.trim() || null
+      if (patch.syncStatus !== undefined) project.syncStatus = patch.syncStatus
+      if (patch.lastError !== undefined) project.lastError = patch.lastError?.trim() || null
+      if (patch.createInFlow !== undefined) project.createInFlow = patch.createInFlow
+      if (patch.prompt !== undefined) project.prompt = String(patch.prompt ?? '').slice(0, 20_000)
+      if (patch.imageModel !== undefined) project.imageModel = patch.imageModel
+      if (patch.imageOutputs !== undefined) project.imageOutputs = patch.imageOutputs
+      if (patch.generationPaused !== undefined) project.generationPaused = patch.generationPaused
+      project.updatedAt = new Date().toISOString()
+      return project
+    },
+    retryLink: async (id: string) => {
+      const project = flowProjects.find((item) => item.id === id)
+      if (!project) throw new Error('Projeto Flow não encontrado.')
+      project.syncStatus = 'sync_failed'
+      project.lastError = 'Vínculo com Google Flow disponível apenas no app Electron com a extensão.'
+      project.updatedAt = new Date().toISOString()
+      return project
+    },
+    remove: async (id: string) => {
+      const index = flowProjects.findIndex((item) => item.id === id)
+      if (index < 0) return false
+      flowProjects.splice(index, 1)
+      for (let i = flowReferences.length - 1; i >= 0; i -= 1) {
+        if (flowReferences[i]?.projectId === id) flowReferences.splice(i, 1)
+      }
+      return true
+    },
+    openLocal: async () => true,
+    openRemote: async () => {
+      throw new Error('Projeto remoto indisponível no modo mock.')
+    },
+    extensionStatus: async (): Promise<FlowExtensionStatus> => ({
+      bridgeRunning: false,
+      bridgePort: null,
+      extensionConnected: false,
+      accountHint: null,
+      extensionPath: '',
+      pairToken: null,
+      lastError: 'Disponível só no app do Atlas.',
+    }),
+    listReferences: async (projectId: string) =>
+      flowReferences
+        .filter((item) => item.projectId === projectId)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt)),
+    addReferences: async (projectId: string, filePaths: string[]) => {
+      const project = flowProjects.find((item) => item.id === projectId)
+      if (!project) throw new Error('Projeto Flow não encontrado.')
+      const existing = flowReferences.filter((item) => item.projectId === projectId)
+      let sortOrder = existing.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1
+      const created: FlowReference[] = []
+      for (const filePath of filePaths) {
+        const now = new Date().toISOString()
+        const ref: FlowReference = {
+          id: crypto.randomUUID(),
+          projectId,
+          label: validateFlowReferenceLabel(labelFromImagePath(filePath)),
+          imagePath: filePath,
+          imageUrl: null,
+          imageThumbUrl: null,
+          sortOrder,
+          flowUploadKey: null,
+          flowFileName: null,
+          syncStatus: 'local',
+          syncedAt: null,
+          lastSyncError: null,
+          createdAt: now,
+          updatedAt: now,
+        }
+        flowReferences.push(ref)
+        created.push(ref)
+        sortOrder += 1
+      }
+      return created
+    },
+    updateReference: async (id: string, patch: FlowReferenceUpdateInput) => {
+      const ref = flowReferences.find((item) => item.id === id)
+      if (!ref) return null
+      if (patch.label !== undefined) ref.label = validateFlowReferenceLabel(patch.label)
+      ref.updatedAt = new Date().toISOString()
+      return { ...ref }
+    },
+    removeReference: async (id: string) => {
+      const index = flowReferences.findIndex((item) => item.id === id)
+      if (index < 0) return false
+      flowReferences.splice(index, 1)
+      return true
+    },
+    syncReferences: async (projectId: string) => {
+      const project = flowProjects.find((item) => item.id === projectId)
+      if (!project) throw new Error('Projeto Flow não encontrado.')
+      if (!project.remoteId) {
+        throw new Error('Informe a URL do projeto existente no Google Flow antes de enviar as referências.')
+      }
+      const refs = flowReferences.filter((item) => item.projectId === projectId)
+      if (refs.length === 0) throw new Error('Anexe pelo menos uma imagem de referência neste projeto.')
+      const now = new Date().toISOString()
+      for (const ref of refs) {
+        ref.syncStatus = 'sent'
+        ref.flowFileName = `${ref.label}.png`
+        ref.flowUploadKey = `${ref.label.toLowerCase()}::${ref.flowFileName}`
+        ref.syncedAt = now
+        ref.lastSyncError = null
+      }
+      return { uploaded: refs.length, reused: 0 }
+    },
+    syncPrompt: async (projectId: string) => {
+      const project = flowProjects.find((item) => item.id === projectId)
+      if (!project) throw new Error('Projeto Flow não encontrado.')
+      if (project.generationPaused) {
+        throw new Error(project.lastError || 'Geração pausada.')
+      }
+      if (!project.remoteId) {
+        throw new Error('Informe a URL do projeto existente no Google Flow antes de enviar o prompt.')
+      }
+      if (!String(project.prompt || '').trim()) {
+        throw new Error('Escreva um prompt neste projeto antes de enviar ao Flow.')
+      }
+      throw new Error('Envio do prompt ao Google Flow disponível apenas no app Electron com a extensão.')
+    },
+    resumeGeneration: async (projectId: string) => {
+      const project = flowProjects.find((item) => item.id === projectId)
+      if (!project) throw new Error('Projeto Flow não encontrado.')
+      project.generationPaused = false
+      project.lastError = null
+      project.updatedAt = new Date().toISOString()
+      return project
+    },
+    listGenerationCards: async () => [],
+    importGenerationCards: async () => {
+      throw new Error('Importação de cards disponível apenas no app Electron.')
+    },
+    addGenerationCard: async () => {
+      throw new Error('Cards disponíveis apenas no app Electron.')
+    },
+    updateGenerationCard: async () => null,
+    removeGenerationCard: async () => false,
+    prepareGenerationCard: async () => {
+      throw new Error('Preparar card disponível apenas no app Electron.')
+    },
+    generateGenerationCard: async () => {
+      throw new Error('Gerar card disponível apenas no app Electron.')
+    },
+    onProgress: () => () => undefined,
+  },
   comfy: {
     getConfig: async () => ({ ...DEFAULT_COMFY_CONFIG }),
     saveConfig: async () => ({ ...DEFAULT_COMFY_CONFIG }),
@@ -1434,6 +1675,172 @@ export const mockApi = {
       message: 'Disponível só no app do Atlas.',
       connection: null,
     }),
+    getRunpodStatus: async () => ({
+      fetchedAt: new Date().toISOString(),
+      apiKeyPresent: false,
+      apiKeyValid: null,
+      error: 'Disponível só no app do Atlas.',
+      autoInfraEnabled: false,
+      preferredPodId: null,
+      dryRunStarts: true,
+      configuredUrl: '',
+      urlStale: false,
+      selectedPod: null,
+      pods: [],
+      suggestedUrl: null,
+      comfy: null,
+      gpuCatalog: [],
+      networkVolumes: [],
+      templates: [],
+      mutationCalls: 0 as const,
+      lifecycle: null,
+    }),
+    previewRunpodStart: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
+    startRunpodPod: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
+    stopRunpodPod: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
+    cleanupSupersededRunpodPods: async () => ({
+      dryRun: true,
+      candidates: [],
+      terminated: [],
+      failed: [],
+      message: 'Disponível só no app do Atlas.',
+    }),
+    getRunpodLifecycle: async () => null,
+    prepareComfyConnect: async () => ({
+      status: 'error' as const,
+      phase: 'error' as const,
+      message: 'Disponível só no app do Atlas.',
+      diagnostics: [],
+      config: { ...DEFAULT_COMFY_CONFIG },
+    }),
+    confirmComfyConnect: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
+    confirmComfyGpuRecovery: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
+    refreshComfyConnectStatus: async () => ({
+      phase: 'error' as const,
+      baseUrl: '',
+      connection: null,
+      message: 'Disponível só no app do Atlas.',
+      config: { ...DEFAULT_COMFY_CONFIG },
+      urlChanged: false,
+    }),
+    prepareLipsyncControlledTest: async () => ({
+      readyToAuthorizeStart: false,
+      readyToGenerateAfterConnect: false,
+      dryRunStarts: true,
+      autoShutdownImplemented: false as const,
+      estimatedCostPerHr: null,
+      preferredPod: null,
+      scene: {
+        refId: null,
+        label: null,
+        number: null,
+        imagePath: null,
+        audioPath: null,
+        promptPreview: null,
+        outputDir: null,
+      },
+      checks: [],
+      blockers: ['Disponível só no app do Atlas.'],
+      warnings: [],
+      authorizationSteps: [],
+      message: 'Disponível só no app do Atlas.',
+    }),
+    prepareGpuRecoveryValidation: async () => ({
+      validation: {
+        readyToAuthorizePaidRecovery: false,
+        dryRunStarts: true,
+        autoShutdownImplemented: false as const,
+        batchProductionAllowed: false as const,
+        estimatedCostPerHr: null,
+        preferredPod: null,
+        recovery: null,
+        recommendedAction: 'none' as const,
+        continuousBillingRisks: [],
+        authorizationSteps: [],
+        postSuccessReportFields: [],
+        checks: [],
+        blockers: ['Disponível só no app do Atlas.'],
+        warnings: [],
+        message: 'Disponível só no app do Atlas.',
+      },
+      autoShutdown: {
+        implemented: false as const,
+        enabledByDefault: false as const,
+        stopAction: 'stop' as const,
+        neverActions: ['terminate', 'delete', 'delete_volume'] as Array<
+          'terminate' | 'delete' | 'delete_volume'
+        >,
+        waitForDownloads: true as const,
+        graceSecondsAfterLastDownload: 30,
+        triggers: [],
+        safetyRules: [],
+        uiRequirements: [],
+        estimatedRiskWithoutIt: 'N/A',
+        message: 'Disponível só no app do Atlas.',
+      },
+      fetchedAt: new Date().toISOString(),
+      mutationCalls: 0 as const,
+      paidOperationsExecuted: false as const,
+    }),
+    getCachedRunpodStatus: async () => null,
+    getSavedLtxDetection: async () => ({
+      detection: null,
+      savedAt: null,
+      inventoryVerifiedAt: null,
+    }),
+    bootstrapLtxEnvironment: async () => ({
+      snapshot: null,
+      detection: null,
+      source: 'none' as const,
+      inventoryFromCache: false,
+      message: 'Disponível só no app do Atlas.',
+    }),
+    saveRunpodS3CredentialsAndBootstrap: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
+    getLtxEnvironment: async () => ({
+      dryRunOnly: true,
+      accountFingerprint: null,
+      templateImage: 'atlas-studio/comfyui-ltx2.3:pending-pin',
+      templateTagPinned: false,
+      containerPort: 8188,
+      storageStrategy: 'undecided' as const,
+      preferredDataCenterId: null,
+      networkVolumeId: null,
+      networkVolumeSizeGb: null,
+      primaryGpuId: null,
+      alternateGpuIds: [null, null] as [string | null, string | null],
+      minVramGb: 16,
+      recommendedVramGb: 24,
+      maxUsdPerHour: null,
+      preferredCloud: 'SECURE' as const,
+      modelsMountPath: '/runpod-volume/models',
+      comfyRootInContainer: '/ComfyUI',
+      notes: '',
+    }),
+    saveLtxEnvironment: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
+    diagnoseLtxEnvironment: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
+    detectLtxEnvironment: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
+    getRunpodS3Status: async () => ({ configured: false, accessKeyPreview: null }),
+    saveRunpodS3Credentials: async () => {
+      throw new Error('Disponível só no app do Atlas.')
+    },
     start: async () => {
       throw new Error('O envio ao ComfyUI só funciona no app do Atlas.')
     },

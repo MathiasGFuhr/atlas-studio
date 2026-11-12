@@ -59,6 +59,8 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel = 'Confirmar',
+  cancelLabel = 'Cancelar',
+  tone = 'default',
   onConfirm,
   onClose,
 }: {
@@ -66,6 +68,9 @@ export function ConfirmDialog({
   title: string
   message: string
   confirmLabel?: string
+  cancelLabel?: string
+  /** warning = ação de parar/desligar; danger = destrutivo. */
+  tone?: 'default' | 'warning' | 'danger'
   onConfirm: () => void
   onClose: () => void
 }) {
@@ -77,9 +82,20 @@ export function ConfirmDialog({
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            Cancelar
+            {cancelLabel}
           </Button>
-          <Button onClick={onConfirm}>{confirmLabel}</Button>
+          <Button
+            onClick={onConfirm}
+            className={
+              tone === 'warning'
+                ? 'bg-amber-600 text-white hover:bg-amber-500'
+                : tone === 'danger'
+                  ? 'bg-red-600 text-white hover:bg-red-500'
+                  : undefined
+            }
+          >
+            {confirmLabel}
+          </Button>
         </>
       }
     >

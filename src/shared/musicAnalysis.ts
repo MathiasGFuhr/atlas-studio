@@ -21,15 +21,17 @@ export interface MusicCaption {
 }
 
 /** Idiomas que o usuário pode escolher para a legenda da música. */
-export type MusicCaptionLanguage = 'pt' | 'en'
+export type MusicCaptionLanguage = 'pt' | 'en' | 'es' | 'de'
 
 export const MUSIC_CAPTION_LANGUAGES: Array<{ value: MusicCaptionLanguage; label: string }> = [
   { value: 'pt', label: 'Português (Brasil)' },
   { value: 'en', label: 'English' },
+  { value: 'es', label: 'Español' },
+  { value: 'de', label: 'Deutsch' },
 ]
 
 export function parseMusicCaptionLanguage(value: string | null | undefined): MusicCaptionLanguage {
-  return value === 'en' ? 'en' : 'pt'
+  return MUSIC_CAPTION_LANGUAGES.find((item) => item.value === value)?.value ?? 'pt'
 }
 
 /**

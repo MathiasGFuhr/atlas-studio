@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FileJson, PlugZap, RefreshCw } from 'lucide-react'
 import type { ComfyConfig, ComfyConnectionInfo } from '@shared/comfy'
 import { DEFAULT_COMFY_CONFIG } from '@shared/comfy'
+import { toUserFacingError } from '@shared/userFacingError'
 import { Button } from '../Button'
 import { getAtlasApi } from '../../lib/api'
 import { useToast } from '../Toast'
@@ -59,7 +60,7 @@ export function ComfyRunpodBar() {
       else if (!fromAuto && !result.ok) push(result.message, 'error')
     } catch (error) {
       if (!fromAuto) pushError(error, 'Não foi possível puxar a URL do RunPod.')
-      else setConnection({ ok: false, message: error instanceof Error ? error.message : String(error) })
+      else setConnection({ ok: false, message: toUserFacingError(error, 'Não foi possível puxar a URL do RunPod.') })
     } finally {
       setBusy(false)
     }
