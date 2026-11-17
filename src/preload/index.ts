@@ -141,6 +141,7 @@ import type {
   EditorExportProgress,
   EditorExportRequest,
   EditorLipsyncGroup,
+  EditorMakeShortRequest,
   EditorProject,
   EditorProjectChangedEvent,
   EditorProjectPatch,
@@ -936,6 +937,8 @@ const api = {
       ipcRenderer.invoke(IPC.editor.alignToMusic, projectId, assetIds) as Promise<EditorAudioAlignResult>,
     export: (request: EditorExportRequest) =>
       ipcRenderer.invoke(IPC.editor.export, request) as Promise<string | null>,
+    makeShort: (request: EditorMakeShortRequest) =>
+      ipcRenderer.invoke(IPC.editor.makeShort, request) as Promise<string>,
     /** Caminho real de um arquivo arrastado do Explorer (File.path não existe mais no Electron 32+). */
     pathForFile: (file: File) => webUtils.getPathForFile(file),
     onAssetChanged: (callback: (asset: EditorAsset) => void) => {

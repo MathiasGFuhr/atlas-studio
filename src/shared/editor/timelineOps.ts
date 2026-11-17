@@ -847,6 +847,46 @@ export function splitAt(
   return next
 }
 
+/**
+ * Extrai o intervalo temporal dos clipes selecionados em uma nova timeline 9:16
+ * iniciando em 0s, preservando vídeo, áudio, efeitos, texto e marca d'água.
+ */
+export function extractShortTimeline(
+  timeline: EditorTimeline,
+  clipIds: readonly string[],
+): EditorTimeline | null {
+  const idSet = new Set(clipIds)
+  const selected = timeline.clips.filter((clip) => idSet.has(clip.id))
+  if (selected.length === 0) return null
+
+  const rangeStart = Math.min(...selected.map((clip) => clip.start))
+  const rangeEnd = Math.max(...selected.map((clip) => clipEnd(clip)))
+  if (rangeEnd - rangeStart < MIN_CLIP_DURATION - EPS) return null
+
+  const clips: EditorClip[] = []
+  for (const clip of timeline.clips) {
+    const end = clipEnd(clip)
+    if (end <= rangeStart + EPS || clip.start >= rangeEnd - EPS) continue
+    const sliceStart = Math.max(clip.start, rangeStart)
+    const sliceEnd = Math.min(end, rangeEnd)
+    const sliceDuration = roundTime(sliceEnd - sliceStart)
+    if (sliceDuration < MIN_CLIP_DURATION - EPS) continue
+    const trimLeft = roundTime(sliceStart - clip.start)
+    const inPoint = roundTime(clip.inPoint + trimLeft)
+    const outPoint = roundTime(inPoint + sliceDuration)
+    clips.push({
+      ...clip,
+      start: roundTime(sliceStart - rangeStart),
+      inPoint,
+      outPoint,
+      fit: isEffectClip(clip) || isTextClip(clip) ? clip.fit : 'cover',
+    })
+  }
+
+  if (clips.length === 0) return null
+  return { ...timeline, aspect: '9:16', clips }
+}
+
 export function deleteClips(
   timeline: EditorTimeline,
   clipIds: readonly string[],

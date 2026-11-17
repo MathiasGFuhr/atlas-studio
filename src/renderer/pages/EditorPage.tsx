@@ -28,6 +28,7 @@ import {
   Scissors,
   SkipBack,
   SkipForward,
+  Smartphone,
   Sparkles,
   Trash2,
   Type,
@@ -50,7 +51,6 @@ import {
 import {
   addTrack,
   clipEnd,
-  clipsAt,
   deleteClips,
   ensureTextTrack,
   findClip,
@@ -202,6 +202,8 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   const [snapping, setSnapping] = useState(true)
   const [timelineHeight, setTimelineHeight] = useState(320)
   const [busy, setBusy] = useState(false)
+  const [shortBusy, setShortBusy] = useState(false)
+  const [shortPercent, setShortPercent] = useState<number | null>(null)
   const [captionBusy, setCaptionBusy] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('saved')
@@ -513,10 +515,8 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   const split = useCallback(() => {
     const current = timelineRef.current
     const time = store.getTime()
-    const under = new Set(clipsAt(current, time).map((clip) => clip.id))
-    const chosen = selectedIds.filter((id) => under.has(id))
-    commit(splitAt(current, time, chosen.length > 0 ? chosen : undefined))
-  }, [commit, selectedIds, store])
+    commit(splitAt(current, time))
+  }, [commit, store])
 
   const removeSelected = useCallback(
     (ripple: boolean) => {
@@ -526,6 +526,35 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
     },
     [commit, selectedIds],
   )
+
+  useEffect(() => {
+    if (!shortBusy) return
+    return api.editor.onExportProgress((event) => {
+      if (event.projectId === project.id && event.stage === 'rendering') {
+        setShortPercent(event.percent)
+      }
+    })
+  }, [api, project.id, shortBusy])
+
+  const makeShort = useCallback(async () => {
+    if (selectedIds.length === 0 || shortBusy) return
+    setShortBusy(true)
+    setShortPercent(0)
+    try {
+      await flush()
+      const outputPath = await api.editor.makeShort({
+        projectId: project.id,
+        clipIds: selectedIds,
+        resolution: 1080,
+      })
+      push(`Short 9:16 salvo em: ${outputPath}`, 'success')
+    } catch (error) {
+      pushError(error, 'Falha ao gerar Short 9:16')
+    } finally {
+      setShortBusy(false)
+      setShortPercent(null)
+    }
+  }, [api, flush, project.id, push, pushError, selectedIds, shortBusy])
 
   const syncAssetsToMusic = useCallback(
     async (inputAssets: EditorAsset[]): Promise<boolean> => {
@@ -1306,6 +1335,16 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
           >
             <Crosshair className="h-4 w-4" />
             {selectedIds.length > 0 ? 'Sincronizar' : 'Sincronizar tudo'}
+          </button>
+          <button
+            type="button"
+            title="Converter o trecho selecionado para 9:16 e salvar na pasta do projeto (short 01, 02...)"
+            className={toolButton}
+            disabled={selectedIds.length === 0 || shortBusy || busy}
+            onClick={() => void makeShort()}
+          >
+            {shortBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Smartphone className="h-4 w-4" />}
+            {shortBusy ? (shortPercent != null ? `Short ${shortPercent}%` : 'Gerando Short...') : 'Fazer Shorts'}
           </button>
           <span className="mx-1 h-5 w-px bg-border-soft" />
           <button

@@ -6,6 +6,7 @@ import type { BrowserWindow } from 'electron'
 import { parseMusicCaptionLanguage, resolveWhisperModelName } from '../../shared/musicAnalysis'
 import { IPC } from '../../shared/types'
 import { transcribeLocalAudio } from '../services/shorts/transcribeLocal'
+import { extractShortTimeline } from '../../shared/editor/timelineOps'
 import {
   EDITOR_ASPECTS,
   EDITOR_AUDIO_EXTENSIONS,
@@ -17,6 +18,7 @@ import {
   type EditorAssetOrigin,
   type EditorExportProgress,
   type EditorExportRequest,
+  type EditorMakeShortRequest,
   type EditorProject,
   type EditorProjectChangedEvent,
   type EditorProjectPatch,
@@ -41,7 +43,13 @@ import {
   sceneNumberFromComfyPath,
 } from '../services/editor/editorComfyIngest'
 import { listEditorLipsyncGroups } from '../services/editor/editorLipsync'
-import { exportEditorProject } from '../services/editor/editorExport'
+import { exportEditorProject, nextShortOutputPath } from '../services/editor/editorExport'
+import {
+  createProjectFolder,
+  folderExists,
+  resolveEnvironmentRoot,
+  sanitizeWindowsFolderName,
+} from '../services/storage/projectFolders'
 import { setComfyEditorIngestHook } from '../services/comfy'
 import { logger } from '../services/logging/logger'
 
@@ -328,4 +336,101 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
       throw error
     }
   })
+
+  ipcMain.handle(IPC.editor.makeShort, async (_e, request: EditorMakeShortRequest) => {
+    const project = requireProject(request?.projectId)
+    const clipIds = Array.isArray(request?.clipIds) ? request.clipIds : []
+    const shortTimeline = extractShortTimeline(project.timeline, clipIds)
+    if (!shortTimeline) {
+      throw new Error('Selecione um trecho válido na timeline para fazer o Short.')
+    }
+    const resolution = isEditorExportResolution(request?.resolution) ? request.resolution : 1080
+    const folder = resolveEditorProjectFolder(project)
+    const targetPath = nextShortOutputPath(folder)
+    const win = getMainWindow()
+    const send = (event: Omit<EditorExportProgress, 'projectId'>) => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send(IPC.editor.exportProgress, { projectId: project.id, ...event })
+      }
+    }
+    send({ stage: 'rendering', percent: 0, message: 'Preparando Short 9:16...' })
+    try {
+      const outputPath = await exportEditorProject({
+        projectId: project.id,
+        outputPath: targetPath,
+        resolution,
+        timelineOverride: shortTimeline,
+        skipSetLastExport: true,
+        onProgress: (percent) => send({ stage: 'rendering', percent, message: `Gerando Short... ${percent}%` }),
+      })
+      send({ stage: 'done', percent: 100, message: 'Short exportado.', outputPath })
+      return outputPath
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      logger.error('editor.make_short.failed', { projectId: project.id, error: message })
+      send({ stage: 'failed', percent: null, message })
+      throw error
+    }
+  })
+}
+
+function resolveEditorProjectFolder(project: EditorProject): string {
+  if (project.musicProjectId) {
+    const musicProject = projectRepository.get(project.musicProjectId)
+    const existing = musicProject?.projectFolderPath?.trim()
+    if (existing) {
+      fs.mkdirSync(existing, { recursive: true })
+      return path.resolve(existing)
+    }
+  }
+
+  const lastDir = project.lastExportPath?.trim() ? path.dirname(path.resolve(project.lastExportPath.trim())) : ''
+  if (lastDir && folderExists(lastDir)) {
+    return lastDir
+  }
+
+  // Tenta localizar um projeto principal com o mesmo nome e pasta vinculada.
+  const normalizedName = project.name.trim().toLowerCase()
+  const matchedProject = projectRepository
+    .list()
+    .find((item) => item.projectFolderPath?.trim() && item.name.trim().toLowerCase() === normalizedName)
+  if (matchedProject?.projectFolderPath) {
+    const resolved = path.resolve(matchedProject.projectFolderPath.trim())
+    fs.mkdirSync(resolved, { recursive: true })
+    return resolved
+  }
+
+  // Usa a pasta onde estão as mídias do projeto (priorizando o áudio principal).
+  const assets = editorRepository.listAssets(project.id)
+  const orderedAssets = [
+    ...assets.filter((asset) => asset.kind === 'audio'),
+    ...assets.filter((asset) => asset.kind !== 'audio'),
+  ]
+  for (const asset of orderedAssets) {
+    if (!asset.sourcePath) continue
+    let dir = path.dirname(path.resolve(asset.sourcePath))
+    const base = path.basename(dir).toLowerCase()
+    if (base === 'comfy' || base === 'videos' || base === 'audio') {
+      dir = path.dirname(dir)
+    }
+    if (folderExists(dir)) return dir
+  }
+
+  // Se já existir pasta com o nome do projeto na raiz do canal/ambiente, reutiliza sem criar "(2)".
+  const parentFolder = project.channelId ? (channelRepository.get(project.channelId)?.folderPath ?? null) : null
+  const root = parentFolder && folderExists(parentFolder) ? path.resolve(parentFolder) : resolveEnvironmentRoot('music')
+  const namedFolder = path.join(root, sanitizeWindowsFolderName(project.name))
+  if (folderExists(namedFolder)) {
+    return namedFolder
+  }
+
+  const created = createProjectFolder({
+    name: project.name,
+    projectType: 'music',
+    parentFolder,
+  })
+  if (project.musicProjectId) {
+    projectRepository.update(project.musicProjectId, { projectFolderPath: created })
+  }
+  return path.resolve(created)
 }

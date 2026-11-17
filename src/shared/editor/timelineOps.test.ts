@@ -5,6 +5,7 @@ import {
   clipsAt,
   createEmptyTimeline,
   deleteClips,
+  extractShortTimeline,
   findClip,
   findFreeStart,
   findTrack,
@@ -310,5 +311,39 @@ describe('clipsAt / normalizeTimeline', () => {
       clips: [],
     })
     expect(audioPinned.tracks.map((track) => track.kind)).toEqual(['video', 'effect', 'audio'])
+  })
+})
+
+describe('extractShortTimeline', () => {
+  it('extrai trecho selecionado em 9:16 com vídeo, música e efeito alinhados em 0s', () => {
+    let timeline = createEmptyTimeline('16:9')
+    const v1 = insertAssetClip(timeline, video('v1', 20))
+    timeline = v1.timeline
+    const m1 = insertAssetClip(timeline, audio('m1', 20))
+    timeline = m1.timeline
+    const e1 = insertEffectClip(timeline, 'bloom', { start: 0, duration: 20 })
+    timeline = e1.timeline
+
+    // Divide tudo em 5s e 12s, depois seleciona o vídeo do meio (5s..12s).
+    timeline = splitAt(timeline, 5)
+    timeline = splitAt(timeline, 12)
+    const middleVideo = timeline.clips.find((clip) => clip.assetId === 'v1' && Math.abs(clip.start - 5) < 0.01)!
+
+    const short = extractShortTimeline(timeline, [middleVideo.id])
+    expect(short).not.toBeNull()
+    expect(short!.aspect).toBe('9:16')
+    expect(short!.clips).toHaveLength(3)
+    for (const clip of short!.clips) {
+      expect(clip.start).toBe(0)
+      expect(clip.outPoint - clip.inPoint).toBeCloseTo(7, 3)
+      expect(clip.inPoint).toBeCloseTo(5, 3)
+    }
+    const shortVideo = short!.clips.find((clip) => clip.assetId === 'v1')!
+    expect(shortVideo.fit).toBe('cover')
+  })
+
+  it('retorna null quando nenhum clipe está selecionado', () => {
+    const { timeline } = withClips()
+    expect(extractShortTimeline(timeline, [])).toBeNull()
   })
 })

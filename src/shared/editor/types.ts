@@ -289,6 +289,12 @@ export type EditorExportRequest = {
   resolution: EditorExportResolution
 }
 
+export type EditorMakeShortRequest = {
+  projectId: string
+  clipIds: string[]
+  resolution?: EditorExportResolution
+}
+
 export type EditorExportProgress = {
   projectId: string
   stage: 'rendering' | 'done' | 'failed'

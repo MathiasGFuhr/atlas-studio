@@ -839,8 +839,7 @@ export function Timeline({
             dropHint?.trackId === null && dropHint.zone === 'top' && 'bg-accent-subtle/40',
           )}
           style={{ width: TIMELINE_HEADER_WIDTH + laneWidth }}
-          title="Solte mídia ou efeito para criar faixa no topo"
-          onPointerDown={startScrubInLane}
+          title="Arraste para selecionar clipes ou solte mídia/efeito para criar faixa no topo"
           onDragOver={(event) => handleDragOver(event, null, 'top')}
           onDrop={(event) => handleDrop(event, null)}
         >
@@ -850,9 +849,15 @@ export function Timeline({
           >
             Nova camada
           </div>
-          <p className="px-4 text-[11px] text-muted-2">
-            Arraste efeito ou mídia aqui para criar uma faixa acima.
-          </p>
+          <div
+            className="flex h-full items-center"
+            style={{ width: laneWidth }}
+            onPointerDown={startMarqueeOrClick}
+          >
+            <p className="pointer-events-none px-4 text-[11px] text-muted-2">
+              Arraste aqui para selecionar um trecho ou solte efeito/mídia para criar uma faixa acima.
+            </p>
+          </div>
         </div>
 
         {view.tracks.map((track) => {
@@ -939,7 +944,6 @@ export function Timeline({
             dropHint?.trackId === null && dropHint.zone === 'bottom' && 'bg-accent-subtle/40',
           )}
           style={{ width: TIMELINE_HEADER_WIDTH + laneWidth }}
-          onPointerDown={startScrubInLane}
           onDragOver={(event) => handleDragOver(event, null, 'bottom')}
           onDrop={(event) => handleDrop(event, null)}
         >
@@ -949,9 +953,15 @@ export function Timeline({
           >
             Nova faixa
           </div>
-          <p className="px-4 text-[11px] text-muted-2">
-            Solte aqui para criar outra faixa (entra acima das existentes).
-          </p>
+          <div
+            className="flex h-full items-center"
+            style={{ width: laneWidth }}
+            onPointerDown={startMarqueeOrClick}
+          >
+            <p className="pointer-events-none px-4 text-[11px] text-muted-2">
+              Arraste aqui para selecionar um trecho ou solte para criar outra faixa.
+            </p>
+          </div>
         </div>
 
         <div

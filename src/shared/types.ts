@@ -1065,6 +1065,7 @@ export const IPC = {
     listLipsync: 'editor:listLipsync',
     alignToMusic: 'editor:alignToMusic',
     export: 'editor:export',
+    makeShort: 'editor:makeShort',
     assetChanged: 'editor:assetChanged',
     exportProgress: 'editor:exportProgress',
     projectChanged: 'editor:projectChanged',
