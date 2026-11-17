@@ -1,0 +1,33 @@
+# Atlas Studio — manifesto de dependências LTX-2.3 (Fase 4)
+# NÃO instalar automaticamente. Build/push exige autorização explícita.
+#
+# Workflow: 55 nós · 40 class_types
+# Inventário acessível: sim (2026-11-08)
+# ComfyUI: 0.30.0
+# PyTorch: 2.10.0+cu130
+# Python: 3.12.3
+# CUDA toolkit/driver: PENDING nvidia-smi (wheel cu130)
+# GPU observada: NVIDIA RTX PRO 4500 Blackwell · ~31.4 GB
+#
+# Runtime (pins confirmados via HTTP):
+# torch==2.10.0  (index cu130)
+# ComfyUI == 0.30.0 (git tag/commit correspondente)
+#
+# Modelos (Network Volume — todos presentes no Pod atual via GET /models):
+# - models/checkpoints/ltx-2.3-22b-dev-fp8.safetensors
+# - models/loras/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors
+# - models/loras/gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors
+# - models/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors
+# - models/latent_upscale_models/ltx-2.3-spatial-upscaler-x2-1.1.safetensors
+#
+# Integridade: após cópia autorizada, registrar sha256; API HTTP não fornece hashes.
+#
+# class_types do workflow exportado (amostra / conferidos no object_info):
+# - TextGenerateLTX2Prompt
+# - LTXVAudioVAELoader
+# - LTXAVTextEncoderLoader
+# - CheckpointLoaderSimple
+# - LoraLoader / LoraLoaderModelOnly
+# - LatentUpscaleModelLoader
+# - SaveVideo
+# (lista completa em workflow-analysis.json)

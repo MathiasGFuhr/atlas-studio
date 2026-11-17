@@ -22,6 +22,14 @@ out/
 auth.json
 credentials.json
 .codex/
+docs/atlas-flow/coordinator-pairing.local.json
+docs/atlas-flow/coordinator-live.json
+docs/atlas-flow/references-store.json
+docs/atlas-flow/last-*.json
+docs/atlas-flow/results/
+docs/atlas-flow/evidence/
+docs/atlas-flow/fixtures/
+docs/atlas-flow/staging/
 
 # Logs and caches
 *.log
@@ -36,6 +44,9 @@ pnpm-debug.log*
 *.tmp
 *.temp
 *.bak
+__pycache__/
+*.pyc
+png-to-ico-*.tgz
 
 # Local databases (userData / SQLite)
 *.db

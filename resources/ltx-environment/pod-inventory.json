@@ -1,0 +1,41 @@
+{
+  "inspectedAt": "2026-11-08T19:35:00.000Z",
+  "dryRun": true,
+  "mutationCalls": 0,
+  "accessible": true,
+  "baseUrl": "https://d3ewr3ge0uk002-8188.proxy.runpod.net",
+  "system": {
+    "comfyuiVersion": "0.30.0",
+    "pytorchVersion": "2.10.0+cu130",
+    "pythonVersion": "3.12.3",
+    "os": "linux",
+    "gpuName": "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+    "vramTotalGb": 31.4
+  },
+  "models": {
+    "checkpoints/ltx-2.3-22b-dev-fp8.safetensors": true,
+    "loras/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors": true,
+    "loras/gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors": true,
+    "text_encoders/gemma_3_12B_it_fp4_mixed.safetensors": true,
+    "latent_upscale_models/ltx-2.3-spatial-upscaler-x2-1.1.safetensors": true
+  },
+  "classTypesAvailable": 1071,
+  "workflowNodesVerifiedPresent": [
+    "TextGenerateLTX2Prompt",
+    "LTXVAudioVAELoader",
+    "LTXAVTextEncoderLoader",
+    "CheckpointLoaderSimple",
+    "LoraLoader",
+    "LatentUpscaleModelLoader",
+    "SaveVideo"
+  ],
+  "pendingChecks": [
+    "CUDA/driver exacto via nvidia-smi no shell do Pod (HTTP só reporta torch cu130)",
+    "Checksums sha256 dos safetensors (API lista nomes, não hashes)",
+    "Tamanhos em disco dos modelos (endpoint legado /models sem size; experiment/models opcional)"
+  ],
+  "notes": [
+    "Inventário somente leitura: GET /system_stats, /object_info, /models, /models/{folder}.",
+    "Nenhum arquivo foi modificado, reinstalado ou removido no container."
+  ]
+}

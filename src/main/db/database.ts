@@ -96,6 +96,7 @@ export async function initDatabase(workspaceRoot: string): Promise<AppDatabase> 
       project_type TEXT NOT NULL DEFAULT 'history',
       folder_path TEXT,
       channel_id TEXT,
+      workspace TEXT NOT NULL DEFAULT 'music',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );

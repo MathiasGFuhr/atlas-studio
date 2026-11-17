@@ -1,0 +1,2247 @@
+ATLAS FLOW — MANUAL MESTRE DE IMPLEMENTAÇÃO DO ZERO PARA O CURSOR
+Versão 1.0 | 13 de novembro de 2026 | Idioma do produto: português brasileiro
+Escopo: integração de geração de IMAGENS do Google Flow dentro do Atlas
+Natureza: especificação técnica, roteiro de execução e critérios de aceitação
+
+LEIA PRIMEIRO
+Este documento é a fonte de requisitos da NOVA integração. Não é prova de que ela
+esteja implementada ou de que o Flow autorize uma integração oficial. Todo código
+de integração deve ser escrito novamente, de forma independente. Não copiar a
+extensão do DarkPlanner e não recuperar código de tentativas anteriores.
+
+O resultado desejado é o usuário criar e acompanhar imagens pelo Atlas, enquanto
+uma extensão opera o Flow autenticado no computador do usuário. O usuário não
+precisa abrir manualmente o Flow a cada projeto ou geração. Login, verificação da
+conta e restrições do próprio Google podem exigir interação excepcional.
+
+Não prometer ausência absoluta de erros. O requisito é evitar operações erradas,
+identificar falhas, preservar dados e permitir recuperação sem duplicação cega.
+Interface de terceiro pode mudar. Uma falha externa nunca deve virar falso sucesso.
+
+Os nomes de rotas da API ATLAS neste documento são contratos propostos que devem
+ser implementados. Não são endpoints existentes do Google. Nenhum seletor real,
+endpoint interno, limite de referência ou resolução do Flow deve ser inventado.
+Esses dados precisam ser descobertos e comprovados no ambiente real na fase 01.
+
+ÍNDICE
+01. Resultado obrigatório e limites do escopo
+02. Significado de começar do zero
+03. Instruções de trabalho para o Cursor
+04. Decisão de arquitetura e transporte
+05. Componentes e tecnologias
+06. Organização dos novos arquivos
+07. Identidades e invariantes
+08. Modelo de dados do Atlas
+09. Banco local da extensão e persistência
+10. Contrato de comunicação e eventos
+11. Pareamento e autorização da extensão
+12. Sessão Google, conta, plano e capacidades
+13. Gerenciamento da aba do Flow
+14. Descoberta real do adaptador do Flow
+15. Execução segura das ações na interface
+16. Observação passiva e correlação de resultados
+17. Criação e vínculo de projetos
+18. Upload, nome e reutilização de referências
+19. Importação de prompts em blocos
+20. Revisões, snapshots e compilação de referências
+21. Scheduler e lotes de três
+22. Máquina de estados e eventos duráveis
+23. Leases, exclusão mútua e envio incerto
+24. Sequência completa de uma geração
+25. Recuperação e armazenamento das imagens
+26. Regeneração, aprovação e versões
+27. Pausa, cancelamento, exclusão e edição
+28. Retomada após falhas e reinícios
+29. Autenticação, limites e proteção de dados
+30. Interface do Atlas
+31. Interface da extensão
+32. Catálogo de erros e recuperação
+33. Prazos, backoff e circuito de proteção
+34. Observabilidade e diagnóstico
+35. Testes automatizados e simulação
+36. Testes reais e matriz de aceitação
+37. Plano sequencial de implementação
+38. Instalação, publicação e atualização
+39. Operação, manutenção e mudança do Flow
+40. Entregáveis e definição de concluído
+41. Contratos de tipos e interfaces
+42. Exemplos completos de mensagens
+43. Pseudocódigo dos algoritmos críticos
+44. Configuração, manifest e parâmetros iniciais
+45. Checklist final do Cursor
+46. Fontes, evidências e questões que exigem observação
+
+01. RESULTADO OBRIGATÓRIO E LIMITES DO ESCOPO
+
+RF-01. O usuário cria um projeto no Atlas. A extensão cria o projeto correspondente
+no Flow, confirma sua identidade e salva o vínculo, incluindo a conta utilizada.
+RF-02. O usuário anexa imagens de referência pelo Atlas e pode dar nomes/aliases.
+RF-03. Cada arquivo é enviado ao Flow uma vez por escopo e versão, salvo quando
+for necessário reparar uma referência ausente ou um upload não confirmado.
+RF-04. O usuário cola prompts em blocos; cada bloco gera uma linha estável.
+RF-05. O sistema executa lotes de até TRÊS PROMPTS. Não são três imagens por prompt.
+RF-06. Cada resultado aparece na linha original, mesmo terminando fora de ordem.
+RF-07. Regenerar uma linha cria uma nova tentativa apenas dessa linha.
+RF-08. Versões antigas continuam disponíveis; uma imagem aprovada pode ser fixada.
+RF-09. Projetos, referências, prompts, tentativas e resultados sobrevivem a reinícios.
+RF-10. O Atlas mostra etapas e erros reais, com recuperação por linha ou conexão.
+RF-11. A geração normal deve funcionar com o usuário permanecendo no Atlas.
+RF-12. Nenhum pedido pode cair silenciosamente em outro projeto, conta ou modelo.
+
+Não adicionar nesta entrega: vídeo no Flow, geração musical, n8n, montagem de clipes,
+novas funções de lipsync, automação de YouTube, múltiplas contas em paralelo ou
+intermediários pagos. Cortador, legenda e lipsync existentes ficam preservados.
+Preparar interfaces de evolução sem implementar essas funções antecipadamente.
+
+Definição operacional: o navegador e a página autenticada precisam estar disponíveis.
+Não prometer execução com computador desligado, navegador fechado ou em suspensão.
+Pedidos já aceitos pelo Google podem continuar no serviço; o executor local para.
+
+02. SIGNIFICADO DE COMEÇAR DO ZERO
+
+Criar uma integração isolada, com namespace e protocolo novos: atlas-flow-v1.
+Não importar executores, bridges, seletores, modelos de fila, bancos, módulos ou
+patches da integração antiga. Não recuperar código apagado de commits anteriores.
+Não reutilizar atalhos inseguros, endpoints privados ou credenciais antigas.
+Não copiar nem adaptar trechos de código de extensões concorrentes.
+
+Pode usar bibliotecas públicas de infraestrutura e contratos existentes de login,
+projeto e armazenamento do Atlas. Isso não é reutilizar a integração removida.
+Não recriar o login geral do Atlas nem excluir seus projetos para cumprir do zero.
+Inspecionar a estrutura atual só para conectar a implementação nova corretamente.
+
+Não apagar recursos do Atlas nem dados do usuário. Criar migrações aditivas.
+Identificar módulos antigos ainda registrados e isolá-los/desativá-los no caminho
+novo, sem executar limpeza destrutiva automática. Não importar dados antigos.
+Qualquer migração futura de dados exige tarefa separada e mapa explícito.
+
+Usar branch/worktree isolado quando houver repositório. Registrar baseline e
+alterações. Não substituir arquivos não relacionados nem descartar trabalho local.
+
+03. INSTRUÇÕES DE TRABALHO PARA O CURSOR
+
+Ler este manual inteiro antes de escolher bibliotecas ou escrever o executor.
+Executar o plano da seção 37 em ordem, mantendo um checklist persistente no repo.
+Começar inspecionando a stack atual e observando o Flow de verdade. Não entregar
+só uma interface bonita e não declarar integração pronta com base em testes mock.
+
+Criar desde o início:
+- IMPLEMENTATION_STATUS.md: implementado, teste local, teste Flow real e pendências.
+- ARCHITECTURE_DECISION.md: runtime do Atlas, transporte escolhido e justificativa.
+- FLOW_OBSERVATIONS.md: data, URL/origem, idioma, versão do adaptador e evidências.
+- ACCEPTANCE_MATRIX.md: cada requisito ligado a teste e resultado.
+- RUNBOOK.md: instalar, iniciar, parear, testar, diagnosticar e recuperar.
+
+Nenhuma etapa posterior deve esconder a falta de validação da anterior. É permitido
+adiantar trabalho independente de banco, tipos ou interface enquanto falta acesso
+à conta; a integração real permanece marcada como NÃO VALIDADA.
+Se um teste real falhar, registrar etapa, erro e evidência; corrigir e repetir o
+teste relevante. Não alterar expectativa para fazer o teste passar artificialmente.
+
+Se não houver acesso ao Flow autenticado, informar esse bloqueio concreto e pedir
+apenas o acesso/interação indispensável. Não inventar logs, screenshots, custos,
+IDs de mídias ou resultados. Nunca resolver bloqueio com bypass de segurança.
+
+Manter código testável, módulos pequenos e schemas compartilhados. Não adicionar
+um segundo sistema de fila quando o novo scheduler já for o responsável.
+O backend decide quem pode trabalhar; a extensão executa e confirma o ocorrido.
+
+04. DECISÃO DE ARQUITETURA E TRANSPORTE
+
+Arquitetura lógica única:
+A. Atlas UI: interface de projetos, referências, linhas, imagens e ações.
+B. Atlas Flow Coordinator: API, banco durável, scheduler, leases e armazenamento.
+C. Extensão MV3: conexão, diário local, gerenciamento de aba e executor.
+D. Flow Adapter: implementação versionada que opera e observa a página real.
+
+O Coordinator é parte nova do Atlas, não uma API do Google. A página do Flow é
+o motor externo acessado pela sessão do navegador. Não embutir Flow em iframe,
+webview ou offscreen document como solução presumida para esconder a página.
+
+DECISÃO OBRIGATÓRIA NA FASE 00:
+Se Atlas é web com backend: usar API HTTPS do próprio Atlas. A extensão conecta
+diretamente ao backend, independente da aba do Atlas. Não exigir app auxiliar.
+Se Atlas é desktop: hospedar o Coordinator no processo de serviço da aplicação,
+ou no backend que ela já usa. Se local, usar HTTP/WS em loopback autenticado.
+Se não existe backend durável: criar o serviço novo como parte desta entrega.
+Não manter fila exclusivamente no frontend. Para um Atlas exclusivamente local,
+SQLite e diretório de arquivos são suficientes; para web, usar banco e storage do
+Atlas, preservando seus mecanismos de autorização.
+
+Escolher UM transporte principal após inspeção. Não implementar cloud e local
+simultaneamente por precaução. Ambos obedecem ao mesmo protocolo lógico.
+Não obrigar transformar Atlas web em desktop por causa da referência DarkPlanner.
+
+Comunicação recomendada: WebSocket para avisos e eventos; REST autenticado para
+claim, transações, reconciliação e arquivos. WebSocket não é banco nem fila.
+Se WS não estiver disponível, polling HTTP limitado a 20 segundos por chamada
+pode implementar o mesmo contrato. Uma conexão caída não invalida trabalhos.
+
+No transporte local, bind exclusivamente em 127.0.0.1, porta configurada pelo app,
+sem escanear dezenas de portas de terceiros. Mostrar endereço de conexão no Atlas
+para pareamento. Validar Host/Origin e exigir credencial forte; localhost não é
+autenticação. Não usar 0.0.0.0 nem expor o bridge na rede local por padrão.
+
+05. COMPONENTES E TECNOLOGIAS
+
+Extensão: TypeScript strict, Manifest V3, APIs chrome.*, build local com Vite ou
+bundler equivalente. Popup/painel de status simples; nenhuma lógica depende deles.
+Schema: Zod se stack TypeScript; compartilhar JSON Schema caso backend use outra
+linguagem. Manter um contrato versionado e validação equivalente nos dois lados.
+Persistência da extensão: IndexedDB, preferencialmente com idb, e chrome.storage.
+Unitários: Vitest ou framework já adotado, testes de estado e contratos reais.
+Testes de interface: Playwright com perfil isolado e extensão carregada. Isso é
+ferramenta de teste, não requisito de instalação para o usuário final.
+O executor de produção é a extensão; não criar dependência paralela de Selenium,
+Playwright headless, CDP/debugger ou outro navegador controlado para gerar imagens.
+
+Backend: respeitar linguagem/framework do Atlas e criar os módulos novos nessa
+stack. Se tudo é novo em TypeScript e não há padrão, usar Node.js LTS suportado,
+Fastify ou equivalente pequeno e banco transacional. Confirmar versões suportadas
+nas fontes oficiais e fixar dependências em lockfile. Não usar versões latest
+flutuantes em produção nem instalar dependências globais como pré-requisito oculto.
+
+Não é necessário Redis na primeira versão. Se o Atlas já o utiliza, não usar
+Redis como único registro de submissões. Banco durável mantém tentativas e locks.
+Não introduzir IA para clicar no Flow, gerar seletores em tempo real ou decidir
+se um clique incerto deve ser repetido. O executor precisa ser determinístico.
+
+06. ORGANIZAÇÃO DOS NOVOS ARQUIVOS
+
+Adaptar os diretórios ao repo sem misturar integração antiga e nova:
+packages/atlas-flow-protocol/: schemas, tipos, erros e compatibilidade.
+apps/atlas-flow-extension/src/background/: conexão, journal, handlers e boot.
+apps/atlas-flow-extension/src/flow/: adapter, selectors, editor, refs e observer.
+apps/atlas-flow-extension/src/content/: ponte isolada da página.
+apps/atlas-flow-extension/src/main/: sensor passivo empacotado, sem segredos.
+apps/atlas-flow-extension/src/storage/: schema IndexedDB e migrações.
+apps/atlas-flow-extension/src/ui/: popup/opções e status.
+apps/atlas-flow-extension/tests/: contratos, fixtures e testes de extensão.
+server/modules/atlas-flow/: rotas, scheduler, leases, repositories e ingestão.
+ui/modules/atlas-flow/: integração com as telas reais do Atlas.
+docs/atlas-flow/: decisões, observações, testes reais e operação.
+
+Esses nomes são orientação, não obrigação de reorganizar o monorepo inteiro.
+Separar explicitamente transporte, domínio e adaptação do Flow. Uma mudança de
+seletor não deve exigir alterar banco, protocolo, autenticação ou componente UI.
+
+07. IDENTIDADES E INVARIANTES
+
+Usar UUIDs gerados de forma criptograficamente segura para entidades locais.
+Não confundir:
+- atlasUserId/tenantId: proprietário autenticado no Atlas.
+- installationId: instalação da extensão naquele perfil de navegador.
+- executorSessionId: sessão de conexão, renovável e não identidade permanente.
+- flowPrincipalId: vínculo local de conta Flow confirmada, com evidência e data.
+- atlasProjectId: projeto do usuário no Atlas.
+- flowProjectId: identidade do projeto externo, só após observação.
+- referenceId/referenceVersionId: referência lógica e versão imutável de arquivo.
+- promptId/promptRevisionId: linha estável e revisão imutável do conteúdo.
+- batchId: lote com no máximo três membros congelados.
+- attemptId: tentativa de geração; regeneração sempre ganha outro attemptId.
+- commandId: operação entregue ao executor; reentrega mantém o mesmo ID.
+- actionId: etapa de efeito externo dentro de uma operação.
+- eventId: evento durável, deduplicado.
+- flowRequestId/flowMediaId: identidades externas quando realmente observáveis.
+- assetId: imagem já incorporada ao armazenamento do Atlas.
+
+INV-01. Uma tentativa pertence a exatamente uma revisão e um projeto/conta.
+INV-02. Posição visual nunca é identidade; ordenar linhas não troca resultados.
+INV-03. Hash de texto não é identidade; prompts iguais são permitidos.
+INV-04. Um efeito externo possivelmente ocorrido nunca é repetido só por timeout.
+INV-05. Concluído requer arquivo recuperado, validado e vinculado no Atlas.
+INV-06. Recebido pela extensão, aceito pelo Flow e concluído são eventos diferentes.
+INV-07. Uma única rotina modifica o editor de um executor de cada vez.
+INV-08. Mudar de projeto aguarda submissões e correlações pendentes da aba.
+INV-09. Conta desconhecida não é conta confirmada. Plano desconhecido não é Free.
+INV-10. Conteúdo enviado não muda quando o usuário edita uma revisão posterior.
+INV-11. Eventos atrasados não fazem um estado confirmado regredir.
+INV-12. Um asset externo não é atribuído a duas tentativas por heurística ambígua.
+INV-13. Reentregar um comando não cria uma nova tentativa.
+INV-14. Regenerar não troca a seleção aprovada automaticamente.
+INV-15. Nenhum modelo, resolução, quantidade ou referência é substituído em silêncio.
+
+08. MODELO DE DADOS DO ATLAS
+
+Usar timestamps UTC, revisão inteira para concorrência otimista e foreign keys.
+O banco já existente continua dono de usuários e projetos gerais. Criar as tabelas
+seguintes, ou equivalentes com os mesmos invariantes. JSON só para snapshots e
+metadados validados; não esconder toda a lógica em um único campo sem constraints.
+
+flow_installations:
+id, tenant_id, atlas_user_id, label, extension_id, extension_version,
+protocol_version, adapter_version, token_hash/credential_ref, token_epoch,
+enabled, last_seen_at, created_at, revoked_at, transport_kind.
+Nunca guardar senha Google. IDs informados pelo cliente não substituem autorização.
+
+flow_principals:
+id, owner_id, installation_id, email_observed nullable, display_name nullable,
+identity_source, verification_status, verified_at, last_observed_at, revision.
+Não alegar obter identificador oficial do perfil Chrome. installationId é próprio.
+Troca de conta cria novo vínculo ou exige reconfirmação; não reescrever histórico.
+
+flow_capability_snapshots:
+id, principal_id, adapter_version, observed_at, expires_at, model_options,
+aspect_ratios, output_counts, max_refs nullable, result_sizes,
+background_verified, passive_correlation_verified, plan_label nullable,
+credits nullable, credits_status, evidence_summary, unknown_fields.
+Planos, créditos e capacidades têm origem e horário; desconhecido é dado válido.
+
+flow_project_links:
+id, atlas_project_id, principal_id, flow_origin, flow_project_id nullable,
+flow_project_url nullable, link_state, requested_title, observed_title nullable,
+create_action_id, last_verified_at, revision, archived_at.
+Único por projeto Atlas e vínculo de conta ativo. Não selecionar conta pelo título.
+
+flow_references:
+id, atlas_project_id, display_name, alias_normalized, active_version_id,
+created_at, updated_at, archived_at, revision.
+Alias único entre referências ativas do mesmo projeto.
+
+flow_reference_versions:
+id, reference_id, source_asset_id, source_sha256, effective_asset_id,
+effective_sha256, mime_type, byte_size, width, height, created_at.
+Original e eventual conversão são preservados; upload usa effective_sha256.
+
+flow_reference_bindings:
+id, project_link_id, reference_version_id, flow_media_id nullable,
+external_locator nullable, binding_state, upload_action_id,
+evidence_kind, verified_at, invalidated_at, revision.
+Único por project_link e versão efetiva. Reuso entre projetos não é presumido.
+
+flow_prompts:
+id, atlas_project_id, position, active_revision_id, selected_asset_id nullable,
+approved_asset_id nullable, archived_at, revision, created_at.
+Ordenação é transacional. Alterar position não altera attemptId nem seus assets.
+
+flow_prompt_revisions:
+id, prompt_id, revision_number, raw_text, compiled_text, raw_text_sha256,
+reference_snapshot, generation_settings, created_at, created_by.
+Revisão imutável. Não editar em lugar o texto que já foi enviado.
+
+flow_batches:
+id, atlas_project_id, principal_id, batch_index, state, created_at, started_at,
+finished_at, policy_version, revision. Membros em tabela flow_batch_members,
+com batch_id, attempt_id, order_in_batch e unique(attempt_id).
+
+flow_attempts:
+id, prompt_revision_id, project_link_id, batch_id nullable, trigger_kind,
+parent_attempt_id nullable, state, execution_stage, submission_certainty,
+expected_outputs, observed_outputs, retrieved_outputs, settings_snapshot,
+failure_code nullable, created_at, submitted_at, finished_at, revision.
+trigger_kind distingue initial, regenerate e explicit_retry_after_failure.
+Adicionar cancel_requested_at/by como sinal ortogonal, sem declarar cancelamento
+externo não confirmado. Adicionar completion_kind (full ou partial_accepted),
+partial_accepted_at/by e accepted_output_count para aceitação explícita de parcial.
+Registrar a resolução de cancelamento separadamente do estado da geração externa.
+
+flow_commands:
+id, installation_id, attempt_id nullable, operation, schema_version, payload,
+idempotency_key, status, delivery_count, lease_id, lease_epoch,
+expires_at, acknowledged_at, result_digest, created_at.
+Único por tenant e idempotency_key; repetir chave com payload diferente é conflito.
+
+flow_external_actions:
+id, command_id, attempt_id nullable, kind, state, intent_at, click_started_at,
+external_request_id nullable, external_media_ids, evidence_digest,
+submission_certainty, reconciled_at, revision.
+É o registro durável que impede perder a informação de um clique possivelmente feito.
+
+flow_events:
+id, aggregate_type, aggregate_id, aggregate_revision, installation_id,
+command_id nullable, attempt_id nullable, event_type, payload,
+occurred_at_client, received_at_server, sequence, created_at.
+unique(event_id) e ordenação por sequência do agregado; relógio cliente é auxiliar.
+
+flow_result_bindings:
+id, attempt_id, flow_media_id, output_index, retrieval_state,
+source_locator_encrypted nullable, source_expires_at nullable,
+atlas_asset_id nullable, mime_type, byte_size, sha256, width, height,
+created_at, retrieved_at, error_code nullable.
+Único por vínculo externo completo e slot da tentativa. Persistir uma identidade
+da mídia, não apenas URL assinada. Hash igual pode ocorrer em linhas legítimas.
+
+flow_executor_leases:
+id, resource_key, installation_id, epoch, state, renewed_at, expires_at,
+quarantine_reason nullable, revision. Unique(resource_key) enquanto ativo.
+resource_key combina proprietário, principal e executor; nunca apenas e-mail solto.
+
+flow_upload_sessions e flow_outbox:
+Usar upload em staging com tamanho/checksum esperado, finalização idempotente e
+outbox transacional para notificações. Artefatos grandes não ficam em linhas JSON.
+
+Índices: itens por projeto/posição; tentativas por estado/projeto; comandos por
+instalação/estado; eventos por agregado/sequência; bindings por flow_media_id;
+ações em submitting/uncertain; leases por validade. Não indexar URLs com segredos.
+Aplicar escopo tenant/owner em toda consulta; constraints também em caminhos de API.
+
+09. BANCO LOCAL DA EXTENSÃO E PERSISTÊNCIA
+
+IndexedDB separado e novo: atlas-flow-executor-v1, com migrações versionadas.
+Stores: commandInbox, actionJournal, eventOutbox, resultStaging, referenceCache,
+projectBindingsCache, observations, leaseSnapshot e schemaMeta.
+commandInbox guarda digest do payload e último resultado de cada commandId.
+actionJournal mantém cada transição antes/depois de efeitos externos.
+Adicionar preparedDrafts com reserva do editor por attemptId, documentId, digest,
+prazo e epoch. Essa reserva liga os comandos separados de prepare e submit.
+eventOutbox mantém evento até confirmação do Coordinator.
+resultStaging pode guardar Blob temporário até ingestão confirmada no Atlas.
+referenceCache usa orçamento e descarte LRU só para arquivos não necessários.
+Um journal de envio incerto nunca é descartado por LRU.
+
+chrome.storage.local: instalação, endpoint autorizado, versão do schema,
+preferências, vínculo e credenciais próprias da instalação. Restringir acesso a
+contextos confiáveis com setAccessLevel; não expor tokens a content scripts.
+chrome.storage.session: tabId e documentId efêmeros. Após reiniciar, revalidar IDs.
+Não usar storage.sync para segredos, arquivos, fila ou dados de geração.
+Não usar localStorage de página do Flow para persistência da extensão.
+
+Tratar QuotaExceededError. Avisar e pausar novos envios antes de perder journal.
+Pedir unlimitedStorage só se o desenho e os testes demonstrarem necessidade.
+Após ingestão confirmada, apagar bytes temporários conforme retenção configurada.
+Estado principal permanece no Atlas; remover extensão não remove projetos Atlas.
+Reinstalação requer pareamento e reconciliação, sem assumir que nada foi enviado.
+
+O service worker pode encerrar. Registrar listeners no escopo superior do módulo,
+fazer boot idempotente, recriar/verificar alarmes e ler pendências do IndexedDB.
+Não depender do popup aberto, DevTools aberto, setInterval ou uma Promise longa.
+Para recuperação periódica, alarms com intervalo mínimo suportado, inicialmente
+30 segundos para Chrome 120+. Um alarme pode atrasar e não garante SLA exato.
+Durante trabalho ativo, mensagens WS podem manter atividade, mas falhas continuam
+possíveis. Não criar pings artificiais permanentes quando não há trabalho.
+
+10. CONTRATO DE COMUNICAÇÃO E EVENTOS
+
+Toda mensagem tem protocolVersion=1 e schema validado. Tamanho máximo de metadados
+proposto: 256 KiB; arquivos seguem canal de transferência separado. Nada de base64
+gigante em mensagens de status. Falhar fechado para operação ou versão desconhecida.
+
+Envelope de comando:
+protocolVersion, commandId, operation, installationId, attemptId nullable,
+projectLinkId nullable, leaseId, leaseEpoch, issuedAt, expiresAt, payloadDigest,
+payload. O servidor calcula campos de autorização; o cliente não escolhe tenant.
+
+Envelope de evento:
+protocolVersion, eventId, commandId, attemptId nullable, installationId,
+sequence, eventType, occurredAt, payload. Eventos duplicados recebem mesmo ACK.
+
+Operações da primeira versão:
+executor.inspect, session.inspect, capabilities.inspect, project.ensure,
+reference.ensure, generation.prepare, generation.submit, generation.observe,
+result.retrieve, executor.reconcile, executor.pause e executor.resume.
+São operações de domínio fechadas e empacotadas, nunca JS/CSS arbitrário enviado
+pelo servidor para execução. O frontend não pode solicitar executeScript livre.
+
+ACK_RECEIVED significa comando validado e gravado no journal local.
+PREPARED significa referências, texto e configuração conferidos.
+SUBMISSION_INTENT_RECORDED significa decisão de envio durável, não aceitação Google.
+FLOW_ACCEPTED significa pedido observado com evidência de aceite.
+RESULT_OBSERVED significa mídia detectada, ainda não disponível permanentemente.
+ASSET_COMMITTED significa arquivo vinculado no Atlas.
+COMPLETED só ocorre após todos os outputs exigidos estarem incorporados ou haver
+decisão explícita e auditável de aceitar um resultado parcial.
+
+REST proposto sob /api/atlas-flow/v1:
+POST /pairings; POST /pairings/{id}/approve; POST /pairings/{id}/exchange;
+POST /installations/{id}/revoke; POST /executor-sessions;
+POST /executors/{id}/heartbeat; POST /commands/claim;
+POST /commands/{id}/ack; POST /commands/{id}/events;
+POST /actions/{id}/intent; POST /actions/{id}/reconcile;
+POST /leases/{id}/renew; POST /leases/{id}/release;
+POST /results/ingest-intents; POST /results/{id}/finalize;
+GET /projects/{id}/flow-state; GET /attempts/{id}/events;
+POST /projects/{id}/flow-link; POST /projects/{id}/references;
+POST /projects/{id}/prompt-imports/preview; POST /projects/{id}/prompt-imports;
+POST /projects/{id}/runs; POST /runs/{id}/pause; POST /runs/{id}/resume;
+POST /prompts/{id}/regenerate; POST /attempts/{id}/resolve-uncertain.
+
+UI usa sessão normal do Atlas; executor usa credencial própria e escopo mínimo.
+Paginar eventos e galerias; cursors estáveis. Uma API de estado devolve revision.
+Conflitos de versão devolvem 409 e snapshot atual, sem sobrescrever atualização.
+POSTs com efeito interno usam Idempotency-Key e digest de corpo. A chave não
+promete idempotência no Google; a máquina de estados trata a lacuna externa.
+
+11. PAREAMENTO E AUTORIZAÇÃO DA EXTENSÃO
+
+Primeira instalação cria installationId e abre página de opções própria.
+O usuário entra no Atlas e escolhe Vincular extensão. Implementar um pareamento
+semelhante a device authorization, pertencente ao Atlas:
+1. Extensão pede um desafio de uso único ao Coordinator autorizado.
+2. Coordinator devolve código para o usuário, ID e segredo longo do desafio.
+3. Usuário confirma o código dentro da sessão autenticada do Atlas.
+4. Extensão troca o segredo por credencial limitada àquela instalação.
+5. UI exibe instalação vinculada, data e opção Desconectar.
+
+Código visível tem validade curta, limite de tentativas e não é bearer permanente.
+Proposta: validade 5 minutos, no máximo 5 tentativas por desafio, rate limit por
+instalação/IP. Usar segredo aleatório de pelo menos 256 bits, armazenado com hash
+no servidor. Access token curto, refresh rotativo e revogável ou mecanismo
+equivalente já seguro do Atlas. Atualizações concorrentes do refresh são serializadas.
+
+Nunca transportar segredo em query string, logs, URL de página Flow ou evento DOM.
+WebSocket autentica por primeira mensagem ou ticket efêmero de uso único; não
+consegue usar livremente cabeçalhos HTTP personalizados como fetch.
+Verificar Origin da extensão e autorização de cada entidade; CORS não substitui isso.
+Credencial da extensão só acessa projetos autorizados e uploads/resultados necessários.
+
+Se usar externally_connectable para detectar instalação e abrir pareamento,
+limitar às origens exatas do Atlas e validar sender.origin/sender.url.
+Isso é otimização de onboarding, não o canal durável da fila. Não expor tokens
+do executor ao JS do Atlas nem permitir que qualquer site inicie gerações.
+Não exigir cookies do Atlas no contexto da extensão para autenticação implícita.
+
+12. SESSÃO GOOGLE, CONTA, PLANO E CAPACIDADES
+
+São três verificações diferentes: extensão vinculada ao Atlas; sessão Google
+presente no navegador; conta Flow correta para aquele projeto.
+Login Atlas via Google não concede automaticamente sessão ou acesso ao Flow.
+Não coletar senha, exportar cookies, copiar bearer Google nem usar OAuth do Atlas
+como se fosse autorização oficial para comandar a interface do Flow.
+
+Ao conectar pela primeira vez, abrir o Flow para o usuário autenticar diretamente
+no Google. Após isso, reutilizar sessão do mesmo perfil do navegador.
+Preferir identificar a conta por informação exposta na interface. Se ela não for
+observável, oferecer confirmação explícita e manter sua natureza declarada.
+Confirmação declarada não pode virar identidade tecnicamente verificada.
+Se identidade não puder ser confirmada com segurança antes de uma mutação,
+pausar e explicar; não escolher a primeira conta nem presumir por nome da aba.
+
+Não pedir permissão cookies no MVP só porque um concorrente pede. Se a interface
+não permitir identificar conta, documentar limitação e avaliar a menor solução
+legítima; qualquer permissão extra deve ter uso concreto e revisão do requisito.
+Nenhum cookie de identificação pode ser tratado como token oficial de autorização.
+
+Sessão: authenticated, unauthenticated, verification_required, unknown.
+Conta: verified, user_confirmed, mismatch, unknown.
+Conexão Atlas: paired, connected, disconnected, revoked.
+Capacidades: observed, stale, unsupported, unknown.
+Mostrar dimensões separadas. Conectado nunca significa pronto se conta divergir.
+
+Plano é informativo, não requisito de login. Ler rótulo e créditos somente quando
+a interface realmente permitir, com origem e horário. Nunca inferir plano por
+saldo ou quantidade de botões. Não fixar números de créditos mensais no código.
+Não supor que ter Ultra elimina limites. O Google controla disponibilidade.
+
+Antes de gerar, confirmar modelo, proporção, quantidade de outputs e referências
+suportadas para aquela configuração. Custo só é exibido como conhecido quando
+observado; caso contrário indicar não disponível. Um saldo é snapshot, não reserva:
+o usuário pode gastar em outra sessão. Pausar ao receber insuficiência de créditos.
+
+Refresh de capacidades: ao conectar, ao trocar conta, ao retomar sessão, quando
+mudança de UI é detectada e antes de aplicar uma configuração com snapshot antigo.
+Não fazer consultas invasivas ao perfil a cada segundo nem navegar entre contas.
+Prazo inicial de snapshot: 5 minutos para opções e 60 segundos para saldo, como
+política do Atlas ajustável; sempre respeitar a resposta mais recente do Flow.
+
+13. GERENCIAMENTO DA ABA DO FLOW
+
+Um executor administra uma aba dedicada por vez. Na primeira versão, uma conta
+ativa e um projeto em produção por instalação. Outros projetos podem aguardar.
+Preferir criar aba própria a tomar controle de uma aba que o usuário está editando.
+Se reutilizar uma aba existente, pedir adoção explícita durante a configuração.
+Guardar propriedade da aba: owned_by_extension ou adopted_by_user.
+Não fechar abas que a extensão não criou sem ação explícita do usuário.
+
+Abrir com active:false. Fixar a aba pode ser preferência, não requisito de sucesso.
+Usar autoDiscardable:false apenas durante trabalho e restaurar preferência anterior
+ao liberar uma aba adotada. Isso não impede encerramento, falha ou suspensão.
+Não roubar foco repetidamente. Se a operação real exigir foco, o requisito de
+geração transparente não foi cumprido: registrar o impedimento em vez de esconder.
+
+Ao localizar aba, verificar origem exata, caminho suportado, frame principal e
+documentId. Não procurar apenas string flow em qualquer URL. Revalidar após SPA,
+reload, redirecionamento ou navegação. Nunca manter referência a elemento antigo.
+Página de login Google não recebe sensores, tokens Atlas ou comandos de editor.
+Uma aba que saiu do Flow para origem desconhecida suspende mutações imediatamente.
+
+Ouvir tabs.onRemoved e tabs.onUpdated. Durante trabalho, tabId ausente gera
+FLOW_TAB_CLOSED e recuperação. Não recriar a aba a cada tick. Uma reabertura por
+incidente com backoff; depois aguardar intervenção. Não criar loop de abre/fecha.
+Se login pendente, manter a aba de login e informar no Atlas, sem novas abas.
+
+O usuário pode abrir outras páginas. A extensão não deve ler conteúdo de sites
+alheios ao escopo. Se o usuário modificar o editor controlado durante preparação,
+detectar divergência e pausar, preservando o que ele escreveu. Não apagar em silêncio.
+Não alternar para outro projeto enquanto uma submissão ainda não foi correlacionada.
+
+14. DESCOBERTA REAL DO ADAPTADOR DO FLOW
+
+Esta fase é obrigatória. O manual não fornece seletores fictícios.
+No navegador de desenvolvimento autorizado, mapear manualmente:
+A. URL de entrada e redirecionamentos atuais, com datas e origens verificadas.
+B. Indicadores de sessão, conta, disponibilidade e bloqueio.
+C. Criar projeto, confirmar ID/URL, obter/alterar título.
+D. Selecionar geração de imagem, modelo, proporção e outputs.
+E. Upload, seleção de arquivo, recorte se houver, conclusão e identidade do asset.
+F. Biblioteca de assets, busca/paginação/virtualização, seleção e remoção de anexos.
+G. Editor de prompt, comportamento controlado, envio e estados de botão.
+H. Resposta de aceitação, execução, falha e resultado pronto.
+I. Download original, eventuais resoluções adicionais e permissões necessárias.
+J. Comportamento em aba inativa, navegador minimizado e após suspensão.
+
+Para cada controle registrar: finalidade, variante de UI, seletor primário,
+alternativo legítimo, restrição de contêiner, pré-condição, pós-condição e prazo.
+Preferir role/nome acessível/data attributes estáveis observados. Classes geradas
+e posições nth-child são último recurso, explicitamente marcadas como frágeis.
+Seletores por texto precisam lidar com pt-BR/en quando forem variantes suportadas.
+Não alegar suporte a todos os idiomas. Conta com UI desconhecida deve receber erro.
+
+flow-adapter/versioned-selectors.ts contém apenas seletores observados e versionados.
+Não importar seletores de concorrente, da versão anterior do Atlas ou de tutoriais
+como se fossem atuais. Pode estudar comportamento público; reimplementar do zero.
+Registrar somente evidência sanitizada. Não commitar cookies, headers, credenciais,
+URLs assinadas ou imagens pessoais. Fixtures para testes devem ser sintéticas.
+
+Capability probe precisa verificar que os controles esperados existem e que o
+sensor recebe eventos relevantes. Se estrutura não corresponde ao adaptador,
+falhar FLOW_UI_UNSUPPORTED; não clicar no primeiro botão parecido.
+Encontrar três elementos compatíveis é ambiguidade, não motivo para escolher um.
+
+Não assumir que projeto ou asset tem UUID no formato de outro sistema. Tratar IDs
+externos como strings opacas com limite de tamanho e parser observado.
+Não montar uma URL de projeto inventada: usar padrão comprovado e origem validada.
+
+15. EXECUÇÃO SEGURA DAS AÇÕES NA INTERFACE
+
+Implementar primitivas de domínio:
+ensureDocumentReady, inspectSession, ensureProject, readSettings, applySettings,
+clearOwnedDraft, selectExistingReferences, uploadReference, writePrompt,
+readPrompt, readAttachedReferences, verifyPreparedDraft e submitPreparedDraft.
+
+Cada primitiva:
+1. Valida o documento, o projeto e o contexto do comando.
+2. Aguarda pré-condição com prazo finito e cancelamento.
+3. Localiza um único controle correto no contêiner esperado.
+4. Faz a ação mínima.
+5. Aguarda e verifica uma pós-condição observável.
+6. Devolve evidência estruturada ou erro tipado.
+
+Não confiar em sleeps fixos como prova de upload ou preparação. MutationObserver,
+eventos de página e verificações periódicas limitadas podem se complementar.
+Remover observers e listeners ao terminar, navegar ou cancelar.
+Pequenos intervalos servem para estabilização medida, não para simular humanidade.
+
+Editor controlado: usar o comportamento real observado. Definir value ou innerText
+sem disparar os eventos requeridos pode não atualizar o estado do app. Testar a
+escrita e ler de volta depois de anexar referências e fechar menus.
+Não usar execCommand como solução universal nem inserir HTML vindo de prompts.
+Prompts são texto, nunca código. React/Slate/ProseMirror, se existirem, exigem
+adaptação comprovada; não depender de propriedades internas não observadas.
+
+Seletor de arquivos: a extensão não pode preencher um input com caminho arbitrário
+do disco. Obter bytes do asset autorizado do Atlas e criar File/Blob no contexto
+correto. Atribuição via FileList/DataTransfer só é usada se a UI real aceitar,
+com evento de mudança e confirmação de upload. Não declarar sucesso pelo evento.
+Se a UI exigir seletor nativo e isso impedir o fluxo, registrar essa limitação.
+
+Aplicar configuração e ler de volta antes de enviar. Modelo indisponível é erro;
+não usar default silencioso. Arquivo enviado mas não selecionado é referência
+disponível, não referência anexada. Miniatura sozinha não prova identidade do asset.
+Não digitar [cantor] ou @cantor supondo que isso anexe a imagem automaticamente.
+
+O mesmo snapshot de texto, referências e opções deve ser validado imediatamente
+antes do envio. Se mudar entre preparação e clique, invalidar preparação.
+Usar preparedDigest com versão do documento, projeto, refs e configuração.
+Não preparar o prompt 2 sobre o editor enquanto o prompt 1 ainda está em envio.
+
+16. OBSERVAÇÃO PASSIVA E CORRELAÇÃO DE RESULTADOS
+
+Estratégia: operar controles reais e observar efeitos da própria página. Não
+construir cliente de endpoints privados do Google nem reproduzir autenticação.
+Não exportar cookies/tokens Google, não resolver CAPTCHA automaticamente, não
+alterar fingerprint, usar proxies, alternar contas ou contornar bloqueios.
+
+Um sensor opcional em MAIN world, empacotado com a extensão, pode observar somente
+respostas relevantes que o Flow já produz durante as operações autorizadas.
+Implementar após verificar necessidade, compatibilidade e observação real.
+O sensor nunca recebe credenciais Atlas e não faz mutações por comando do backend.
+Preservar semântica de fetch/XHR, usar cópia da resposta sem consumir o corpo
+original, não alterar status, cabeçalhos, payload ou resultado visto pela página.
+Limitar origens/rotas/formatos efetivamente observados; nunca registrar todo tráfego.
+Não ler cookies, Authorization, requisições de login ou tokens de verificação.
+
+Extrair e transmitir apenas campos necessários: identidade de projeto/requisição,
+identidade da mídia, estado, metadados de imagem e localizador temporário quando
+indispensável. Redigir/criptografar localizadores; não colocá-los em logs comuns.
+Não encaminhar respostas brutas completas ao backend. Limite inicial de JSON
+observável: 256 KiB, ajustável só com evidência de necessidade. Rejeitar oversize.
+
+MAIN e ISOLATED são mundos distintos. A ponte deve validar origem da mensagem,
+source === window, schema, documentId esperado, tipo e tamanho. Mensagens da página
+continuam dados não confiáveis: um nonce auxilia correlação mas não autentica uma
+página hostil. Nenhuma mensagem DOM pode escolher URL de backend, arquivo local,
+operação privilegiada ou identidade do proprietário.
+Evitar encaminhar conteúdo HTML. Validar campos no service worker e novamente no
+Coordinator; autorização depende do comando já existente, não do payload da página.
+
+Garantir instalação idempotente do sensor, sem envolver fetch várias vezes a cada
+reconexão. Remover listeners de documentos encerrados e manter versão de instalação.
+Se a aplicação guardou uma referência antiga a fetch e a instrumentação não observa
+o evento, capability probe deve apontar isso. Não fingir sensor funcional.
+
+Correlação forte desejada:
+actionId local -> única janela de submissão -> pedido observado daquele envio ->
+identificador externo -> mídias geradas -> attemptId -> assetId do Atlas.
+Registrar contexto da aba, documentId, projeto, hora monotônica/local e sequência.
+Não supor que podemos acrescentar attemptId ao corpo de uma chamada do Google.
+Se o Flow não devolver uma identidade de pedido, manter a janela de envio exclusiva
+até obter vínculo inequívoco do resultado. Se não for possível distinguir, limitar
+a uma geração pendente ou bloquear com RESULT_CORRELATION_UNAVAILABLE.
+
+Texto parcial, hash do prompt, última miniatura, posição no DOM e ordem de conclusão
+NÃO são garantias suficientes. São evidências auxiliares, nunca desempate silencioso.
+Dois prompts idênticos devem ter tentativas diferentes e associação comprovável.
+Não adicionar marcadores secretos ao prompt para tentar criar correlação; isso
+altera o conteúdo criativo e não é protocolo suportado pelo Flow.
+
+Um MutationObserver da galeria pode complementar o sensor para descobrir estados.
+Só usar como fonte principal se os elementos expõem identidades e vínculo seguro.
+Não usar chrome.webRequest presumindo acesso ao corpo de todas as respostas.
+Não habilitar debugger como atalho de produção para ler o tráfego.
+
+Complemento da seção 16 — entrega durável das observações:
+A ponte content -> worker mantém fila curta e reenvia observações com o mesmo
+observationId até receber ACK de persistência no journal. Recebimento apenas em
+memória não basta. A fila da página pode se perder em reload; evento ausente exige
+reconciliação, nunca prova de que não houve envio. Não capturar tráfego geral.
+
+17. CRIAÇÃO E VÍNCULO DE PROJETOS
+
+Atlas cria o projeto local primeiro e mostra Flow: aguardando sincronização.
+Coordinator cria project.ensure com create_action_id único e lease válido.
+Extensão confirma conta e página, procura vínculo existente e verifica se ainda
+é acessível. Se o vínculo é válido, não cria outro projeto.
+Se não existe, grava intenção de criação no journal e no Coordinator, aciona criar
+e observa a identidade real da nova página/projeto.
+Depois confirma título. Se renomear é suportado pela UI, executa e lê de volta.
+Se não puder renomear, mantém nome Atlas independente e mostra nome Flow observado.
+Criar um título retornado na resposta sem renomear a UI não satisfaz confirmação.
+
+Persistir ID, origem e URL observados. Títulos não são chaves únicas.
+Se houve clique mas a resposta/URL se perdeu, estado CREATE_PROJECT_UNCERTAIN.
+Reconciliar com histórico e evidência disponíveis; não criar repetidamente projetos
+com o mesmo nome. Se impossível distinguir, oferecer vinculação manual na interface.
+Nome único temporário pode ajudar diagnóstico se for conteúdo visível autorizado,
+mas não substitui ID nem garante localização após falha.
+
+Se projeto externo foi apagado ou perdeu acesso, marcar link_missing/access_denied.
+Não criar substituto e reenviar referências silenciosamente. Oferecer Reparar vínculo
+com efeito explicado; nova ligação não modifica a origem histórica dos resultados.
+Renomear projeto no Atlas não deve excluir/recriar o projeto Flow.
+
+18. UPLOAD, NOME E REUTILIZAÇÃO DE REFERÊNCIAS
+
+Fluxo obrigatório:
+selected_local -> stored_in_atlas -> validated -> pending_upload -> uploading ->
+available_in_flow -> verified_binding. Para um prompt: selected_for_attempt ->
+attached_to_draft -> verified_attached. Esses estados não são intercambiáveis.
+
+Entrada no Atlas: validar magic bytes, tipo, tamanho, dimensões e decodificação.
+Limites próprios iniciais: 20 MiB por arquivo e 40 megapixels, configuráveis.
+Eles são limites do produto Atlas, não afirmações sobre o Flow. A compatibilidade
+de MIME e o limite efetivo do fornecedor devem ser observados. Começar com PNG/JPEG;
+aceitar WebP ou outros somente após teste do adaptador. Rejeitar SVG executável.
+Preservar original. Se converter/reduzir, criar versão derivada com hash próprio,
+registrar transformação e confirmar que não houve distorção ou perda indevida.
+
+Calcular SHA-256 dos bytes efetivamente enviados. Dedupe por owner, projectLink,
+principal e hash/versão efetiva. Não deduplicar entre usuários nem tratar arquivos
+com mesmo nome como iguais. Dois aliases podem apontar para mesmo asset, com aviso.
+Não fazer upload de novo só porque o usuário renomeou o alias.
+
+Antes do upload, conferir binding válido. Se já existe, localizar o asset na UI e
+revalidar conforme necessidade. Biblioteca virtualizada requer busca ou paginação
+legítima; o asset não estar no primeiro viewport não significa que foi apagado.
+Gravar upload intent antes da ação. Observar conclusão e identidade da mídia.
+Se ID não está disponível, só aceitar localizador alternativo que tenha sido
+comprovado único e persistente no escopo. Nome ou miniatura genérica não basta.
+
+Upload com resposta perdida vira REFERENCE_UPLOAD_UNCERTAIN. Primeiro reconciliar.
+Reenvio de arquivo pode duplicar biblioteca; não fazer retry automático desse efeito.
+Atualizar imagem cria referenceVersionId novo, sem destruir versões usadas por
+tentativas anteriores. Nova geração usa a versão selecionada no snapshot.
+
+Alias: [cantor], [banda], [microfone], [cenário], ou nome definido pelo usuário.
+Guardar display_name e alias_normalized separados. Normalizar alias com Unicode
+NFC, trim e comparação sem diferença de caixa; preservar acentos. Proibir vazio,
+colchetes internos, caracteres de controle e mais de 48 caracteres no alias.
+Unicidade por projeto. Nunca usar alias como ID de arquivo externo.
+
+Renomear alias não muda IDs. Atualizar referências dos rascunhos por identidade,
+com revisão explícita do texto se necessário. Não alterar revisões em execução.
+Se bloco contém alias inexistente, apontar linha/trecho antes de gerar.
+Remover referência usada por uma revisão arquiva a referência lógica e preserva
+snapshot histórico. Não apagar asset do Flow automaticamente ao remover no Atlas.
+
+Complemento da seção 18 — aliases do mesmo arquivo:
+Se dois aliases resolvem para o mesmo asset, preservar o mapa autoral dos nomes,
+mas anexar esse asset uma única vez no draft. A contagem de referências efetivas
+usa IDs únicos. Não exigir duas miniaturas iguais para satisfazer dois aliases.
+
+19. IMPORTAÇÃO DE PROMPTS EM BLOCOS
+
+Modo principal: um separador explícito, três hífens isolados numa linha, entre
+blocos. Quebras de linha dentro de um bloco fazem parte do mesmo prompt.
+Aceitar CRLF/LF e normalizar separador de linha para armazenamento consistente,
+preservando o texto criativo. Trim somente das bordas do bloco, conforme preview.
+
+Exemplo de entrada:
+[cantor] com [banda] ao fundo, enquadramento próximo.
+Manter [microfone] e a luz natural de [cenário].
+---
+[cantor] em outro ângulo, mesmas referências e figurino.
+---
+Detalhe instrumental da [banda] no [cenário].
+
+Esse exemplo gera três linhas, não cinco. Exibir preview com número, texto e aliases
+resolvidos. Não enviar ao Flow enquanto o usuário apenas cola ou revisa o preview.
+Modo um prompt por linha pode existir como opção explícita, nunca adivinhado.
+Não dividir por qualquer linha em branco: prompts profissionais podem ter parágrafos.
+
+Validações: bloco vazio; texto acima do limite observado/configurado; alias ausente;
+tipo de geração incompatível; arquivo pendente; configuração ainda não verificada.
+Texto duplicado é aviso, não motivo para excluir ou juntar linhas.
+Importação é transacional e idempotente por importId; clique duplo não duplica linhas.
+Limite de segurança inicial: 200 blocos por importação e 1 MiB de texto total.
+Paginar/virtualizar UI; ampliar limite só após testes, sem alegar limite do Flow.
+
+Gramática de aliases: colchetes simples, sem aninhamento, compatíveis com os aliases
+do projeto. Permitir escape explícito com barra invertida para texto literal entre
+colchetes. Identificar ambiguidades no preview; não tratar instrução literal como
+referência e não descartar conteúdo desconhecido silenciosamente.
+
+20. REVISÕES, SNAPSHOTS E COMPILAÇÃO DE REFERÊNCIAS
+
+Ao clicar Gerar, criar revisão imutável com texto original, texto a enviar, IDs das
+versões de referência, configuração, conta e projeto externos vinculados.
+O usuário vê como os aliases foram resolvidos. As imagens são anexadas pela UI;
+o texto pode manter os aliases legíveis ou usar nomes descritivos conforme uma
+política explícita de compilação validada. Não fazer reescrita criativa automática.
+O texto efetivo precisa aparecer no preview e ser guardado em compiled_text.
+
+IDs de referências são lista explícita no payload. Não pedir que a extensão resolva
+nomes globais por conta própria nem enviar só texto com colchetes.
+Gravar digest dos bytes UTF-8 do texto efetivo, IDs e hashes das referências, modelo,
+proporção e outputs. Ordenar campos canonicamente no hash de configuração.
+Hashes auxiliam integridade, não identificação de tentativa.
+
+Antes do envio, validar que vínculo de cada referência corresponde ao mesmo
+projeto/conta. Referência encontrada em outra conta não pode ser reutilizada.
+Ao editar depois de enfileirar, oferecer aplicar à próxima tentativa ou substituir
+uma tentativa ainda não enviada com cancelamento transacional. Nunca modificar
+o snapshot de uma tentativa com submit intent já gravado.
+
+Complemento da seção 20 — referência imutável versus binding externo:
+O snapshot autoral congela referenceVersionId e hash efetivo mesmo quando o upload
+está pendente. Após reference.ensure, criar um contexto de execução resolvido com
+flowBindingId/flowMediaId e revisão do binding. Essa resolução não reescreve o
+snapshot autoral. Guardar a resolução usada na tentativa para auditoria.
+
+21. SCHEDULER E LOTES DE TRÊS
+
+Responsabilidade principal do Coordinator. Extensão não escolhe livremente o próximo
+projeto e a UI não é scheduler. Criar grupos congelados [1,2,3], [4,5,6], [7,...].
+Um prompt por membro. expected_outputs é outra configuração, default=1; usar valores
+disponíveis na conta. Três prompts com dois outputs podem produzir seis imagens.
+
+Processar preparação/submissão sequencialmente no editor. Após correlação suficiente
+do primeiro envio, o segundo pode ser submetido se a capacidade real permitir.
+No máximo três tentativas pendentes no lote e nunca acima do limite verificado.
+Se o Flow só permite uma pendente, o lote de três é executado sequencialmente e a
+UI informa capacidade real. Não anunciar três gerações simultâneas sem validação.
+O critério final de paralelismo pendente=3 exige prova real; modo reduzido não é
+aprovação automática desse critério. Não abrir três abas para mascarar a limitação.
+
+O próximo lote começa quando os membros do anterior estão concluídos, falharam de
+forma definitiva ou foram explicitamente pulados/cancelados. Sessão bloqueada,
+resultado ambíguo e envio incerto não são terminais e interrompem avanço automático.
+Falha definitiva de uma linha não invalida resultados das outras; seguir conforme
+política visível do projeto. Default: continuar com linhas válidas, exceto bloqueios
+globais. Política é congelada por run e registrada.
+
+Só um run por conta/executor ativo no MVP. Enfileirar outros sem trocar de projeto
+enquanto houver solicitações incertas ou em observação na aba atual.
+Regenerações entram em fila própria de tentativas, priorizadas após o lote atual.
+Não interromper uma preparação já iniciada para inserir uma regeneração.
+Evitar duas tentativas do mesmo prompt simultâneas até provar correlação inequívoca.
+
+Taxa de envio deve seguir disponibilidade observada e resposta do serviço. Não usar
+intervalos para alegar anti-bloqueio. Rate limit, cooldown ou verificação pausam o
+escopo apropriado. Nunca aumentar concorrência por tentativa e erro agressiva.
+
+22. MÁQUINA DE ESTADOS E EVENTOS DURÁVEIS
+
+Estados da tentativa:
+draft, queued, waiting_executor, waiting_session, preparing, ready_to_submit,
+submitting, generating, retrieving, completed, partial, failed, canceled,
+submission_uncertain, needs_user_action.
+execution_stage detalha conta, projeto, referências, texto, opções, envio e arquivo.
+submission_certainty é independentemente not_sent, may_have_sent,
+accepted, rejected ou resolved_by_user. Não inferir certeza só pelo state geral.
+
+Transições principais:
+queued -> waiting_executor ou preparing;
+preparing -> ready_to_submit ou failed/needs_user_action;
+ready_to_submit -> submitting após intenção durável;
+submitting -> generating com aceite confirmado;
+submitting -> submission_uncertain se confirmação perdida;
+submitting -> failed apenas com rejeição inequívoca observada;
+generating -> retrieving com resultado pronto;
+generating -> failed com falha externa definitiva;
+retrieving -> completed depois de ingestão e vínculos confirmados;
+retrieving -> partial se faltam outputs após reconciliação;
+submission_uncertain -> generating/retrieving/completed quando conciliado;
+submission_uncertain -> needs_user_action se não há evidência suficiente.
+
+Falha de download não volta para queued e não aciona nova geração.
+Reautenticar não reinicia uma tentativa aceita. Retomar geração e retomar ingestão
+são ações distintas. Cancelar após aceite não prova cancelamento no Google.
+
+Usar reducer de transições com guardas, testes e revisão otimista.
+Evento com sequence menor é deduplicado/arquivado e não regride o agregado.
+completed é imutável quanto à tentativa; nova geração é novo attemptId.
+Eventos de novas mídias tardias precisam ser reconciliados sem reabrir geração.
+Transação do backend persiste evento, estado e outbox antes de ACK.
+Extensão remove evento local só após ACK persistido do servidor.
+
+23. LEASES, EXCLUSÃO MÚTUA E ENVIO INCERTO
+
+Existem dois controles: lease durável do executor/conta e mutex do editor.
+O lease no banco impede dois navegadores/instâncias coordenadas de consumirem a
+mesma fila. O mutex impede duas operações modificarem o mesmo editor.
+Na extensão, uma Promise em memória pode serializar em execução normal, mas não
+substitui journal/lease após reinício. Ao iniciar, reconciliar ações abertas antes
+de admitir novas mutações.
+
+Valores iniciais propostos: TTL do lease 90 s; renovação 15 s enquanto ativo;
+prazo mínimo restante antes de ação mutável 30 s. O servidor é autoridade de tempo.
+Cada nova concessão incrementa epoch. Toda confirmação de mutação exige lease/epoch
+atuais. Worker antigo não pode atualizar o banco de uma concessão nova.
+
+IMPORTANTE: o Google não aplica nosso fencing token. Portanto, fencing só no banco
+NÃO garante ausência de clique externo duplicado durante partição de rede.
+Mitigação obrigatória: se o executor perde lease/conexão, para novas mutações; se
+havia intent/submitting, o recurso entra em quarentena e NÃO é reassigned para um
+novo executor só porque o TTL venceu. Exigir reconciliação ou decisão explícita.
+Continuar observação passiva local e guardar eventos/arquivos quando possível.
+
+Envio tem janela inevitável entre gravar intenção e Google confirmar. Registrar:
+action created -> journal persisted -> intent ACK backend -> final checks ->
+click_started journal -> ação UI -> observed_external_outcome -> evento durable.
+Só clicar após todos os ACKs e verificações. Se backend indisponível antes do intent
+ACK, não clicar. Crash entre registros é tratado conservadoramente como incerto.
+
+Não existe exactly-once garantido em sistema externo sem idempotência fornecida por
+ele. Usar entrega pelo menos uma vez internamente e proteção contra repetir efeitos.
+Um commandId já terminal devolve resultado existente. Mesmo ID com payload diferente
+é COMMAND_PAYLOAD_CONFLICT. Comando expirado é descartado antes de nova mutação;
+eventos de efeito que já ocorreu continuam recebidos para reconciliação.
+
+Complemento da seção 23 — reserva entre prepare e submit:
+Os dois comandos compartilham uma RESERVA durável do editor. Ao concluir prepare,
+guardar PreparedDraft e manter a reserva daquele attemptId até submit consumir a
+preparação ou o TTL expirar sem intent aberto. Não preparar outra linha nesse
+intervalo. A Promise do handler pode terminar; a reserva continua no journal e no
+Coordinator. No boot, invalidar preparo de documento antigo. Sem intent, é possível
+revalidar/repreparar. Com intent, conciliar antes de liberar. Expiração não autoriza
+apagar conteúdo alterado pelo usuário ou descartar efeito possivelmente ocorrido.
+
+24. SEQUÊNCIA COMPLETA DE UMA GERAÇÃO
+
+1. Usuário clica Gerar no Atlas; backend valida propriedade, aliases e opções.
+2. Congela revisões, cria run, lotes e tentativas em transação idempotente.
+3. Scheduler escolhe executor vinculado e conta correta; obtém lease.
+4. Extensão recebe comando e grava inbox antes de ACK_RECEIVED.
+5. Verifica versão, schema, prazo, permissão, lease e existência de ações abertas.
+6. Localiza/abre aba dedicada; confirma documento e identidade da conta.
+7. Confirma projectLink e navega ao projeto correto, se necessário.
+8. Garante que todas as referências têm bindings válidos; uploads são operações
+   próprias, seriadas, registradas e conciliadas antes da geração.
+9. Adquire mutex do editor. Não segurar mutex durante download de arquivos já prontos.
+10. Verifica se há rascunho estranho; se houver, pausa sem apagar conteúdo do usuário.
+11. Limpa apenas rascunho pertencente ao executor e configura modo imagem.
+12. Aplica modelo, proporção e quantidade; lê de volta e compara exatamente.
+13. Seleciona os assets do snapshot, por identidade, usando biblioteca da UI.
+14. Confirma lista anexada, sem extras nem ausências.
+15. Preenche texto, fecha menus necessários e lê texto/anexos/opções novamente.
+16. Produz preparedDigest. Instala janela de observação ANTES de acionar gerar.
+17. Revalida conta, projeto, documentId, lease e digest imediatamente antes do envio.
+18. Persiste intent local e no backend; só continua após ACK durável.
+19. Marca click_started no journal; aciona gerar uma única vez.
+20. Observa rejeição, aceite ou incerteza. Clique não é prova de aceite.
+21. Persiste vínculo externo e evento. Libera editor só após condição segura de
+    separação da submissão; se ambígua, mantém bloqueio lógico e para novos envios.
+22. Acompanha geração sem repetir clique. Pode preparar o próximo membro do lote
+    somente quando a correlação e a capacidade de pendências permitem.
+23. Quando há resultado, persiste IDs e recupera cada arquivo.
+24. Atlas valida bytes e associa asset à tentativa e à linha original.
+25. Marca completed após todas as ingestões exigidas; atualiza UI por evento.
+26. Remove cache temporário já confirmado; mantém journal necessário ao histórico.
+27. Ao encerrar o lote, avalia bloqueios e só então inicia o próximo.
+
+25. RECUPERAÇÃO E ARMAZENAMENTO DAS IMAGENS
+
+O resultado precisa chegar como arquivo ao Atlas, não somente thumbnail ou link.
+Separar geração externa, aquisição de bytes, upload ao Atlas e finalização de asset.
+Implementar esta parte na primeira prova real, antes de expandir a fila.
+
+Caminho preferencial: observar um localizador legítimo do arquivo, validar host e
+tipo e recuperar os bytes pelo contexto autorizado da extensão. Usar permissões
+exatas para origens de mídia efetivamente necessárias e observadas. Não permitir
+fetch de URL arbitrária enviada pela página ou pelo usuário.
+Não copiar Authorization/cookies Google para o backend. Preferir URL legítima de
+download com validade própria. Se exige interação com Download da UI, mapear e
+testar o caminho normal. URL de thumbnail não é prova de imagem em resolução final.
+
+Se o resultado é blob: de origem da página, ele pode não ser acessível no worker.
+Ler no contexto em que existe, com autorização e validação, transferindo bytes em
+chunks limitados para staging da extensão/ingestão. Não tratar blob: como URL global.
+Mensagens Chrome usam representação JSON: ArrayBuffer não deve ser presumido como
+transferível. Implementar chunks base64 pequenos se necessário, com índice, offset,
+hash, ACK e limite total; evitar explosão de memória. Proposta de chunk: 512 KiB
+de bytes antes de base64. Ajustar por medições, sem mensagens gigantes.
+
+O service worker não deve depender de APIs DOM indisponíveis. Dimensões e decode
+podem ser validados no backend ou em contexto de extensão apropriado. Se usar
+offscreen document para trabalho DOM de arquivos, ele é auxiliar de processamento,
+não substituto da página do Flow e nunca mecanismo para impedir suspensão do worker.
+Só adicionar a permissão offscreen após necessidade concreta e teste.
+
+chrome.downloads permite iniciar e acompanhar download, mas não concede leitura
+arbitrária do arquivo local pelo caminho retornado. Não implementar web upload
+como se downloads.search fornecesse os bytes. Para Atlas web, obter bytes por
+caminho comprovado ou marcar recuperação indisponível. Para Atlas desktop, importação
+de download local pode ser implementada pelo processo do Atlas, restrita ao arquivo
+esperado, com allowlist de diretório e validação contra symlink/path traversal.
+Esse fallback deve ser escolhido e testado, nunca só citado como solução pronta.
+
+Ingestão no Atlas:
+1. POST ingest-intent com resultBindingId, tamanho, mime e checksum conhecido.
+2. Coordinator gera destino restrito ao próprio resultado e àquela instalação.
+3. Transferir o arquivo, com retomada se tamanho justificar.
+4. Validar magic bytes, tamanho, decodificação, dimensões e checksum no servidor.
+5. Gravar asset e vínculo em transação idempotente; então emitir ASSET_COMMITTED.
+6. Finalizar tentativa quando todos os outputs exigidos estiverem confirmados.
+
+Storage de objeto e banco não formam transação única. Usar staging + finalize,
+chave determinística por resultado e checksum, estado explícito e garbage collector
+de objetos órfãos após prazo seguro. Não apagar staging de uma ingestão aberta.
+Se finalize foi confirmado mas o ACK se perdeu, repetir finalize não duplica asset.
+Se arquivo já existe por hash, pode reutilizar bytes físicos no mesmo tenant,
+mantendo entidades/vínculos separados para cada tentativa. Nunca eliminar uma linha
+porque a imagem tem o mesmo hash de outra linha.
+
+Não armazenar apenas URLs assinadas: elas expiram. Guardar localizador protegido
+somente durante recuperação e identidade externa permanente quando disponível.
+Se URL expirou, reencontrar a MESMA mídia na UI e obter novo download. Isso não é
+nova geração. Se não puder recuperá-la, estado RESULT_RETRIEVAL_FAILED com ação
+Tentar recuperar. Não rotular como falha de geração nem regenerar por conta própria.
+
+Quantidade de outputs: guardar expected_outputs, observados e recuperados.
+Mais resultados que o esperado são extras, ficam conciliados e identificados.
+Menos resultados exigem reconciliação. Não completar pela primeira imagem quando
+o pedido exigia mais. Permitir Aceitar resultado parcial com registro explícito.
+Limite inicial de imagem recuperada: 64 MiB, configurável após teste. Rejeitar
+HTML de login com status 200, mime falso, corpo vazio e imagem indecodificável.
+
+Resolução: default é arquivo original disponibilizado pelo Flow. Oferecer 4K ou
+upscale somente após comprovar disponibilidade, custo, fluxo e identidade da mídia
+derivada. Não anunciar 4K por mudar nome de arquivo ou redimensionar thumbnail.
+Guardar relação entre original e derivado, dimensões reais e etapa de upscale.
+
+Complemento da seção 25 — conclusão parcial explicitamente aceita:
+Ao aceitar parcial, persistir accepted_output_count e autoria/data da decisão,
+manter expected_outputs original e concluir com completion_kind=partial_accepted.
+A UI mostra Concluído com resultado parcial. Só essa decisão torna o membro
+terminal para avanço do lote. Mídia tardia pode ser incorporada à mesma tentativa
+sem gerar novamente nem trocar automaticamente a seleção aprovada.
+
+26. REGENERAÇÃO, APROVAÇÃO E VERSÕES
+
+Regenerar cria attemptId novo com parent_attempt_id e revisão escolhida.
+Mesmo prompt e mesmas referências não significam mesmo comando ou mesma tentativa.
+Clique duplo no MESMO gesto usa idempotency key da ação; um novo clique deliberado,
+após conclusão, pode criar nova tentativa, conforme interface clara.
+
+Se revisão não mudou, reutilizar snapshot. Se texto, arquivo ou opções foram
+editados, criar revisão nova e exibir a configuração aplicada à próxima tentativa.
+As referências já vinculadas continuam reutilizadas, desde que válidas no projeto.
+Não recriar projeto ou reenviar todas as referências ao regenerar.
+
+UI de cada linha: histórico de tentativas, imagens, modelo efetivo, hora, estado,
+seletor de imagem e ação Regenerar. Preservar seleção anterior enquanto nova tentativa
+processa. Novo resultado não substitui approved_asset_id automaticamente.
+Fixar/aprovar protege a escolha do usuário, não altera o arquivo externo do Flow.
+Ao trocar manualmente uma imagem aprovada, registrar nova escolha explicitamente.
+
+Uma regeneração durante lote ativo entra após o lote. Mostrar posição prevista.
+Se outra tentativa da mesma linha está submitting/generating, enfileirar sem
+sobrepor até existir correlação comprovada. Não cancelar geração externa para abrir
+espaço sem consentimento. Não prometer mesma seed ou reprodução determinística.
+
+27. PAUSA, CANCELAMENTO, EXCLUSÃO E EDIÇÃO
+
+Pausar run: não entregar novos submits. Ação ainda sem intent pode terminar preparo
+ou ser descartada com limpeza controlada. Ação com intent já aberto precisa ser
+conciliada. Continuar observando/recolhendo resultados de pedidos já aceitos.
+Pausa não fecha o Flow nem apaga rascunhos do usuário.
+
+Cancelar membro queued: marcar canceled, remover do planejamento e liberar slot.
+Cancelar após envio: registrar cancel_requested_at, parar novas mutações da tentativa
+e informar que o pedido externo pode continuar. Só afirmar cancelamento Flow se
+existir mecanismo real observado e confirmação. Preservar resultado tardio como
+material recuperável, sem atribuir a outra linha. Não prometer estorno de créditos.
+
+Excluir linha/projeto no Atlas: arquivamento lógico por padrão. Histórico necessário
+à reconciliação não é apagado enquanto houver efeito externo pendente. Não excluir
+projeto Flow nem referências externas automaticamente. Exclusão externa é escopo
+separado, com ação específica e confirmação correspondente.
+
+Ordenar linhas: atualiza position, não os membros congelados do lote em execução.
+Novas linhas entram em run posterior ou append explícito após o lote atual.
+Editar linha enviada cria revisão para próxima tentativa. Não alterar o texto do
+resultado antigo no histórico. Salvar edições usa controle de revisão, sem last-write
+wins silencioso entre duas abas do Atlas.
+
+28. RETOMADA APÓS FALHAS E REINÍCIOS
+
+No boot da extensão:
+A. Abrir banco local e validar schema/migrações.
+B. Carregar instalação e credencial; renovar acesso Atlas quando necessário.
+C. Recriar listeners/alarmes de forma idempotente.
+D. Reenviar outbox de eventos com mesmos eventIds.
+E. Consultar estado durável do Coordinator.
+F. Enumerar abas autorizadas e reconciliar documentIds, principal e projeto.
+G. Resolver ações abertas; só depois liberar novos submits.
+
+Matriz de recuperação:
+- Crash antes do intent: retomar preparação a partir de dados válidos.
+- Crash após intent e antes de ACK local: tratar efeito como potencialmente ocorrido.
+- Crash após clique/antes de aceite: submission_uncertain, sem reenviar.
+- Crash após aceite: observar mesma requisição/mídia, não gerar novamente.
+- Crash durante download: retomar aquisição da mesma mídia.
+- Crash após upload Atlas/antes de finalize: consultar sessão e finalizar.
+- Crash após finalize/antes de ACK: repetir confirmação idempotente.
+- Reinstalação: pedir pareamento, consultar pendências e confirmar conta antes de
+  assumir lease. A ausência de journal local não autoriza reiniciar tudo.
+- Troca de máquina: mesmo processo, sem usar estado antigo como prova de sessão.
+- Google logout: pausar envios, manter eventos conhecidos e pedir reconexão.
+- Mudança de conta: interromper mutações e exigir vínculo correto para recuperar.
+- Aba fechada: reabrir uma vez se permitido; revalidar e conciliar, sem nova geração.
+- Computador suspenso: prazos locais não comprovam falha; consultar estado ao voltar.
+- Atlas UI fechada: Coordinator e extensão continuam se seus processos estiverem
+  ativos e transporte não depender da UI.
+- Atlas desktop encerrado: Coordinator local também pode parar; extensão interrompe
+  novos envios, preserva observações locais e retoma ao reconectar.
+
+Reconciliação de envio incerto:
+Buscar evidência do mesmo actionId/contexto, pedido externo conhecido, mídias já
+associadas, alterações do projeto e arquivos em staging. Não usar apenas texto.
+Se aceitar/rejeitar puder ser provado, atualizar certeza com origem da evidência.
+Se não puder, mostrar: envio não confirmado, não repetido para evitar duplicação.
+Oferecer localizar/vincular o resultado, aguardar ou iniciar NOVA tentativa com
+aviso de possível duplicação. Decisão do usuário fica registrada, sem converter
+incerteza histórica em afirmação falsa de nunca enviado.
+
+29. AUTENTICAÇÃO, LIMITES E PROTEÇÃO DE DADOS
+
+Não enviar sessões Google ao Atlas. Tokens próprios ficam no service worker e
+armazenamento restrito da extensão. Recursos do protocolo sempre passam por
+autorização tenant/owner/installation. Não confiar em IDs presentes no DOM.
+Não usar segredo estático igual para todos os usuários ou XOR como autenticação.
+Não colocar chave privada de assinatura da extensão no código, ZIP ou documento.
+
+Schema validation em todas as entradas; rejeitar operações arbitrárias, URLs fora
+de allowlist, caminhos absolutos e payload excessivo. Credencial de upload só serve
+ao asset designado e expira. Expiração não deve provocar nova geração.
+Proteção SSRF na ingestão: backend não busca URLs externas arbitrárias. Preferir
+bytes enviados pelo executor; se fetch server-side for indispensável, bloquear
+IPs privados, metadados cloud, redirects indevidos e DNS rebinding.
+
+Rotas locais validam Host e Origin, mas isso não basta: exigir pareamento autenticado.
+Rotas web usam HTTPS, autorização e proteção de sessão/CSRF nas ações do usuário.
+WebSocket exige autenticação, limite de mensagens e encerramento de sessões revogadas.
+Não exibir stack trace, tokens ou caminhos do computador a outro tenant.
+
+Permissões Chrome mínimas: storage, scripting e alarms; acesso aos hosts exatos
+do Flow e Atlas. Adicionar tabs/sidePanel/downloads/offscreen só conforme uso real.
+activeTab sozinho não sustenta acesso automático permanente em segundo plano.
+Não pedir acesso a todos os sites, cookies, histórico, debugger ou file:// por
+conveniência. A permissão não garante que um recurso do fornecedor seja permitido.
+
+Não executar código remoto, eval, new Function, scripts de CDN nem pipelines
+arbitrários recebidos como dados. Todo comportamento executável fica empacotado
+na extensão. Configuração remota, se existir, limita-se a flags e limites tipados;
+não construir um interpretador remoto de seletores/ações para evitar atualização.
+
+Não logar prompts completos ou imagens por padrão. Suporte usa identificadores,
+hashes, código de erro e contexto mínimo. Exportação diagnóstica é iniciada pelo
+usuário e redigida. Não coletar screenshots de conta automaticamente para nuvem.
+Política de retenção inicial: logs técnicos 14 dias; metadados de tentativas e
+assets conforme retenção do projeto; staging concluído até 24 h; pendências não
+são apagadas só por idade. Esses são defaults de produto, ajustáveis e documentados.
+
+30. INTERFACE DO ATLAS
+
+Usar o design do Atlas. Não criar outra aplicação visual desconectada.
+Tela de conexão mostra separadamente: extensão encontrada, pareada, conectada,
+Flow autenticado, conta identificada, adaptador compatível e executor disponível.
+Botões: Vincular, Conectar Flow, Verificar conexão, Desconectar instalação e
+Abrir diagnóstico. Login/verificação excepcional tem instrução direta.
+
+Tela do projeto:
+- Nome Atlas e vínculo externo com estado de sincronização.
+- Referências com imagem, nome, alias, versão e estado de upload/vínculo.
+- Importação de blocos com preview e erros na linha correta.
+- Modelo, proporção e outputs apenas entre opções verificadas.
+- Botões Gerar, Pausar e Retomar, com total de prompts e lotes.
+- Linhas estáveis com prompt, refs resolvidas, etapa, galeria e Regenerar.
+- Histórico acessível de tentativas e imagem selecionada/aprovada.
+
+Ordem é sempre por prompt.position. Re-render, websocket reconnect e conclusão
+fora de ordem não mudam o DOM key do prompt. Não usar índice de array como ID.
+Resultado pertence ao prompt por attemptId/promptId, nunca pelo card visível ativo.
+Paginação não deve fazer o evento cair em outra linha; atualizar store por ID.
+
+Estados devem ser humanos: aguardando extensão; reconecte ao Flow; enviando
+referência; anexando referências; preparando texto; enviando; gerando; recuperando
+imagem; concluído; resultado parcial; envio não confirmado; ação necessária.
+Não mostrar spinner infinito sem estágio/prazo. Não mostrar 100% antes da ingestão.
+Se duração não é previsível, usar progresso por etapas ou contagem, não ETA inventada.
+
+Exemplo: lote 2 de 4, prompt 5 gerando, 3 imagens recuperadas de 10 previstas.
+Não confundir prompts concluídos com quantidade de imagens. Uma referência ainda
+em upload bloqueia só o que depende dela, salvo operação global indisponível.
+
+Fluxo otimista da UI não pode declarar projeto Flow criado antes do evento confirmado.
+Se usuário estiver offline, salvar rascunho conforme arquitetura e mostrar não
+enviado. Restaurar UI por GET snapshot + eventos a partir de cursor persistido.
+Não duplicar linhas ao receber snapshot e evento do mesmo agregado.
+
+31. INTERFACE DA EXTENSÃO
+
+Painel pequeno de status, sem virar uma segunda galeria/editor do Atlas.
+Mostrar: instalação vinculada, endpoint Atlas, estado da sessão Flow, conta atual
+com privacidade adequada, projeto, etapa, tentativa e versão do adaptador.
+Controles: Conectar Atlas, Abrir Flow, Pausar executor, Reconectar, Diagnóstico,
+Desvincular. Estado do painel deriva do journal/Coordinator, não de variáveis da UI.
+
+Popup fechado não interrompe trabalho. Se painel lateral for escolhido, usar
+sidePanel com abertura por ação do usuário; ele não precisa ficar aberto para gerar.
+Não depender de APIs que exigem user gesture para cada envio de geração.
+Ícone/badge pode indicar trabalho, pausa ou ação necessária, sem expor dados pessoais.
+
+Desvincular: revoga acesso Atlas, para novas mutações, preserva avisos de ações
+pendentes e permite exportar diagnóstico seguro. Não desloga a conta Google e
+não apaga projeto Flow. Explicar pendências se houver submissão já aceita.
+
+32. CATÁLOGO DE ERROS E RECUPERAÇÃO
+
+Cada erro tem code, scope, stage, retryPolicy, userMessage, diagnosticId e evidence.
+scope: line, project, principal, installation ou global_adapter.
+retryPolicy: safe_read, safe_internal, reconcile_first, user_action ou no_retry.
+
+ATLAS_AUTH_EXPIRED: renovar credencial própria; não pedir login Google.
+INSTALLATION_REVOKED: parar mutações e solicitar novo vínculo.
+PROTOCOL_MISMATCH: atualizar versão compatível, preservando estado.
+EXTENSION_DISCONNECTED: aguardar conexão, sem repetir envios já abertos.
+GOOGLE_LOGIN_REQUIRED: abrir login uma vez e orientar reconexão.
+GOOGLE_VERIFICATION_REQUIRED: pausar; usuário resolve no Google.
+ACCOUNT_UNKNOWN: identificar/confirmar conforme política; não escolher conta.
+ACCOUNT_MISMATCH: pausar projeto e manter vínculo original.
+FLOW_UI_UNSUPPORTED: interromper mutações e exigir adaptador compatível.
+FLOW_TAB_CLOSED: recuperar aba e conciliar.
+FLOW_DOCUMENT_CHANGED: invalidar preparação e revalidar contexto.
+FLOW_PROJECT_MISSING: reparar vínculo explicitamente.
+CREATE_PROJECT_UNCERTAIN: conciliar antes de criar outro.
+MODEL_UNAVAILABLE: pedir configuração compatível; sem fallback oculto.
+OUTPUT_COUNT_UNAVAILABLE: informar opção real; sem reduzir silenciosamente.
+REFERENCE_ALIAS_UNKNOWN: apontar o trecho no preview.
+REFERENCE_FILE_INVALID: corrigir arquivo no Atlas.
+REFERENCE_UPLOAD_UNCERTAIN: conciliar antes de reupload.
+REFERENCE_BINDING_MISSING: localizar/reparar o asset, sem assumir pelo nome.
+REFERENCE_ATTACH_FAILED: impedir envio; repetir só seleção sem efeito de geração.
+PROMPT_WRITE_MISMATCH: impedir envio; mostrar diagnóstico de texto esperado/observado.
+USER_EDITOR_INTERFERENCE: pausar sem apagar conteúdo não pertencente ao executor.
+LEASE_LOST: parar mutações e colocar ações abertas em reconciliação.
+COMMAND_PAYLOAD_CONFLICT: bloquear comando; falha de integridade do protocolo.
+SUBMISSION_UNCERTAIN: nunca auto-regenerar; conciliar ou decisão explícita.
+FLOW_RATE_LIMITED: respeitar cooldown/aviso e pausar novos envios.
+FLOW_UNUSUAL_ACTIVITY: pausar conta; sem insistir ou contornar verificação.
+FLOW_CREDITS_INSUFFICIENT: pausar run; saldo conhecido/desconhecido corretamente.
+FLOW_CONTENT_REJECTED: marcar linha; permitir edição autoral, sem reescrita automática
+para contornar políticas do fornecedor.
+FLOW_GENERATION_FAILED: erro externo confirmado; nova tentativa é ação explícita.
+RESULT_CORRELATION_UNAVAILABLE: pausar escopo; não atribuir por chute.
+RESULT_RETRIEVAL_FAILED: tentar recuperar a mesma mídia, sem gerar de novo.
+RESULT_URL_EXPIRED: renovar localizador da mesma mídia.
+RESULT_INVALID_BYTES: preservar diagnóstico e recuperar novamente se possível.
+PARTIAL_OUTPUTS: mostrar faltantes; conciliar ou aceitar parcial explicitamente.
+LOCAL_STORAGE_FULL: pausar novos efeitos até liberar staging seguro.
+ATLAS_INGEST_FAILED: preservar bytes/journal e repetir ingestão idempotente.
+
+Mensagens do Flow podem vir localizadas. Traduzir para códigos só após padrões
+observados, mantendo evidência sanitizada. Erro desconhecido vira UNKNOWN_EXTERNAL,
+não crédito insuficiente presumido. HTTP 200 pode conter erro semântico.
+
+33. PRAZOS, BACKOFF E CIRCUITO DE PROTEÇÃO
+
+Valores iniciais do Atlas; não são promessas de duração do Google:
+- Chamada REST curta: timeout 15 s; polling longo no máximo 20 s.
+- Localizar documento/UI: 20 s; navegação/login renderizado: até 60 s.
+- Ação de seleção/texto: 15 s; preparo completo sem upload: 90 s.
+- Upload de referência: 120 s, com observação de progresso quando disponível.
+- Confirmação de envio: 60 s; após prazo, incerto se efeito pode ter ocorrido.
+- Geração sem atualização: alerta em 5 min, reconciliação em 10 min; não declarar
+  rejeição somente por tempo. Suspensão do computador invalida inferência de prazo.
+- Recuperação de arquivo: 120 s com progresso; tamanho grande exige política própria.
+- Heartbeat de conexão: 20 s durante trabalho; stale após 60 s; reconciliação ao voltar.
+- Alarme de recuperação: mínimo 30 s no alvo Chrome 120+, pode atrasar.
+
+Backoff de conexão/leitura: 1, 2, 4, 8, 16, 30 s, com jitter técnico para evitar
+reconexão simultânea de clientes. Não usar jitter como mecanismo anti-detecção.
+Respeitar Retry-After quando disponível. Limitar retries seguros a 3 por etapa,
+depois mostrar erro recuperável e aguardar retomada controlada.
+
+Criar/upload/gerar são efeitos externos e não entram nessa política genérica.
+Repetir apenas após prova de não ocorrência ou decisão explícita do usuário.
+Download e finalize interno podem ter retry idempotente sem nova geração.
+Troca de modelo, conta ou prompt nunca é uma estratégia automática de retry.
+
+Circuit breaker por adaptador/conta: uma detecção de atividade incomum já pausa;
+três erros estruturais consecutivos de UI suspendem novas mutações e pedem inspeção.
+Não fazer health check que gasta créditos ou cria projetos repetidos.
+Monitorar progresso por eventos, sem observar toda a página a cada 10 ms.
+
+34. OBSERVABILIDADE E DIAGNÓSTICO
+
+Eventos mínimos: command.created, command.received, lease.acquired,
+session.verified, project.confirmed, reference.available, reference.attached,
+settings.verified, prompt.verified, submission.intent, submission.click_started,
+submission.accepted, submission.uncertain, result.observed, result.retrieved,
+asset.committed, attempt.completed, attempt.failed, executor.paused e reconciled.
+
+Log estruturado: timestamp, severity, component, adapterVersion, installationId
+redigido, commandId, attemptId, projectLinkId, stage, code, durationMs e revision.
+Não incluir texto integral, imagens, bearer, cookies, URL assinada ou corpo bruto.
+Guardar expectedDigest/observedDigest para divergência sem expor conteúdo.
+
+Tela de diagnóstico por tentativa deve responder:
+Foi recebido? Qual conta/projeto foi confirmado? Quais referências foram vinculadas
+e anexadas? O texto foi conferido? Houve intent/clique/aceite? Qual mídia resultou?
+O arquivo chegou ao Atlas? Qual etapa está aguardando e qual ação é segura agora?
+
+Métricas: sucesso por etapa, duplicações evitadas, envios incertos, resultados sem
+correlação, falhas de referência, ingestões pendentes e retomadas. Separar falha de
+integração de rejeição/indisponibilidade externa. Não usar média que esconda erro
+de conta/projeto: associação errada é incidente de integridade, qualquer ocorrência.
+
+Exportar diagnóstico por ação do usuário, com resumo, versões, eventos sanitizados
+e IDs locais necessários. Não exportar screenshots de conta nem arquivos pessoais
+por padrão. Pacote de suporte não pode conter credenciais ou URLs de download vivas.
+
+35. TESTES AUTOMATIZADOS E SIMULAÇÃO
+
+Mock é permitido para desenvolvimento e claramente identificado como simulação.
+O build de produção não deve criar imagens fictícias nem oferecer mock como fallback.
+Testes são necessários aqui por envolver estados, custos e efeitos externos.
+
+Unitários de domínio:
+U01 parser multiline/separadores/CRLF/escapes;
+U02 aliases Unicode, duplicados e ausentes;
+U03 snapshots imutáveis após edição;
+U04 lotes de 3, último lote incompleto e ordem congelada;
+U05 três prompts diferentes, iguais e prefixos iguais;
+U06 idempotência de import/run/command/event/finalize;
+U07 guardas de estado e eventos fora de ordem;
+U08 perda de lease antes/depois de intent;
+U09 regeneração não altera seleção aprovada;
+U10 decisões de cancelamento e pausa em cada estágio;
+U11 reference dedupe por hash/projeto/conta/versão;
+U12 troca de conta e projeção de capacidades desconhecidas;
+U13 resultados múltiplos, extras, tardios e parciais;
+U14 recuperação de url expirada sem nova geração;
+U15 interpretação de falhas e proibição de retry de efeito incerto.
+
+Integração backend/extensão:
+I01 duas instâncias tentam claim simultâneo;
+I02 mesma chave idempotente com payload diferente;
+I03 outbox ACK perdido e reentrega;
+I04 transação falha antes/depois de gravar evento;
+I05 arquivo staging presente mas finalize não recebido;
+I06 instalação revogada e token expirado;
+I07 acesso cruzado entre tenants/projetos;
+I08 mensagens DOM falsas, oversize e URLs fora da allowlist;
+I09 WS cai, reconecta e reconcilia por snapshot/cursor;
+I10 migração de schema local e rollback compatível;
+I11 quota local esgotada e limpeza segura;
+I12 refresh token concorrente sem revogar indevidamente sessão válida.
+
+Harness de página sintética com editor controlado, biblioteca virtualizada e
+respostas assíncronas simuladas. Cobrir mudança de ordem, interface atrasada,
+anexo que remove texto, upload aceito sem miniatura e login como HTML 200.
+Fixtures não são os seletores reais do Flow. Elas verificam o executor e o parser,
+não compatibilidade atual com o serviço.
+
+Testar sensor passivo: não muda corpo/status do app, não duplica listeners,
+ignora tráfego de login, respeita limites e não aceita execução arbitrária.
+Testar uso real de Chrome APIs em navegador com extensão, não só mocks de chrome.*.
+Rodar testes de suspensão/restart com DevTools FECHADO e popup/painel FECHADO;
+DevTools pode alterar o ciclo de vida e esconder o problema.
+
+36. TESTES REAIS E MATRIZ DE ACEITAÇÃO
+
+Configurar um projeto de teste identificado e um orçamento de testes no Atlas.
+Os testes reais são iniciados pelo usuário autorizado e limitados ao orçamento
+configurado; registrar quantidade de submissões e saldo/custo só quando observável.
+Nunca fazer geração infinita para passar teste. Não atribuir saída mock a teste real.
+Cada teste grava versão de Chrome, extensão, adaptador, data, conta redigida,
+entrada, IDs correlacionados, resultado e evidência sanitizada.
+
+R01 Pareamento inicial e revogação sem acesso Google indevido.
+R02 Login existente; login expirado; verificação pendente sem loop de abas.
+R03 Criar projeto pelo Atlas e confirmar ID/título/conta no Flow.
+R04 Repetir ensure do mesmo projeto sem duplicação.
+R05 Upload de duas referências e obtenção de bindings reais.
+R06 Gerar um prompt com as duas referências anexadas e texto preservado.
+R07 Recuperar a imagem real como asset permanente na linha correta do Atlas.
+R08 Segundo prompt reutiliza referências sem upload repetido.
+R09 Renomear alias e manter o arquivo vinculado.
+R10 Atualizar arquivo e preservar a referência histórica da tentativa antiga.
+R11 Seis prompts em dois lotes de três com ordem das linhas preservada.
+R12 Confirmar capacidade de três pendentes se oferecida; não confundir com outputs.
+R13 Resultado fora de ordem: testar evento fora de ordem no harness e conciliação
+    de IDs no serviço. Não forçar o Google a terminar em determinada ordem.
+R14 Dois prompts iguais em sequência e regeneração de um deles sem confusão.
+R15 Regenerar linha 1; linhas 2 a 6 e imagem aprovada permanecem intactas.
+R16 Fechar popup/painel; Atlas em primeiro plano e Flow em aba inativa.
+R17 Reiniciar worker antes do preparo, depois de intent e após aceite.
+R18 Interromper conexão após clique: não existe reenvio automático por timeout.
+R19 Interromper download/finalize: recuperar mesma mídia sem nova geração.
+R20 Fechar aba Flow e reabrir sem criar projeto duplicado.
+R21 Fechar Atlas UI e continuar, quando o Coordinator permanece ativo.
+R22 Reiniciar Chrome e recuperar o estado confirmado.
+R23 Simular troca de conta: impedir geração no projeto da conta anterior.
+R24 Falha de referência/texto impede clique em gerar.
+R25 Modelo/quantidade indisponível não vira default silencioso.
+R26 Pausar lote e continuar recolhendo pedidos já aceitos.
+R27 Resultado parcial fica explícito e não se converte em concluído sozinho.
+R28 Saldo/limite/bloqueio observado pausa corretamente, sem provocar restrição
+    deliberadamente. Casos destrutivos/caros são injetados no harness, não forçados
+    em conta real. Documentar quais cenários só foram simulados.
+R29 Reinstalar/reparear usando projeto já existente sem reiniciar geração incerta.
+R30 Atualizar extensão e retomar operações sem perder a seleção aprovada.
+
+Não exigir em todos os testes erro real do Google ou comportamento raro. Separar
+comportamento observado em produção, falha injetada no cliente/harness e hipótese.
+Proposta de piloto: pelo menos 12 tentativas reais distribuídas em 2 projetos,
+incluindo referências, dois lotes de três e regeneração; reaproveitar as tentativas
+entre testes para reduzir custo. Se orçamento não permitir, registrar cobertura
+real menor e não rotular estabilidade ampliada como demonstrada.
+
+Critérios obrigatórios: zero associação errada de conta/projeto/linha nos testes;
+zero clique quando referências/texto não conferem; zero retry automático de envio
+incerto; todos os resultados confirmados persistentes; nenhuma pendência escondida.
+Isso é uma condição de release, não garantia matemática de zero erros futuros.
+
+37. PLANO SEQUENCIAL DE IMPLEMENTAÇÃO
+
+FASE 00 — INVENTÁRIO E DECISÃO
+Ler instruções do repo e este manual. Mapear stack, runtime web/desktop, banco,
+storage, autenticação e telas que receberão a integração. Confirmar ausência de
+importações do executor antigo. Criar branch, diretórios e documentos de status.
+Escolher transporte conforme seção 04 e registrar decisão. Não implementar dois.
+Saída: decisão escrita, mapa das interfaces do Atlas e requisitos rastreados.
+
+FASE 01 — OBSERVAR FLOW E PROVAR VIABILIDADE BÁSICA
+No navegador autorizado, executar manualmente criação de projeto, upload de duas
+referências, anexação, geração e download. Mapear controles e respostas observáveis.
+Verificar se aba inativa mantém funcionalidade; começar visível apenas para depurar.
+Determinar mecanismo de correlação e obtenção dos bytes. Se esses pontos falham,
+resolver antes de criar fila em lote. Não preencher seletores com estimativas.
+Saída: FLOW_OBSERVATIONS.md e mapa de capacidades suportadas/desconhecidas.
+
+FASE 02 — CONTRATOS E ESQUELETO NOVOS
+Criar tipos, schemas, erros, estado e IDs. Implementar migrations aditivas e
+repositories transacionais. Gerar build MV3 mínimo com configurações por ambiente.
+Implementar harness e testes de parsing/estados. Criar tela simples de status Atlas.
+Saída: build instalável e contratos testados, ainda sem alegação de geração real.
+
+FASE 03 — PAREAMENTO E CONEXÃO REAL
+Implementar pareamento, credencial própria, revogação, WS/REST e heartbeat.
+Demonstrar que extensão recebe um comando, persiste inbox e devolve um evento
+persistido no Atlas. Fechar popup e reabrir sem perder vínculo.
+Saída: conexão real entre Atlas e extensão, distinguida de sessão Google.
+
+FASE 04 — ABA, SESSÃO E PROJETO
+Implementar TabManager, session inspector e project.ensure com journal.
+Criar projeto real iniciado pelo Atlas e guardar vínculo. Repetir ensure sem
+duplicar. Testar conta divergente e login pendente.
+Saída: projeto certo na conta certa, iniciado sem abrir manualmente nova aba.
+
+FASE 05 — REFERÊNCIAS REAIS
+Implementar ingestão de referências no Atlas, versão/hash, transferir bytes ao
+executor, upload e retorno de identidade. Garantir seleção no draft separadamente.
+Testar duas referências e renomear alias sem reupload.
+Saída: refs disponíveis E anexadas confirmadas, com bindings persistidos.
+
+FASE 06 — UM CICLO COMPLETO REAL
+Implementar configuração, escrita/conferência de texto, sensor/correlação,
+intent, submit único, observação e recuperação de bytes até asset no Atlas.
+Uma linha, um prompt, duas referências, um resultado real persistente.
+Executar com Atlas em primeiro plano, sem popup aberto.
+Portão obrigatório: NÃO AVANÇAR para lote se a imagem não retornou corretamente.
+Se exigir foco no Flow, registrar requisito de segundo plano como não cumprido.
+
+FASE 07 — RECUPERAÇÃO ANTES DE ESCALAR
+Implementar/validar inbox, journal e outbox após restart. Injetar desconexão entre
+intent, clique, aceite, download e finalize. Comprovar que envio incerto não duplica.
+Saída: retomada confiável de um pedido, sem reiniciar o projeto.
+
+FASE 08 — BLOCOS E FILA
+Implementar preview/importação transacional, revisões e scheduler. Começar sequencial
+com três linhas para validar IDs/ordem. Depois habilitar até três pendentes somente
+com correlação e capacidades comprovadas. Executar seis prompts em dois lotes.
+Saída: lotes e linhas corretas, sem disputa do editor.
+
+FASE 09 — REGENERAÇÃO E GALERIA
+Implementar nova tentativa por ação, histórico, seleção e aprovação. Regenerar só
+uma linha, mantendo as demais intactas. Testar texto igual e eventos tardios.
+Saída: fluxo de revisão usável sem sair do Atlas.
+
+FASE 10 — PAUSA, CANCELAMENTO E RECONCILIAÇÃO ASSISTIDA
+Implementar ações da seção 27 e tela de envio incerto. Testar conta trocada,
+referência apagada, projeto ausente e reconexão.
+Saída: usuário entende a falha e dispõe de ação segura, sem limpar tudo.
+
+FASE 11 — INTERFACE FINAL E INTEGRIDADE
+Integrar ao visual do Atlas, acessibilidade, preview, progresso por etapas,
+paginação, estados vazios e diagnóstico. Revisar que UI não inventa sucesso.
+Nenhum redesenho de funcionalidades não relacionadas.
+
+FASE 12 — PILOTO, TESTES E EMPACOTAMENTO
+Executar suites e matriz real dentro do orçamento. Verificar com DevTools fechado.
+Resolver falhas de integridade antes de release. Criar build versionado, instruções,
+checksum, notas de versão, known issues e relatório final honesto.
+Saída: candidato instalável e evidências para todos os RFs da seção 01.
+
+FASE 13 — PUBLICAÇÃO POSTERIOR
+Só após piloto, preparar Chrome Web Store, privacidade, permissões, ID estável e
+compatibilidade. Publicar não corrige defeitos do executor nem dispensa testes.
+O pedido atual autoriza preparar artefatos; publicar em conta externa segue a
+autorização específica do proprietário quando for solicitado no trabalho real.
+
+Em cada fase o Cursor deve relatar: mudou o quê, onde, como foi verificado, qual
+evidência existe, o que falta e próximo passo. Não parar numa lista de planos quando
+há implementação autorizada e executável; também não mascarar dependência externa.
+
+38. INSTALAÇÃO, PUBLICAÇÃO E ATUALIZAÇÃO
+
+Desenvolvimento: gerar dist/novo, carregar pasta sem compactação em chrome://extensions,
+modo desenvolvedor, em perfil de teste apropriado. Documentar Node/package manager,
+comandos do próprio package.json, envs e caminho do manifest gerado.
+Depois de alterar manifest/worker/content, recarregar extensão e páginas afetadas.
+Não pedir ao usuário para apagar IndexedDB a cada atualização. Isso destrói journal.
+Criar migrações compatíveis e teste de upgrade com pendências abertas.
+
+ID da extensão precisa ser estável por ambiente. Se login/pareamento depende da
+origem chrome-extension://, documentar o ID autorizado. Manter chave pública/ID de
+desenvolvimento conforme orientação Chrome; a chave privada de publicação fica
+fora do repositório. Separar instalações dev/prod para não disputar a mesma conta.
+
+Build de produção sem mocks, sourcemaps públicos com segredos ou endpoints locais
+de teste. Não embutir senha/token real em .env de exemplo. Conferir manifest, hosts,
+CSP, arquivos empacotados e versão protocol/adapter. Fixar lockfile.
+Atualização de adaptador é pacote novo, não download de script remoto.
+
+Atualização com trabalho ativo: pausar novos envios, persistir estado, concluir
+janela curta de submissão ou marcá-la incerta antes de reload controlado. Mudança
+inevitável/restart de navegador é coberta pelo journal. Não depender de postponement
+perfeito de atualização do Chrome. Backend aceita versão anterior por janela
+explicitamente definida ou bloqueia novos comandos com upgrade_required.
+
+Se houver mudança incompatível do schema, proibir downgrade direto que lê banco
+novo incorretamente. Rollback deve preservar arquivos/journals e usar plano testado.
+Na loja, revisar requisitos atuais e transparência de dados. Aprovação da loja não
+constitui aprovação oficial do Flow nem garante imunidade a bloqueios.
+
+39. OPERAÇÃO, MANUTENÇÃO E MUDANÇA DO FLOW
+
+Antes de habilitar adaptador novo, rodar smoke real completo com referência e
+ingestão. Não basta checar se o botão Gerar existe. Fazer rollout controlado da
+versão do produto e acompanhar erros por etapa/variante de UI.
+Um problema de UI global deve permitir desativar novos envios via flag de produto
+sem apagar filas. Flags não transportam código nem novos scripts arbitrários.
+
+Quando Flow muda: identificar origem/variante, reproduzir, atualizar somente o
+adaptador e fixtures sanitizadas, testar uma geração real e publicar nova versão.
+Se não existe meio legítimo de cumprir o requisito, registrar incompatibilidade.
+Não responder com mecanismos de contorno ou insistência automática.
+
+Runbook para fila travada:
+1. Verificar conexão Atlas, sessão, conta, projeto e versão do adaptador separados.
+2. Encontrar primeiro comando/ação não terminal.
+3. Verificar se há submit intent ou mídia externa já conhecida.
+4. Reconciliar e recuperar resultado quando houver.
+5. Retomar somente operações comprovadamente não enviadas ou ingestão idempotente.
+6. Nunca limpar banco, recriar projeto e reenviar tudo como primeira solução.
+
+Arquivo ausente, saldo insuficiente, conteúdo rejeitado e indisponibilidade do
+Google são causas externas a tratar. O Atlas deve manter resultado/pendência
+consistentes mesmo nesses casos. Não anunciar SLA de geração que depende do Google.
+
+40. ENTREGÁVEIS E DEFINIÇÃO DE CONCLUÍDO
+
+Entregar código novo da extensão, módulos novos do Atlas/Coordinator, migrations,
+schemas, testes, build instalável, documentação de instalação e diagnóstico.
+Entregar matriz com cada requisito RF-01 a RF-12 e referência de teste/evidência.
+Entregar relatório de consumo real de testes quando observável, sem custos inventados.
+Entregar lista de versões suportadas e known issues, inclusive limitações de conta,
+domínio, idioma, resolução, modo de segundo plano e correlação.
+
+NÃO CONCLUÍDO: conexão funcionando mas geração não; imagem só no Flow; output mock;
+refs enviadas mas não anexadas; link temporário sem arquivo; três rotinas escrevendo
+no editor; fallback silencioso; retry automático de envio incerto; necessidade de
+abrir manualmente o Flow a cada prompt; perda de histórico ao reiniciar.
+
+CONCLUÍDO para o escopo: usuário cria projeto, envia refs, importa blocos, gera
+lotes e recebe imagens corretas no Atlas, regenera individualmente e retoma após
+interrupção com evidências reais. Login/verificação excepcional são explicitados.
+Se alguma capacidade final ficou pendente, entregar status parcial verdadeiro,
+não uma garantia de funcionamento que os testes não sustentam.
+
+41. CONTRATOS DE TIPOS E INTERFACES
+
+Os tipos abaixo são referência normativa de domínio, não um código completo pronto
+para colar sem adaptação. Implementar schemas de runtime equivalentes, validação
+de campos desconhecidos e testes. Persistir os campos exigidos no modelo de dados.
+
+type SubmissionCertainty =
+  | 'not_sent' | 'may_have_sent' | 'accepted' | 'rejected'
+  | 'resolved_by_user';
+
+type AttemptState =
+  | 'draft' | 'queued' | 'waiting_executor' | 'waiting_session'
+  | 'preparing' | 'ready_to_submit' | 'submitting' | 'generating'
+  | 'retrieving' | 'completed' | 'partial' | 'failed' | 'canceled'
+  | 'submission_uncertain' | 'needs_user_action';
+
+type Evidence<T> = {
+  value: T | null;
+  status: 'observed' | 'user_confirmed' | 'unknown' | 'stale';
+  source: string;
+  observedAt: string;
+  documentId?: string;
+};
+
+type ReferenceSnapshot = {
+  referenceId: string;
+  referenceVersionId: string;
+  aliasAtSubmission: string;
+  effectiveSha256: string;
+};
+
+type ResolvedReference = ReferenceSnapshot & {
+  flowBindingId: string;
+  flowMediaId: string;
+};
+
+type GenerationSettings = {
+  mode: 'image';
+  modelKey: string;
+  aspectRatio: string;
+  outputs: number;
+  resolutionPolicy: 'original';
+  capabilitySnapshotId: string;
+};
+
+type AttemptSnapshot = {
+  attemptId: string;
+  promptId: string;
+  promptRevisionId: string;
+  atlasProjectId: string;
+  projectLinkId: string;
+  flowPrincipalId: string;
+  flowProjectId: string;
+  compiledText: string;
+  compiledTextSha256: string;
+  references: ReferenceSnapshot[];
+  settings: GenerationSettings;
+};
+
+type ResolvedAttempt = Omit<AttemptSnapshot, 'references'> & {
+  references: ResolvedReference[];
+};
+
+type PreparedDraft = {
+  attemptId: string;
+  tabId: number;
+  documentId: string;
+  projectLinkId: string;
+  observedPrincipalId: string;
+  textDigest: string;
+  referenceBindingIds: string[];
+  settingsDigest: string;
+  preparedDigest: string;
+  verifiedAt: string;
+  validUntil: string;
+};
+
+type ExternalSubmission = {
+  actionId: string;
+  certainty: SubmissionCertainty;
+  flowRequestId: string | null;
+  flowMediaIds: string[];
+  correlation: 'request_identity' | 'serialized_verified' | 'unavailable';
+  evidenceDigest: string;
+};
+
+type ResultObservation = {
+  attemptId: string;
+  actionId: string;
+  flowProjectId: string;
+  flowRequestId: string | null;
+  flowMediaId: string;
+  status: 'pending' | 'ready' | 'failed';
+  outputIndex: number | null;
+  mimeType: string | null;
+  width: number | null;
+  height: number | null;
+  locatorRef: string | null;
+};
+
+interface FlowAdapter {
+  readonly version: string;
+  inspect(context: AdapterContext): Promise<Inspection>;
+  inspectCapabilities(context: AdapterContext): Promise<CapabilitySnapshot>;
+  ensureProject(context: AdapterContext, request: ProjectRequest): Promise<ProjectBinding>;
+  ensureReference(context: AdapterContext, request: ReferenceRequest): Promise<ReferenceBinding>;
+  prepare(context: AdapterContext, attempt: ResolvedAttempt): Promise<PreparedDraft>;
+  verifyPrepared(context: AdapterContext, draft: PreparedDraft): Promise<PreparedDraft>;
+  submit(context: AdapterContext, draft: PreparedDraft): Promise<ExternalSubmission>;
+  observe(context: AdapterContext, target: ObservationTarget): Promise<ObservationPage>;
+  acquireResult(context: AdapterContext, result: ResultObservation): Promise<StagedFile>;
+  reconcile(context: AdapterContext, action: ExternalAction): Promise<Reconciliation>;
+}
+
+AdapterContext inclui AbortSignal, account/project/document identity, logger
+redigido e acesso mediado às primitivas do browser. Não inclui token Atlas em
+argumentos injetados no mundo MAIN. Tipos auxiliares citados precisam ser definidos
+na implementação, sem any silencioso nem campos preenchidos com dados fictícios.
+
+interface CoordinatorTransport {
+  connect(): Promise<void>;
+  claimCommands(request: ClaimRequest): Promise<Command[]>;
+  acknowledge(commandId: string, receipt: DurableReceipt): Promise<void>;
+  commitIntent(action: IntentRequest): Promise<IntentReceipt>;
+  postEvents(events: DomainEvent[]): Promise<EventAcknowledgements>;
+  renewLease(leaseId: string, epoch: number): Promise<Lease>;
+  getReconciliationSnapshot(): Promise<ExecutorSnapshot>;
+  createIngestIntent(input: IngestRequest): Promise<IngestDestination>;
+  finalizeAsset(input: FinalizeRequest): Promise<CommittedAsset>;
+}
+
+Validar ID opaco de fornecedor separadamente de UUID local. SHA-256 é hex de 64
+caracteres. MIME/dimensões/tamanhos positivos têm limites explícitos. Datas inválidas,
+NaN, Infinity, status desconhecido e arrays enormes devem ser rejeitados.
+Limitar quantidade de aliases e referências por prompt pelo menor entre política
+Atlas e capacidade real observada. Não usar um máximo extraído de concorrente.
+
+42. EXEMPLOS COMPLETOS DE MENSAGENS
+
+Exemplos ilustrativos. UUIDs, digests e campos entre sinais de menor/maior são
+placeholders explicativos, nunca valores para produção. Os schemas reais exigem
+UUIDs/digests válidos. Não usar nomes de modelos não verificados na conta.
+
+Comando para preparação:
+{
+  "protocolVersion": 1,
+  "commandId": "<uuid-command-prepare>",
+  "operation": "generation.prepare",
+  "installationId": "<uuid-installation>",
+  "attemptId": "<uuid-attempt-1>",
+  "projectLinkId": "<uuid-project-link>",
+  "leaseId": "<uuid-lease>",
+  "leaseEpoch": 7,
+  "issuedAt": "2026-11-13T12:00:00Z",
+  "expiresAt": "2026-11-13T12:02:00Z",
+  "payloadDigest": "<sha256-do-payload-canonico>",
+  "payload": {
+    "promptId": "<uuid-prompt-1>",
+    "promptRevisionId": "<uuid-revision-1>",
+    "flowPrincipalId": "<uuid-principal>",
+    "flowProjectId": "<id-externo-observado>",
+    "compiledText": "O cantor em enquadramento próximo, banda ao fundo, luz natural.",
+    "compiledTextSha256": "<sha256-do-texto-efetivo>",
+    "references": [
+      {
+        "referenceId": "<uuid-ref-cantor>",
+        "referenceVersionId": "<uuid-ref-cantor-v1>",
+        "aliasAtSubmission": "cantor",
+        "effectiveSha256": "<sha256-bytes-cantor>",
+        "flowBindingId": "<uuid-binding-cantor>",
+        "flowMediaId": "<id-midia-cantor-observado>"
+      },
+      {
+        "referenceId": "<uuid-ref-banda>",
+        "referenceVersionId": "<uuid-ref-banda-v1>",
+        "aliasAtSubmission": "banda",
+        "effectiveSha256": "<sha256-bytes-banda>",
+        "flowBindingId": "<uuid-binding-banda>",
+        "flowMediaId": "<id-midia-banda-observado>"
+      }
+    ],
+    "settings": {
+      "mode": "image",
+      "modelKey": "<modelo-observado-na-conta>",
+      "aspectRatio": "16:9",
+      "outputs": 1,
+      "resolutionPolicy": "original",
+      "capabilitySnapshotId": "<uuid-capabilities>"
+    }
+  }
+}
+
+Evento após preparação real, antes de qualquer clique em gerar:
+{
+  "protocolVersion": 1,
+  "eventId": "<uuid-event-prepared>",
+  "commandId": "<uuid-command-prepare>",
+  "attemptId": "<uuid-attempt-1>",
+  "installationId": "<uuid-installation>",
+  "sequence": 4,
+  "eventType": "generation.prepared",
+  "occurredAt": "2026-11-13T12:00:20Z",
+  "payload": {
+    "documentId": "<documento-Chrome-observado>",
+    "textVerified": true,
+    "referenceBindingIds": ["<uuid-binding-cantor>", "<uuid-binding-banda>"],
+    "settingsVerified": true,
+    "preparedDigest": "<sha256-preparo>",
+    "validUntil": "2026-11-13T12:00:50Z"
+  }
+}
+
+Comando separado de submissão:
+{
+  "protocolVersion": 1,
+  "commandId": "<uuid-command-submit>",
+  "operation": "generation.submit",
+  "installationId": "<uuid-installation>",
+  "attemptId": "<uuid-attempt-1>",
+  "projectLinkId": "<uuid-project-link>",
+  "leaseId": "<uuid-lease>",
+  "leaseEpoch": 7,
+  "issuedAt": "2026-11-13T12:00:21Z",
+  "expiresAt": "2026-11-13T12:00:50Z",
+  "payloadDigest": "<sha256-payload-submit>",
+  "payload": {
+    "actionId": "<uuid-action-submit>",
+    "preparedDigest": "<sha256-preparo>",
+    "intentRevision": 1
+  }
+}
+
+O comando de submit não pode ficar muito tempo na fila: se preparação expirou,
+repreparar com comando novo, desde que não exista intent/submissão anterior incerta.
+Não enviar usando apenas true em textVerified guardado há vários minutos.
+
+Evento de envio incerto:
+{
+  "protocolVersion": 1,
+  "eventId": "<uuid-event-uncertain>",
+  "commandId": "<uuid-command-submit>",
+  "attemptId": "<uuid-attempt-1>",
+  "installationId": "<uuid-installation>",
+  "sequence": 7,
+  "eventType": "submission.uncertain",
+  "occurredAt": "2026-11-13T12:01:21Z",
+  "payload": {
+    "actionId": "<uuid-action-submit>",
+    "certainty": "may_have_sent",
+    "errorCode": "SUBMISSION_UNCERTAIN",
+    "retryPolicy": "reconcile_first",
+    "reason": "Confirmação não observada após acionamento do envio.",
+    "automaticResubmitAllowed": false
+  }
+}
+
+Resultado após arquivo incorporado ao Atlas:
+{
+  "protocolVersion": 1,
+  "eventId": "<uuid-event-asset>",
+  "commandId": "<uuid-command-retrieve>",
+  "attemptId": "<uuid-attempt-1>",
+  "installationId": "<uuid-installation>",
+  "sequence": 12,
+  "eventType": "asset.committed",
+  "occurredAt": "2026-11-13T12:02:30Z",
+  "payload": {
+    "flowMediaId": "<id-imagem-observado>",
+    "atlasAssetId": "<uuid-asset>",
+    "sha256": "<sha256-bytes-imagem>",
+    "mimeType": "image/png",
+    "width": 1536,
+    "height": 864,
+    "byteSize": 1250000
+  }
+}
+
+Dimensões e tamanho acima são meramente ilustrativos. Ler os valores do arquivo,
+não fixá-los no código. Preferir evento asset.committed emitido pelo Coordinator
+após verificar ingestão; a extensão não pode autodeclarar commit do storage Atlas.
+Snapshot para UI contém promptId e attemptId resolvidos pelo servidor, sem confiar
+numa associação arbitrária enviada pelo cliente.
+
+43. PSEUDOCÓDIGO DOS ALGORITMOS CRÍTICOS
+
+Pseudocódigo expressa comportamento, não substitui testes e implementação real.
+
+A. Receber comando com proteção de reentrega
+
+onCommand(command):
+  validateSchemaAndAuthorization(command)
+  existing = journal.find(command.commandId)
+  if existing exists and existing.payloadDigest != command.payloadDigest:
+    fail COMMAND_PAYLOAD_CONFLICT
+  if existing is terminal:
+    replayStoredReceiptAndResult(existing)
+    return
+  if existing has open external action:
+    reconcile(existing)
+    return
+  persist inbox receipt transactionally
+  enqueue durable ACK_RECEIVED
+  if expired or lease invalid:
+    persist non-executed outcome
+    return
+  dispatch only packaged handler for command.operation
+
+Não usar um catch global que reenvia generate depois de qualquer exception.
+
+B. Compilar aliases para snapshot
+
+compilePrompt(project, rawText, selectedSettings):
+  tokens = parseReferenceGrammarWithEscapes(rawText)
+  resolve each reference token to stable referenceId and immutable versionId
+  reject missing/ambiguous aliases
+  preserve intentional text and show compiled text in preview
+  verify effective file hashes and project/account bindings
+  snapshot settings only from observed capabilities
+  persist immutable revision and digest
+  return revision
+
+C. Submeter uma única vez dentro do que é controlável
+
+submitPrepared(command):
+  if journal.action(command.actionId) may have produced effect:
+    return reconcile(command.actionId)
+  acquire editor mutex bound to current executor epoch
+  assert account, project and document match
+  assert remaining lease validity is sufficient
+  draft = read complete current editor state
+  assert digest(draft) == command.preparedDigest
+  observation = armCorrelationWindowBeforeClick(command.actionId)
+  persist local external intent
+  await Coordinator.commitIntent and durable acknowledgement
+  recheck lease, account, project, document and draft
+  persist click_started
+  invoke one verified UI submit action
+  outcome = wait for bounded external observation
+  if unequivocal rejection:
+    persist rejection with evidence
+  else if unequivocal acceptance:
+    persist external identities and accepted event
+  else:
+    persist may_have_sent and quarantine
+  release UI mutex only when next submission cannot corrupt correlation
+  flush outbox independently
+
+Se o processo morrer em qualquer ponto, o journal conduz recuperação conservadora.
+Janela pequena entre última verificação e efeito não é garantia exactly-once Google.
+
+D. Scheduler de lote
+
+tick(run):
+  if paused or global blocker or no valid executor: return
+  batch = earliest non-terminal frozen batch
+  if batch contains uncertain or unresolved user-action state: return
+  reconcile already submitted members first
+  for each queued member in frozen order:
+    if account/project differs from active scope with pending work: stop
+    if pendingCount >= verifiedPendingLimit: stop
+    if editor is occupied or previous submit lacks safe correlation: stop
+    issue prepare then submit when fresh preparation succeeds
+  if all members terminal:
+    advance to next batch transactionally
+
+VERIFIED_PENDING_LIMIT tem teto 3 e mínimo operacional 1 quando comprovado.
+Não usar Promise.all para três prepare/submit no mesmo editor.
+Operações de download de mídias já vinculadas podem ocorrer em paralelo com limite
+próprio, sem ocupar o editor ou mudar de projeto. Registrar esse limite separado.
+
+E. Ingestão idempotente
+
+ingest(result):
+  ensure unique binding for attempt and external media identity
+  if asset already committed: return existing asset
+  acquire or resume bytes of same external media
+  validate file and calculate checksum
+  create/resume staging upload for resultBindingId
+  upload without changing attempt identity
+  finalize transactionally in Coordinator
+  remove local bytes only after committed asset acknowledgement
+  update attempt only after required output count is reconciled
+
+F. Reinício
+
+boot():
+  register listeners synchronously at module load
+  open/migrate durable stores
+  ensure recovery alarms exist
+  restore pairing and renew own credential if necessary
+  flush event outbox
+  load Coordinator snapshot and local journal
+  compare identities and revisions, quarantine conflicting facts
+  reconcile all open external effects
+  resume observation/retrieval
+  enable scheduler mutations only after readiness checks
+
+44. CONFIGURAÇÃO, MANIFEST E PARÂMETROS INICIAIS
+
+Configuração de build obrigatória, sem segredos:
+ATLAS_FLOW_ENV: development | production.
+ATLAS_FLOW_TRANSPORT: https | loopback, exatamente um por build/implantação.
+ATLAS_FLOW_API_ORIGIN: origem exata verificada do Atlas/Coordinator.
+ATLAS_FLOW_WS_ORIGIN: origem WS/WSS correspondente, quando suportado.
+ATLAS_FLOW_ALLOWED_UI_ORIGINS: origens exatas do Atlas para onboarding.
+ATLAS_FLOW_PROVIDER_ORIGINS: origens do Flow observadas na fase 01.
+ATLAS_FLOW_MEDIA_ORIGINS: hosts estritamente necessários à aquisição dos bytes.
+ATLAS_FLOW_PROTOCOL_VERSION: 1.
+ATLAS_FLOW_ADAPTER_VERSION: identificador do adaptador empacotado.
+ATLAS_FLOW_BUILD_ID: versão/commit da integração nova.
+
+Esses parâmetros precisam ser materializados no build. Não deixar placeholders
+ou domínio example em manifest de produção. Não receber allowlist arbitrária de
+um prompt, página Flow ou mensagem DOM. Endpoint Atlas local é escolhido durante
+onboarding dentro do escopo permitido; alteração requer novo pareamento.
+
+Manifest conceitual a ser gerado com os hosts confirmados:
+{
+  "manifest_version": 3,
+  "name": "Atlas Flow Connector",
+  "version": "0.1.0",
+  "minimum_chrome_version": "120",
+  "description": "Conecta o Atlas à sessão do Flow no navegador do usuário.",
+  "permissions": ["storage", "scripting", "alarms"],
+  "host_permissions": ["<HOSTS-EXATOS-CONFIRMADOS-NO-BUILD>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["<PADROES-FLOW-CONFIRMADOS>"],
+      "js": ["flow-content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
+
+O exemplo é propositalmente não instalável até substituir os marcadores por match
+patterns válidos. O Cursor deve gerar e validar manifest real, não entregar esse
+template como build. Se sensor MAIN precisar document_start, declará-lo como script
+separado empacotado e restrito ao Flow. Manter a ponte ISOLATED separada.
+Se sidePanel for usado, declarar permissão e default_path; se downloads/offscreen
+forem necessários, acrescentar somente com implementação e testes correspondentes.
+Ícones devem estar no pacote. Não inventar extensionId antes de preparar ambiente.
+
+Compatibilidade Chrome 120+: preferir chrome.* e padrão de callback que retorna
+true para resposta assíncrona em onMessage, sem depender de Promise listeners
+introduzidos posteriormente. Não depender de persistAcrossSessions de alarms de
+versões novas. Verificar/recriar alarmes no boot e onStartup.
+Content script não acessa diretamente IndexedDB da origem da extensão; mediar
+persistência via mensagens validadas ao worker.
+
+Parâmetros próprios iniciais, configuráveis e com unidades:
+batchSize=3;
+defaultOutputsPerPrompt=1;
+verifiedPendingLimit=1 até prova de capacidade maior, teto 3;
+maxConcurrentEditorMutations=1;
+maxConcurrentResultTransfers=2;
+leaseTtlMs=90000;
+leaseRenewMs=15000;
+minimumLeaseRemainingForMutationMs=30000;
+activeHeartbeatMs=20000;
+recoveryAlarmMinutes=0.5;
+preparedDraftTtlMs=30000;
+maxMetadataMessageBytes=262144;
+maxBinaryTransferMessageBytes=786432;
+binaryChunkBytes=524288;
+O limite de 256 KiB é do canal de metadados; envelopes de chunks binários têm
+limite separado de 768 KiB, incluindo base64 e cabeçalhos, com schema restrito.
+maxImportedPrompts=200;
+maxImportTextBytes=1048576;
+maxReferenceBytes=20971520;
+maxReferencePixels=40000000;
+maxResultBytes=67108864;
+maxSafeReadRetries=3;
+automaticResubmitAfterUncertain=false.
+
+Tais limites são defaults de engenharia do Atlas. Eles não determinam quotas do
+Flow nem autorizam ultrapassar limites. Validar combinação com capacidades atuais.
+No modo ocioso reduzir conexões/consumo; no ativo pings WS abaixo de 30 segundos
+ajudam atividade em Chrome suportado, mas nunca substituem journal/recuperação.
+Não reter uma única chamada pendente por dez minutos dentro de um handler.
+Observação de geração é retomável e divide o trabalho em eventos curtos.
+
+Comandos a criar no package.json e documentar, usando package manager do repo:
+build:flow-extension; dev:flow-coordinator quando aplicável;
+test:flow-unit; test:flow-integration; test:flow-extension;
+check:flow-types; check:flow-manifest; package:flow-extension.
+São scripts a implementar, não comandos existentes que o Cursor deve supor prontos.
+README deve conter sequência exata resultante de instalação/build/start/test.
+
+45. CHECKLIST FINAL DO CURSOR
+
+BASE E ESCOPO
+[ ] Integração nova com namespace próprio, sem importar código antigo.
+[ ] Nenhum código do concorrente copiado ou redistribuído.
+[ ] Cortador, legenda, lipsync e dados existentes do Atlas preservados.
+[ ] Runtime e transporte escolhidos; não há duas filas concorrentes.
+[ ] Nenhuma dependência obrigatória de n8n ou navegador headless.
+
+CONEXÃO E LOGIN
+[ ] Extensão instalada, pareada, revogável e independente do popup.
+[ ] Token próprio não aparece na página do Flow ou em logs.
+[ ] Sessão Google e conta Flow verificadas separadamente do login Atlas.
+[ ] Conta divergente/indeterminada tratada sem gerar em conta presumida.
+[ ] Plano e saldo desconhecidos exibidos honestamente.
+[ ] Origens e permissões mínimas validadas no manifest real.
+
+PROJETO E REFERÊNCIAS
+[ ] Projeto nasce no Atlas e vínculo Flow é confirmado por ID real.
+[ ] Reentrega de ensure não cria projeto duplicado.
+[ ] Nome Flow confirmado ou diferença explicitada sem falsa sincronização.
+[ ] Arquivos originais, versões e hashes preservados.
+[ ] Upload gera binding real; seleção para prompt é verificada separadamente.
+[ ] Segundo prompt e regeneração não reenviam arquivos desnecessariamente.
+[ ] Renomear alias mantém identidade; atualizar arquivo cria versão nova.
+
+PROMPTS E FILA
+[ ] Importação multiline previsível com preview e separador explícito.
+[ ] Cada linha tem promptId estável e revisões imutáveis.
+[ ] Três prompts por lote separados de outputs por prompt.
+[ ] Um escritor no editor; capacidade de pendências realmente verificada.
+[ ] Resultado fora de ordem não altera a linha de destino.
+[ ] Dois textos iguais e regenerações são distinguíveis.
+[ ] Bloqueio/incerteza não permite avanço automático indevido.
+
+GERAÇÃO E RESULTADO
+[ ] Texto, referências, conta, projeto e opções conferidos antes do clique.
+[ ] Intent e journal duráveis antes do efeito externo.
+[ ] Nenhum retry automático de efeito possivelmente ocorrido.
+[ ] Correlação não depende da última miniatura ou do texto sozinho.
+[ ] Imagem real recuperada, validada e incorporada ao Atlas.
+[ ] Arquivo permanece acessível após expirar URL do Flow.
+[ ] Múltiplos outputs e resultados parciais têm estado correto.
+[ ] Recuperar download não dispara nova geração.
+[ ] Regenerar uma linha preserva outras linhas e seleção aprovada.
+
+RECUPERAÇÃO E QUALIDADE
+[ ] Worker/Chrome/aba/rede podem reiniciar sem perder o registro do envio.
+[ ] Lease expirado com intent aberto entra em quarentena, não em reenvio.
+[ ] UI não depende de variáveis do popup nem gera falso sucesso.
+[ ] Migrações/upgrade preservam journal e histórico.
+[ ] Diagnóstico identifica etapa e próxima ação segura.
+[ ] Testes reais rodados com DevTools e painel fechados.
+[ ] Matriz distingue real, simulado, pendente e incompatível.
+[ ] Build e instalação testados usando instruções entregues.
+[ ] Nenhum placeholder de seletor/host/secret em produção.
+[ ] Relatório final não afirma estabilidade ou ausência de erros sem evidência.
+
+46. FONTES, EVIDÊNCIAS E QUESTÕES QUE EXIGEM OBSERVAÇÃO
+
+Este manual define uma implementação independente. A pesquisa pública sobre
+DarkPlanner serviu para compreender padrões, não para copiar código ou assumir
+que todo caminho da extensão continua ativo no produto atual.
+Foi observado no pacote público 9.6.9 um protocolo app–extensão, rotinas de projeto,
+upload, referências, observação de respostas e persistência. O desenvolvedor anunciou
+em 08/09/2026 a mudança de geração para o app com extensão como suporte. Nada disso
+prova que uma nova implementação tenha funcionado antes dos seus próprios testes.
+
+FONTES OFICIAIS CONSULTADAS EM 13/11/2026
+[R1] Chrome: ciclo de vida do service worker e persistência.
+https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle
+[R2] Chrome: alarms, limites e persistência conforme versão.
+https://developer.chrome.com/docs/extensions/reference/api/alarms
+[R3] Chrome: storage, áreas local/session e controles de acesso.
+https://developer.chrome.com/docs/extensions/reference/api/storage
+[R4] Chrome: mensagens, validação e respostas assíncronas.
+https://developer.chrome.com/docs/extensions/develop/concepts/messaging
+[R5] Chrome: content scripts e mundos de execução.
+https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts
+[R6] Chrome: tabs, criação e acesso aos metadados conforme permissão.
+https://developer.chrome.com/docs/extensions/reference/api/tabs
+[R7] Chrome: requisições entre origens e host permissions.
+https://developer.chrome.com/docs/extensions/develop/concepts/network-requests
+[R8] Chrome: WebSocket em service worker.
+https://developer.chrome.com/docs/extensions/how-to/web-platform/websockets
+[R9] Chrome: API de downloads.
+https://developer.chrome.com/docs/extensions/reference/api/downloads
+[R10] Chrome Web Store: requisitos de código do Manifest V3.
+https://developer.chrome.com/docs/webstore/program-policies/mv3-requirements
+[R11] Google Flow: acesso e requisitos atuais.
+https://support.google.com/flow/answer/16353333?hl=pt-BR
+[R12] Google Flow: créditos, disponibilidade e consulta de custos no produto.
+https://support.google.com/flow/answer/16526234?hl=pt-BR
+[R13] Chrome: manter ID de extensão no desenvolvimento.
+https://developer.chrome.com/docs/extensions/reference/manifest/key
+[R14] Chrome: instalar/recarregar extensão em desenvolvimento.
+https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world
+[R15] Chrome: atualização de extensões e publicação de nova versão.
+https://developer.chrome.com/docs/extensions/develop/concepts/extensions-update-lifecycle
+https://developer.chrome.com/docs/webstore/update
+
+Fontes públicas do estudo de referência, sem dependência de execução:
+https://chromewebstore.google.com/detail/darkplanner/dkpcmhcjlidhmmnileiojcflhpclhcdn?hl=pt-BR
+https://chromewebstore.google.com/detail/darkplanner/dkpcmhcjlidhmmnileiojcflhpclhcdn/reviews?hl=pt-BR
+https://darkplanner.shop/
+
+As decisões de scheduler, banco, leases, estados, limites e testes neste documento
+são propostas de engenharia do Atlas. Não são requisitos impostos pelo Google nem
+implementação alegadamente idêntica à do concorrente.
+
+LISTA DE DESCOBERTAS QUE O CURSOR PRECISA PREENCHER COM FATOS
+[ ] Stack e runtime reais do Atlas, comandos atuais e pontos de integração.
+[ ] Origens/redirecionamentos atuais do Flow no ambiente suportado.
+[ ] Identificação confiável da conta e suas limitações de observação.
+[ ] Controles atuais de criar projeto e confirmar título/ID.
+[ ] Modelos, proporções, outputs, tipos e quantidade de referências disponíveis.
+[ ] Semântica real do editor e da biblioteca de referências.
+[ ] Forma legítima de observar identidade do upload e da geração.
+[ ] Forma de adquirir os bytes finais sem exportar sessão Google.
+[ ] Condições reais de segundo plano, janela minimizada e recuperação de sessão.
+[ ] Correlação segura com até três pendentes e com textos idênticos.
+[ ] Origem/capacidade real de download original e eventual upscale, se oferecido.
+[ ] Limitações do serviço, resultados do piloto e critérios ainda pendentes.
+
+Nenhum documento estático pode preencher honestamente esses itens sem observar
+a interface e testar a conta. A obrigação do Cursor é descobri-los, implementar,
+validar e registrar. Se um item indispensável não puder ser cumprido, o estado da
+entrega é parcial/incompatível, com motivo concreto, nunca sucesso inventado.
+
+INSTRUÇÃO FINAL PARA INICIAR NO CURSOR
+Implemente esta especificação como uma integração nova. Comece pela fase 00,
+escolha o transporte com base no Atlas real, observe o Flow e construa a prova de
+um ciclo completo. Preserve tudo que não pertence à integração. Não use código
+antigo e não entregue só uma simulação. Avance por evidências até o usuário criar
+projeto, usar referências, gerar lotes e regenerar linhas pelo Atlas com retomada
+segura e resultados persistentes. Registre com precisão qualquer limitação externa.
+
+FIM DO MANUAL MESTRE

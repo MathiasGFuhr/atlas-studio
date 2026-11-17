@@ -1,0 +1,52 @@
+{
+  "fetchedAt": "2026-11-08T19:52:00.000Z",
+  "phase": "pre5_controlled_validation",
+  "dryRun": true,
+  "mutationCalls": 0,
+  "advancedToPhase5": false,
+  "networkVolume": {
+    "id": "tjp7a4uk0y",
+    "name": "inadequate_magenta_crow",
+    "dataCenter": "EU-RO-1",
+    "sizeGb": 70,
+    "type": "STANDARD",
+    "consoleUsdPerMonth": 4.9,
+    "modelsCopied": false,
+    "doNotCreateAnother": true
+  },
+  "pods": {
+    "lipsyncReady": {
+      "id": "d3ewr3ge0uk002",
+      "status": "RUNNING",
+      "dataCenterId": "US-KS-2",
+      "gpuType": "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+      "costPerHr": 0.72,
+      "comfyHealthy": true,
+      "modelsPresent": true,
+      "usesNetworkVolume": false
+    }
+  },
+  "paths": {
+    "A_oneSceneTest": {
+      "podId": "d3ewr3ge0uk002",
+      "usesVolume": false,
+      "createsResources": false,
+      "maxUsdSuggested": 0.54,
+      "maxMinutesSuggested": 15,
+      "maxMinutesMeaning": "wall-clock session budget; abort test flow if exceeded",
+      "maxUsdMeaning": "incremental test cost ceiling (hours elapsed * pod $/h); does not auto-stop the Pod"
+    },
+    "B_migration": {
+      "dataCenterId": "EU-RO-1",
+      "networkVolumeId": "tjp7a4uk0y",
+      "primaryGpuId": "NVIDIA RTX PRO 4500 Blackwell",
+      "alternateGpuIds": [
+        "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        null
+      ],
+      "requiresSeparateApproval": true,
+      "blockedUntilAuthorized": true
+    }
+  },
+  "approvalPrompt": "AUTORIZO teste LipSync 1 cena\npodId=d3ewr3ge0uk002\nmaxUsd=0.54\nmaxMinutes=15\ncaminho=A\nconfirmar: sem criar volume/Pod; sem copiar modelos; sem migração EU-RO-1"
+}

@@ -106,6 +106,8 @@ import type {
   FlowReferenceUpdateInput,
 } from '../../shared/flowProjects'
 import { flowProjectService } from '../services/flow/FlowProjectService'
+import { atlasFlowCoordinatorServer } from '../services/atlas-flow-v1'
+import { getMainDir } from '../paths'
 import { flowReferenceRepository } from '../repositories/flowReferenceRepository'
 import { musicRepository } from '../repositories/musicRepository'
 import { transcribeLocalAudio } from '../services/shorts/transcribeLocal'
@@ -171,8 +173,8 @@ import { getWorkspaceCapabilities } from '../services/workspace/getWorkspaceCapa
 import {
   createChannelVideo,
   removeChannelVideo,
-  removeProject,
 } from '../services/videos/musicVideoProjectService'
+import { removeAtlasProject } from '../services/atlas-flow-v1/removeAtlasProject'
 import {
   checkForAppUpdates,
   downloadAppUpdate,
@@ -233,8 +235,10 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle(
     IPC.projects.list,
-    (_e, filters?: { projectType?: ProjectType; query?: string }) =>
-      projectRepository.list(filters),
+    (
+      _e,
+      filters?: { projectType?: ProjectType; query?: string; workspace?: 'music' | 'flow' | 'all' },
+    ) => projectRepository.list(filters),
   )
   ipcMain.handle(IPC.projects.get, (_e, id: string) => projectRepository.get(id))
   ipcMain.handle(
@@ -247,14 +251,26 @@ export function registerIpcHandlers(deps: {
         projectType: ProjectType
         channelId?: string | null
         projectFolderPath?: string | null
+        workspace?: 'music' | 'flow'
       },
-    ) => projectRepository.create(input),
+    ) => {
+      const created = projectRepository.create(input)
+      // Projeto de música/Lipsync com cantor → já nasce o projeto no Editor.
+      if (created.workspace !== 'flow' && created.channelId) {
+        void import('../services/editor/editorComfyIngest')
+          .then(({ seedEditorForMusicProject }) => seedEditorForMusicProject(created.id))
+          .catch(() => {
+            /* Editor opcional no create */
+          })
+      }
+      return created
+    },
   )
   ipcMain.handle(IPC.projects.update, (_e, id: string, patch: ProjectPatch) =>
     projectRepository.update(id, patch),
   )
   ipcMain.handle(IPC.projects.remove, (_e, id: string, options?: RemoveProjectOptions) =>
-    removeProject(id, options),
+    removeAtlasProject(id, options).then((result) => result.removed),
   )
 
   ipcMain.handle(IPC.projects.createFolder, (_e, id: string) => {
@@ -567,6 +583,11 @@ export function registerIpcHandlers(deps: {
 
     const track = await musicRepository.importFromFile(result.filePaths[0], targetProjectId)
     projectRepository.touch(targetProjectId)
+    void import('../services/editor/editorComfyIngest')
+      .then(({ seedEditorForMusicProject }) => seedEditorForMusicProject(targetProjectId, track.id))
+      .catch(() => {
+        /* Editor opcional no import de faixa */
+      })
     return track
   })
   ipcMain.handle(
@@ -1560,6 +1581,384 @@ export function registerIpcHandlers(deps: {
     if (error) throw new Error(error)
     return true
   })
+
+  ipcMain.handle(IPC.atlasFlowV1.status, () => atlasFlowCoordinatorServer.getStatus())
+  ipcMain.handle(IPC.atlasFlowV1.createPairingCode, () => {
+    return atlasFlowCoordinatorServer.createPairingCode()
+  })
+  ipcMain.handle(IPC.atlasFlowV1.connectGoogleFlow, () => {
+    return atlasFlowCoordinatorServer.beginGoogleFlowConnect()
+  })
+  ipcMain.handle(IPC.atlasFlowV1.getConnectionStatus, () => {
+    return atlasFlowCoordinatorServer.getConnectionView()
+  })
+  ipcMain.handle(
+    IPC.atlasFlowV1.ensureProject,
+    async (_event, input: { atlasProjectId: string; requestedTitle?: string }) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      return flowJobService.enqueueProjectEnsure(input.atlasProjectId, input.requestedTitle)
+    },
+  )
+  ipcMain.handle(IPC.atlasFlowV1.lastSessionObservation, () =>
+    atlasFlowCoordinatorServer.getLastSessionObservation(),
+  )
+  ipcMain.handle(IPC.atlasFlowV1.openExtensionFolder, async () => {
+    const candidates = [
+      path.join(process.cwd(), 'apps', 'atlas-flow-extension', 'dist'),
+      path.join(getMainDir(), '../apps/atlas-flow-extension/dist'),
+    ]
+    const target = candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]!
+    fs.mkdirSync(target, { recursive: true })
+    const error = await shell.openPath(target)
+    if (error) throw new Error(error)
+    return target
+  })
+
+  ipcMain.handle(IPC.atlasFlowV1.listProjectCovers, async () => {
+    const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+    return flowJobService.listProjectCovers()
+  })
+
+  ipcMain.handle(IPC.atlasFlowV1.getBenchSnapshot, async (_event, atlasProjectId?: string) => {
+    const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+    const status = atlasFlowCoordinatorServer.getStatus()
+    const connection = atlasFlowCoordinatorServer.getConnectionView()
+    return flowJobService.getBenchSnapshot({
+      atlasProjectId: atlasProjectId || undefined,
+      coordinator: {
+        running: status.running,
+        port: status.port,
+        extensionConnected: status.extensionConnected,
+        lastExtensionSeenAt: status.lastExtensionSeenAt,
+        lastInstallationId: status.lastInstallationId,
+      },
+      sessionObservation: atlasFlowCoordinatorServer.getLastSessionObservation(),
+      connection: {
+        phase: connection.phase,
+        label: connection.label,
+        detail: connection.detail,
+        accountLabel: connection.accountLabel,
+        sessionUsable: connection.sessionUsable,
+        loginRequired: connection.loginRequired,
+        extensionConnected: connection.extensionConnected,
+        pairingOfferActive: connection.pairingOfferActive,
+        hasPairedInstallation: connection.hasPairedInstallation,
+        extensionPathHint: connection.extensionPathHint,
+      },
+    })
+  })
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.createPromptLine,
+    async (
+      _event,
+      input: { atlasProjectId: string; text: string; selectedReferenceIds?: string[] },
+    ) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      const promptId = flowJobService.createPromptLine(
+        input.atlasProjectId,
+        input.text || '',
+        input.selectedReferenceIds || [],
+      )
+      return { ok: true, promptId }
+    },
+  )
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.updatePromptDraft,
+    async (
+      _event,
+      input: { promptId: string; text: string; selectedReferenceIds: string[] },
+    ) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      return flowJobService.updatePromptDraft(
+        input.promptId,
+        input.text,
+        input.selectedReferenceIds || [],
+      )
+    },
+  )
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.importPromptBlocks,
+    async (
+      _event,
+      input: {
+        atlasProjectId: string
+        blocks?: string[]
+        numbered?: Array<{ number: number; text: string }>
+        selectedReferenceIds?: string[]
+      },
+    ) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      const refs = input.selectedReferenceIds || []
+      if (Array.isArray(input.numbered) && input.numbered.length > 0) {
+        const result = flowJobService.importNumberedPrompts(input.atlasProjectId, input.numbered, refs)
+        return { ok: true, ...result }
+      }
+      const ids = flowJobService.importPromptBlocks(input.atlasProjectId, input.blocks || [], refs)
+      return { ok: true, promptIds: ids, created: ids.length, updated: 0 }
+    },
+  )
+
+  ipcMain.handle(IPC.atlasFlowV1.pickDirectionDocument, async () => {
+    const win = getMainWindow()
+    const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: 'Documento de prompts do Flow',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Documento', extensions: ['txt', 'md'] },
+        { name: 'Texto', extensions: ['txt', 'md', 'json'] },
+      ],
+    })
+    const filePath = result.filePaths[0]
+    if (result.canceled || !filePath) return null
+    const stat = fs.statSync(filePath)
+    if (stat.size > 1024 * 1024) {
+      throw new Error('O documento passa de 1 MB.')
+    }
+    const text = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '')
+    return { text, fileName: path.basename(filePath) }
+  })
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.updateReferenceAlias,
+    async (_event, input: { referenceId: string; alias: string }) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      const result = flowJobService.updateReferenceAlias(input.referenceId, input.alias)
+      if (result.ok) atlasFlowCoordinatorServer.restageReferenceForRename(input.referenceId)
+      return result
+    },
+  )
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.updateReferenceRole,
+    async (_event, input: { referenceId: string; useAsCharacter: boolean }) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      return flowJobService.updateReferenceRole(input.referenceId, input.useAsCharacter === true)
+    },
+  )
+
+  ipcMain.handle(IPC.atlasFlowV1.archivePromptLine, async (_event, promptId: string) => {
+    const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+    return flowJobService.archivePromptLine(promptId)
+  })
+
+  ipcMain.handle(IPC.atlasFlowV1.archiveReference, async (_event, referenceId: string) => {
+    const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+    return flowJobService.archiveReference(referenceId)
+  })
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.enqueueGenerate,
+    async (_event, input: string | { promptId?: string; imageSettings?: unknown }) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      const promptId = typeof input === 'string' ? input : String(input?.promptId || '')
+      const imageSettings = typeof input === 'string' ? undefined : input?.imageSettings
+      return flowJobService.enqueueGenerate(promptId, imageSettings)
+    },
+  )
+
+  ipcMain.handle(IPC.atlasFlowV1.cancelAttempt, async (_event, attemptId: string) => {
+    const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+    return flowJobService.cancelAttempt(attemptId)
+  })
+
+  ipcMain.handle(IPC.atlasFlowV1.enqueueClearComposer, async () => {
+    const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+    return flowJobService.enqueueClearComposer()
+  })
+
+  ipcMain.handle(IPC.atlasFlowV1.enqueueRecover, async (_event, attemptId: string) => {
+    const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+    return flowJobService.enqueueRecover(attemptId)
+  })
+
+  ipcMain.handle(IPC.atlasFlowV1.listRecoveryCandidates, async (_event, attemptId: string) => {
+    const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+    return flowJobService.enqueueListRecoveryCandidates(String(attemptId || ''))
+  })
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.recoverExplicitSelection,
+    async (
+      _event,
+      input: { attemptId: string; candidateKeys: string[]; allowKnownSha?: boolean },
+    ) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      return flowJobService.enqueueRecoverExplicitSelection({
+        attemptId: String(input?.attemptId || ''),
+        candidateKeys: Array.isArray(input?.candidateKeys) ? input.candidateKeys : [],
+        allowKnownSha: input?.allowKnownSha === true,
+      })
+    },
+  )
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.enqueueUploadStaged,
+    async (
+      _event,
+      input: { atlasProjectId: string; referenceIds?: string[] },
+    ) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      return flowJobService.enqueueUploadStaged(
+        input.atlasProjectId,
+        input.referenceIds || [],
+      )
+    },
+  )
+
+  ipcMain.handle(IPC.atlasFlowV1.openResultFile, async (_event, resultBindingId: string) => {
+    const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+    const opened = flowJobService.openResultPath(resultBindingId)
+    if (!opened.ok || !opened.absPath) return opened
+    const error = await shell.openPath(opened.absPath)
+    if (error) return { ok: false, error }
+    return { ok: true, absPath: opened.absPath }
+  })
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.downloadResult,
+    async (_event, input: { resultBindingId?: string; resolution?: string }) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      return flowJobService.enqueueResultDownload({
+        resultBindingId: String(input?.resultBindingId || ''),
+        resolution: String(input?.resolution || ''),
+      })
+    },
+  )
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.deleteResult,
+    async (
+      _event,
+      input: { resultBindingId?: string; attemptId?: string; outputIndex?: number },
+    ) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      return flowJobService.deleteBenchImage({
+        resultBindingId: input?.resultBindingId,
+        attemptId: input?.attemptId,
+        outputIndex: input?.outputIndex,
+      })
+    },
+  )
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.approveResult,
+    async (_event, input: { resultBindingId: string; approved?: boolean }) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      return flowJobService.approveResult(
+        String(input?.resultBindingId || ''),
+        input?.approved !== false,
+      )
+    },
+  )
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.sendResultToLipSync,
+    async (_event, input: { resultBindingId: string }) => {
+      const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+      return flowJobService.sendResultToLipSync(String(input?.resultBindingId || ''))
+    },
+  )
+
+  void import('../services/atlas-flow-v1/FlowJobService').then(({ flowJobService }) => {
+    flowJobService.onBenchUpdate((event) => {
+      const win = getMainWindow()
+      if (win && !win.isDestroyed()) win.webContents.send(IPC.atlasFlowV1.benchUpdate, event)
+    })
+  })
+
+  ipcMain.handle(IPC.atlasFlowV1.pickReferenceFiles, async () => {
+    const win = getMainWindow()
+    const result = win
+      ? await dialog.showOpenDialog(win, {
+          title: 'Adicionar referências Flow',
+          properties: ['openFile', 'multiSelections'],
+          filters: [{ name: 'Imagens', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+        })
+      : await dialog.showOpenDialog({
+          title: 'Adicionar referências Flow',
+          properties: ['openFile', 'multiSelections'],
+          filters: [{ name: 'Imagens', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+        })
+    if (result.canceled) return { ok: true, paths: [] as string[] }
+    return { ok: true, paths: result.filePaths }
+  })
+
+  ipcMain.handle(
+    IPC.atlasFlowV1.addReferenceFromPath,
+    async (
+      _event,
+      input: { atlasProjectId: string; filePath: string; displayName?: string; alias?: string },
+    ) => {
+      const filePath = String(input.filePath || '')
+      if (!filePath || !fs.existsSync(filePath)) {
+        return { ok: false, error: 'FILE_NOT_FOUND' }
+      }
+      const bytes = fs.readFileSync(filePath)
+      if (!bytes.length || bytes.length > 12 * 1024 * 1024) {
+        return { ok: false, error: 'FILE_TOO_LARGE' }
+      }
+      const crypto = await import('node:crypto')
+      const sha256 = crypto.createHash('sha256').update(bytes).digest('hex')
+      const referenceId = crypto.randomUUID()
+      const versionId = crypto.randomUUID()
+      const stagingDir = path.join(process.cwd(), 'docs', 'atlas-flow', 'staging')
+      fs.mkdirSync(stagingDir, { recursive: true })
+      const absPath = path.join(stagingDir, `${versionId}.bin`)
+      fs.writeFileSync(absPath, bytes)
+      const ext = path.extname(filePath).toLowerCase()
+      const mimeType =
+        ext === '.png'
+          ? 'image/png'
+          : ext === '.webp'
+            ? 'image/webp'
+            : ext === '.gif'
+              ? 'image/gif'
+              : 'image/jpeg'
+      const displayName =
+        input.displayName?.trim() || path.basename(filePath, path.extname(filePath)) || 'reference'
+      const { atlasFlowReferenceStore } = await import(
+        '../services/atlas-flow-v1/atlasFlowReferenceStore'
+      )
+      atlasFlowReferenceStore.upsertStaged({
+        referenceId,
+        versionId,
+        atlasProjectId: input.atlasProjectId,
+        displayName,
+        mimeType,
+        byteSize: bytes.length,
+        sha256,
+        absPath,
+        stagedAt: new Date().toISOString(),
+        uploadState: 'staged_local',
+        bindingState: 'not_bound',
+        attachedState: 'not_attached',
+        flowMediaId: null,
+      })
+      if (input.alias?.trim()) {
+        const { flowJobService } = await import('../services/atlas-flow-v1/FlowJobService')
+        flowJobService.updateReferenceAlias(referenceId, input.alias)
+      }
+      atlasFlowCoordinatorServer.registerStagedReference({
+        referenceId,
+        versionId,
+        atlasProjectId: input.atlasProjectId,
+        displayName,
+        mimeType,
+        byteSize: bytes.length,
+        sha256,
+        absPath,
+        stagedAt: new Date().toISOString(),
+        uploadState: 'staged_local',
+        bindingState: 'not_bound',
+        attachedState: 'not_attached',
+        flowMediaId: null,
+      })
+      return { ok: true, referenceId, versionId, sha256, byteSize: bytes.length }
+    },
+  )
 
   registerEditorHandlers(getMainWindow)
 }

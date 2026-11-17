@@ -1,0 +1,22 @@
+{
+  "dryRunOnly": true,
+  "templateImage": "atlas-studio/comfyui-ltx2.3:pending-pin",
+  "templateTagPinned": false,
+  "containerPort": 8188,
+  "storageStrategy": "network_volume",
+  "preferredDataCenterId": "EU-RO-1",
+  "networkVolumeId": "tjp7a4uk0y",
+  "networkVolumeSizeGb": 70,
+  "primaryGpuId": "NVIDIA RTX PRO 4500 Blackwell",
+  "alternateGpuIds": [
+    "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+    null
+  ],
+  "minVramGb": 16,
+  "recommendedVramGb": 24,
+  "maxUsdPerHour": 0.9,
+  "preferredCloud": "SECURE",
+  "modelsMountPath": "/runpod-volume/models",
+  "comfyRootInContainer": "/ComfyUI",
+  "notes": "Volume inadequate_magenta_crow (tjp7a4uk0y) já existe em EU-RO-1 70GB US$4.90/mês — NÃO criar outro. Caminho A: teste 1 cena no Pod d3ewr3ge0uk002. Caminho B: Pod novo futuro em EU-RO-1 anexando este volume."
+}

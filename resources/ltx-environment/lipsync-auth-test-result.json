@@ -1,0 +1,49 @@
+{
+  "ok": false,
+  "aborted": true,
+  "reason": "foreign_remote_queue_busy",
+  "path": "A",
+  "authorization": {
+    "podId": "d3ewr3ge0uk002",
+    "maxUsd": 0.54,
+    "maxMinutes": 15,
+    "caminho": "A"
+  },
+  "checkedAt": "2026-11-08T19:58:00.000Z",
+  "podStatus": "RUNNING",
+  "comfyHealthy": true,
+  "selectedScene": {
+    "refId": "2c38dc92-b6ba-47f4-b98c-5929eb6bf100",
+    "projectId": "09f209f2-33b5-4ef0-aafc-b1e765b4ed9a",
+    "projectName": "What Am I Saving It For",
+    "label": "5",
+    "audioDurationSec": 1.99,
+    "ready": true
+  },
+  "generationSeconds": null,
+  "sessionElapsedMin": 0,
+  "estimatedSessionUsd": 0,
+  "downloadedPath": null,
+  "actionsTaken": [
+    "GET /system_stats (ok)",
+    "GET /queue (ocupada)",
+    "Nenhum POST /prompt",
+    "Nenhum upload",
+    "Nenhum stop/terminate/create"
+  ],
+  "remoteWorkInProgress": {
+    "running": 1,
+    "pending": 9,
+    "atlasBatchId": "40e8277d-92ca-4e08-a978-d9f31c741ab1",
+    "atlasBatchProjectHint": "Quando Tudo Passar (Daniel De Jesus)",
+    "note": "Fila ComfyUI com lote Atlas de produção ativo. Cancelar/interromper esses jobs NÃO foi autorizado nesta mensagem."
+  },
+  "whyNotStarted": "Com 1 job RUNNING + 9 PENDING de produção, uma cena LTX adicional não cabe com segurança em maxMinutes=15 / maxUsd=0.54 sem cancelar a fila alheia.",
+  "nextAuthorizationOptions": [
+    "Pausar/cancelar o lote de produção no Atlas e reenviar a mesma autorização do caminho A",
+    "Ou aumentar maxMinutes o suficiente após a fila esvaziar e reautorizar"
+  ],
+  "podLeftRunning": true,
+  "workflowUnchanged": true,
+  "noVolumeOrPodCreated": true
+}

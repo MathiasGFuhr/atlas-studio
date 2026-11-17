@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Atlas Flow v1",
+  "version": "0.3.74",
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "description": "Executor atlas-flow-v1 para o Atlas Studio (pareamento local). Integração real ainda não validada.",
+  "permissions": ["storage", "alarms", "tabs", "scripting", "debugger"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "https://flow.google.com/*",
+    "https://flow-content.google/*",
+    "https://*.flow.google.com/*",
+    "https://*.googleusercontent.com/*",
+    "https://*.ggpht.com/*",
+    "https://*.google.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Atlas Flow v1",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://flow.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

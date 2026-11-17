@@ -1,0 +1,122 @@
+{
+  "exportedAt": "2026-11-08T19:34:11.604Z",
+  "workflowName": "video_ltx2_3_ia2v.json",
+  "analysis": {
+    "source": "sqlite_import",
+    "nodeCount": 55,
+    "classTypes": [
+      "CFGGuider",
+      "CLIPTextEncode",
+      "CheckpointLoaderSimple",
+      "ComfyMathExpression",
+      "ComfySwitchNode",
+      "CreateVideo",
+      "EmptyLTXVLatentVideo",
+      "KSamplerSelect",
+      "LTXAVTextEncoderLoader",
+      "LTXVAudioVAEDecode",
+      "LTXVAudioVAEEncode",
+      "LTXVAudioVAELoader",
+      "LTXVConcatAVLatent",
+      "LTXVConditioning",
+      "LTXVCropGuides",
+      "LTXVImgToVideoInplace",
+      "LTXVLatentUpsampler",
+      "LTXVPreprocess",
+      "LTXVSeparateAVLatent",
+      "LatentUpscaleModelLoader",
+      "LoadAudio",
+      "LoadImage",
+      "LoraLoader",
+      "LoraLoaderModelOnly",
+      "ManualSigmas",
+      "PreviewAny",
+      "PrimitiveBoolean",
+      "PrimitiveFloat",
+      "PrimitiveInt",
+      "PrimitiveStringMultiline",
+      "RandomNoise",
+      "ResizeImageMaskNode",
+      "ResizeImagesByLongerEdge",
+      "SamplerCustomAdvanced",
+      "SaveVideo",
+      "SetLatentNoiseMask",
+      "SolidMask",
+      "TextGenerateLTX2Prompt",
+      "TrimAudioDuration",
+      "VAEDecodeTiled"
+    ],
+    "hasLtxMarker": true,
+    "modelRefs": [
+      {
+        "nodeId": "340:335",
+        "classType": "LTXVAudioVAELoader",
+        "field": "ckpt_name",
+        "fileName": "ltx-2.3-22b-dev-fp8.safetensors"
+      },
+      {
+        "nodeId": "340:313",
+        "classType": "LatentUpscaleModelLoader",
+        "field": "model_name",
+        "fileName": "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
+      },
+      {
+        "nodeId": "340:293",
+        "classType": "LoraLoaderModelOnly",
+        "field": "lora_name",
+        "fileName": "ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors"
+      },
+      {
+        "nodeId": "340:317",
+        "classType": "CheckpointLoaderSimple",
+        "field": "ckpt_name",
+        "fileName": "ltx-2.3-22b-dev-fp8.safetensors"
+      },
+      {
+        "nodeId": "340:318",
+        "classType": "LTXAVTextEncoderLoader",
+        "field": "text_encoder",
+        "fileName": "gemma_3_12B_it_fp4_mixed.safetensors"
+      },
+      {
+        "nodeId": "340:318",
+        "classType": "LTXAVTextEncoderLoader",
+        "field": "ckpt_name",
+        "fileName": "ltx-2.3-22b-dev-fp8.safetensors"
+      },
+      {
+        "nodeId": "340:345",
+        "classType": "LoraLoader",
+        "field": "lora_name",
+        "fileName": "gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors"
+      }
+    ],
+    "officialModelsMatched": [
+      "ltx-2.3-22b-dev-fp8.safetensors",
+      "ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
+      "gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors",
+      "gemma_3_12B_it_fp4_mixed.safetensors",
+      "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
+    ],
+    "officialModelsMissingInWorkflow": [],
+    "extraModelFiles": [],
+    "nativeLtxClassTypes": [
+      "LTXAVTextEncoderLoader",
+      "LTXVAudioVAEDecode",
+      "LTXVAudioVAEEncode",
+      "LTXVAudioVAELoader",
+      "LTXVConcatAVLatent",
+      "LTXVConditioning",
+      "LTXVCropGuides",
+      "LTXVImgToVideoInplace",
+      "LTXVLatentUpsampler",
+      "LTXVPreprocess",
+      "LTXVSeparateAVLatent"
+    ],
+    "comparisonNotes": [
+      "Comparado com docs.comfy.org LTX-2.3 IA2V.",
+      "Workflow real: 55 nós, 40 class_types.",
+      "Assets oficiais no workflow: 5/5."
+    ]
+  }
+}

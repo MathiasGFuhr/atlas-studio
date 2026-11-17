@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { FlowImageSettings } from '../shared/flowImageSettings'
 import type { IdeaItem, IdeaKind } from '../shared/ideas'
 import type {
   AdjustScriptRequest,
@@ -150,8 +151,11 @@ type EditorImportResult = { assets: EditorAsset[]; errors: string[] }
 
 const api = {
   projects: {
-    list: (filters?: { projectType?: ProjectType; query?: string }) =>
-      ipcRenderer.invoke(IPC.projects.list, filters) as Promise<Project[]>,
+    list: (filters?: {
+      projectType?: ProjectType
+      query?: string
+      workspace?: 'music' | 'flow' | 'all'
+    }) => ipcRenderer.invoke(IPC.projects.list, filters) as Promise<Project[]>,
     get: (id: string) => ipcRenderer.invoke(IPC.projects.get, id) as Promise<Project | null>,
     create: (input: {
       name: string
@@ -159,6 +163,7 @@ const api = {
       projectType: ProjectType
       channelId?: string | null
       projectFolderPath?: string | null
+      workspace?: 'music' | 'flow'
     }) => ipcRenderer.invoke(IPC.projects.create, input) as Promise<Project>,
     update: (id: string, patch: ProjectPatch) =>
       ipcRenderer.invoke(IPC.projects.update, id, patch) as Promise<Project | null>,
@@ -691,6 +696,124 @@ const api = {
       ipcRenderer.on(IPC.flowProjects.progress, listener)
       return () => {
         ipcRenderer.removeListener(IPC.flowProjects.progress, listener)
+      }
+    },
+  },
+  atlasFlowV1: {
+    status: () => ipcRenderer.invoke(IPC.atlasFlowV1.status),
+    createPairingCode: () => ipcRenderer.invoke(IPC.atlasFlowV1.createPairingCode),
+    connectGoogleFlow: () => ipcRenderer.invoke(IPC.atlasFlowV1.connectGoogleFlow),
+    getConnectionStatus: () => ipcRenderer.invoke(IPC.atlasFlowV1.getConnectionStatus),
+    ensureProject: (input: { atlasProjectId: string; requestedTitle?: string }) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.ensureProject, input),
+    listProjectCovers: () =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.listProjectCovers) as Promise<
+        Array<{ atlasProjectId: string; coverUrl: string }>
+      >,
+    lastSessionObservation: () => ipcRenderer.invoke(IPC.atlasFlowV1.lastSessionObservation),
+    openExtensionFolder: () =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.openExtensionFolder) as Promise<string>,
+    getBenchSnapshot: (atlasProjectId?: string) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.getBenchSnapshot, atlasProjectId),
+    createPromptLine: (input: {
+      atlasProjectId: string
+      text: string
+      selectedReferenceIds?: string[]
+    }) => ipcRenderer.invoke(IPC.atlasFlowV1.createPromptLine, input),
+    updatePromptDraft: (input: {
+      promptId: string
+      text: string
+      selectedReferenceIds: string[]
+    }) => ipcRenderer.invoke(IPC.atlasFlowV1.updatePromptDraft, input),
+    importPromptBlocks: (input: {
+      atlasProjectId: string
+      blocks?: string[]
+      numbered?: Array<{ number: number; text: string }>
+      selectedReferenceIds?: string[]
+    }) => ipcRenderer.invoke(IPC.atlasFlowV1.importPromptBlocks, input),
+    pickDirectionDocument: () =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.pickDirectionDocument) as Promise<{
+        text: string
+        fileName: string
+      } | null>,
+    updateReferenceAlias: (input: { referenceId: string; alias: string }) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.updateReferenceAlias, input),
+    updateReferenceRole: (input: { referenceId: string; useAsCharacter: boolean }) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.updateReferenceRole, input) as Promise<{
+        ok: boolean
+        error?: string
+      }>,
+    archivePromptLine: (promptId: string) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.archivePromptLine, promptId),
+    archiveReference: (referenceId: string) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.archiveReference, referenceId),
+    enqueueGenerate: (input: string | { promptId: string; imageSettings?: FlowImageSettings }) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.enqueueGenerate, input),
+    cancelAttempt: (attemptId: string) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.cancelAttempt, attemptId),
+    enqueueClearComposer: () =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.enqueueClearComposer) as Promise<{
+        ok: boolean
+        error?: string
+        commandId?: string
+      }>,
+    enqueueRecover: (attemptId: string) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.enqueueRecover, attemptId),
+    listRecoveryCandidates: (attemptId: string) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.listRecoveryCandidates, attemptId),
+    recoverExplicitSelection: (input: {
+      attemptId: string
+      candidateKeys: string[]
+      allowKnownSha?: boolean
+    }) => ipcRenderer.invoke(IPC.atlasFlowV1.recoverExplicitSelection, input),
+    enqueueUploadStaged: (input: { atlasProjectId: string; referenceIds?: string[] }) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.enqueueUploadStaged, input),
+    openResultFile: (resultBindingId: string) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.openResultFile, resultBindingId),
+    downloadResult: (input: { resultBindingId: string; resolution: '1k' | '2k' | '4k' }) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.downloadResult, input) as Promise<{
+        ok: boolean
+        pending?: boolean
+        error?: string | null
+        resolution?: string
+        commandId?: string
+        savedPath?: string | null
+        folderError?: string | null
+      }>,
+    deleteResult: (input: {
+      resultBindingId?: string | null
+      attemptId?: string | null
+      outputIndex?: number | null
+    }) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.deleteResult, input) as Promise<{
+        ok: boolean
+        error?: string
+        flowDeleted?: boolean
+        flowMissing?: boolean
+      }>,
+    approveResult: (input: { resultBindingId: string; approved?: boolean }) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.approveResult, input),
+    sendResultToLipSync: (input: { resultBindingId: string }) =>
+      ipcRenderer.invoke(IPC.atlasFlowV1.sendResultToLipSync, input) as Promise<{
+        ok: boolean
+        error?: string
+        sceneNumber?: number
+        musicProjectId?: string
+        imagePath?: string
+      }>,
+    pickReferenceFiles: () => ipcRenderer.invoke(IPC.atlasFlowV1.pickReferenceFiles),
+    addReferenceFromPath: (input: {
+      atlasProjectId: string
+      filePath: string
+      displayName?: string
+      alias?: string
+    }) => ipcRenderer.invoke(IPC.atlasFlowV1.addReferenceFromPath, input),
+    onBenchUpdate: (callback: (event: Record<string, unknown>) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: Record<string, unknown>) =>
+        callback(data)
+      ipcRenderer.on(IPC.atlasFlowV1.benchUpdate, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.atlasFlowV1.benchUpdate, listener)
       }
     },
   },

@@ -1,7 +1,7 @@
 {
   "name": "atlas-studio",
   "productName": "Atlas Studio",
-  "version": "2.0.15",
+  "version": "2.0.16",
   "description": "Atlas Studio ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ProduÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o musical com IA",
   "private": true,
   "main": "dist-electron/main.js",
@@ -25,6 +25,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run",
     "electron:dev": "vite",
+    "atlas-flow:extension:build": "vite build --config ./apps/atlas-flow-extension/vite.config.ts",
+    "atlas-flow:coordinator": "node ./scripts/start-atlas-flow-coordinator.mjs",
     "electron:build": "npm run build && electron-builder --win --publish never",
     "electron:release": "npm run build && electron-builder --win --publish always",
     "codex:status": "npm run build && node scripts/check-codex-status.mjs",
@@ -49,11 +51,18 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.8.2",
-    "sql.js": "^1.13.0"
+    "sql.js": "^1.13.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.13",
+    "@babel/preset-env": "^7.29.14",
+    "@babel/preset-typescript": "^7.29.7",
     "@eslint/js": "^9.35.0",
+    "@rollup/plugin-babel": "^7.1.0",
+    "@rollup/plugin-commonjs": "^29.0.3",
     "@tailwindcss/vite": "^4.1.13",
+    "@types/chrome": "^0.3.7",
     "@types/node": "^22.18.1",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",

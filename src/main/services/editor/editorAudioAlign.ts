@@ -2,13 +2,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { sceneNumberFromAsset } from '../../../shared/editor/syncToMusic'
+import { cutForScene, sceneNumberFromAsset } from '../../../shared/editor/syncToMusic'
 import { alignAudioSegment, scaleNumberedSegmentsToMusic } from '../../../shared/editor/audioAlign'
 import {
   pickPreferredAudioPath,
   sceneNumberFromAudioFileName,
 } from '../../../shared/editor/numberedAudio'
 import type { EditorAsset } from '../../../shared/editor/types'
+import type { MusicSegment } from '../../../shared/musicAnalysis'
 import { probeAudioDuration } from '../audio/audioProbe'
 import { runFfmpegResult } from '../audio/ffmpeg'
 import { logger } from '../logging/logger'
@@ -144,24 +145,42 @@ export async function buildCumulativeStartsFromNumberedAudio(
   return starts.size > 0 ? starts : null
 }
 
+/** Pastas onde os N.mp3 dos cortes costumam estar (música, projeto, lipsync e pais). */
+export function candidateSegmentAudioDirs(input: {
+  musicAsset: Pick<EditorAsset, 'sourcePath'>
+  videoAssets: Array<Pick<EditorAsset, 'sourcePath'>>
+}): string[] {
+  const dirs: string[] = []
+  const musicDir = path.dirname(input.musicAsset.sourcePath)
+  dirs.push(musicDir)
+  dirs.push(path.join(musicDir, 'lipsync'))
+  dirs.push(path.join(musicDir, 'video'))
+  for (const video of input.videoAssets) {
+    const videoDir = path.dirname(video.sourcePath)
+    dirs.push(videoDir)
+    dirs.push(path.dirname(videoDir))
+    const base = path.basename(videoDir).toLowerCase()
+    if (base === 'lipsync' || base === 'video') {
+      dirs.push(path.dirname(videoDir))
+    }
+  }
+  return [...new Set(dirs.map((dir) => path.resolve(dir)).filter(Boolean))]
+}
+
 /** Áudio do trecho N ao lado da música / do vídeo (1.mp3, 2.wav…). */
 export function resolveSegmentAudioPath(input: {
   videoAsset: Pick<EditorAsset, 'name' | 'sourcePath'>
   musicAsset: Pick<EditorAsset, 'sourcePath'>
 }): string | null {
   const scene = sceneNumberFromAsset(input.videoAsset)
-  const dirs = [
-    path.dirname(input.musicAsset.sourcePath),
-    path.dirname(input.videoAsset.sourcePath),
-    path.join(path.dirname(input.musicAsset.sourcePath), 'lipsync'),
-    path.join(path.dirname(input.musicAsset.sourcePath), 'video'),
-  ]
-  const unique = [...new Set(dirs.map((dir) => path.resolve(dir)))]
-  if (scene != null) {
-    for (const dir of unique) {
-      const found = listNumberedAudioInDir(dir, scene)
-      if (found) return found
-    }
+  if (scene == null) return null
+  const dirs = candidateSegmentAudioDirs({
+    musicAsset: input.musicAsset,
+    videoAssets: [input.videoAsset],
+  })
+  for (const dir of dirs) {
+    const found = listNumberedAudioInDir(dir, scene)
+    if (found) return found
   }
   return null
 }
@@ -178,15 +197,47 @@ function pickMusicAsset(
   return assets.find((asset) => asset.kind === 'audio' && asset.available !== false) ?? null
 }
 
+function placementFromCut(input: {
+  assetId: string
+  sceneNumber: number
+  cuts: MusicSegment[]
+  needlePath: string
+}): EditorAudioAlignPlacement | null {
+  const cut = cutForScene(input.cuts, input.sceneNumber)
+  if (!cut || !Number.isFinite(cut.start)) return null
+  return {
+    assetId: input.assetId,
+    start: Math.max(0, cut.start),
+    duration: Math.max(0.1, cut.end - cut.start),
+    score: 1,
+    sceneNumber: input.sceneNumber,
+    needlePath: input.needlePath,
+  }
+}
+
+async function resolveCumulativeMap(
+  dirs: string[],
+  musicPath: string,
+): Promise<Map<number, { start: number; path: string; duration: number }> | null> {
+  for (const dir of dirs) {
+    const cumulative = await buildCumulativeStartsFromNumberedAudio(dir, musicPath)
+    if (cumulative) return cumulative
+  }
+  return null
+}
+
 /**
- * Para cada vídeo, posiciona no tempo do áudio correspondente:
- * 1) se existir 1.mp3…N.mp3 na pasta da música, usa a soma das durações (cortes em sequência);
- * 2) senão, procura o mesmo áudio dentro da música (com confirmação rigorosa).
+ * Para cada vídeo, posiciona no tempo certo da música:
+ * 1) 1.mp3…N.mp3 em sequência (pasta da música / projeto / lipsync);
+ * 2) corte N da faixa vinculada (caminho confiável para vídeos do Lipsync);
+ * 3) match PCM do áudio do trecho — se falhar e houver corte, usa o corte.
  */
 export async function alignEditorVideosToMusic(input: {
   assets: EditorAsset[]
   videoAssetIds: string[]
   timelineAudioAssetIds: string[]
+  /** Cortes da faixa vinculada ao projeto do Editor (`Trecho N` → start/end). */
+  cuts?: MusicSegment[]
 }): Promise<EditorAudioAlignResult> {
   const music = pickMusicAsset(input.assets, input.timelineAudioAssetIds)
   if (!music) {
@@ -201,24 +252,33 @@ export async function alignEditorVideosToMusic(input: {
     return { placements: [], skipped: [], musicAssetId: music.id }
   }
 
-  const musicDir = path.dirname(music.sourcePath)
-  const cumulative = await buildCumulativeStartsFromNumberedAudio(musicDir, music.sourcePath)
+  const cuts = Array.isArray(input.cuts) ? input.cuts : []
+  const searchDirs = candidateSegmentAudioDirs({ musicAsset: music, videoAssets: videos })
+  const cumulative = await resolveCumulativeMap(searchDirs, music.sourcePath)
   const placements: EditorAudioAlignPlacement[] = []
   const skipped: Array<{ assetId: string; reason: string }> = []
 
-  const needFallback = videos.filter((video) => {
+  const needPcm = videos.filter((video) => {
     const scene = sceneNumberFromAsset(video)
-    return !(cumulative && scene != null && cumulative.has(scene))
+    if (cumulative && scene != null && cumulative.has(scene)) return false
+    if (scene != null && cutForScene(cuts, scene)) return false
+    return true
   })
 
   let haystack: Int16Array | null = null
   const pcmCache = new Map<string, Int16Array>()
-  if (needFallback.length > 0) {
+  if (needPcm.length > 0) {
     haystack = await decodeMonoPcm(music.sourcePath)
   }
 
+  let mode: 'numbered-scaled' | 'music-cuts' | 'pcm-match' | 'mixed' = 'pcm-match'
+  let usedNumbered = false
+  let usedCuts = false
+  let usedPcm = false
+
   for (const video of videos) {
     const sceneNumber = sceneNumberFromAsset(video)
+
     if (cumulative && sceneNumber != null && cumulative.has(sceneNumber)) {
       const entry = cumulative.get(sceneNumber)!
       placements.push({
@@ -229,7 +289,22 @@ export async function alignEditorVideosToMusic(input: {
         sceneNumber,
         needlePath: entry.path,
       })
+      usedNumbered = true
       continue
+    }
+
+    if (sceneNumber != null) {
+      const fromCut = placementFromCut({
+        assetId: video.id,
+        sceneNumber,
+        cuts,
+        needlePath: music.sourcePath,
+      })
+      if (fromCut) {
+        placements.push(fromCut)
+        usedCuts = true
+        continue
+      }
     }
 
     const companion = resolveSegmentAudioPath({ videoAsset: video, musicAsset: music })
@@ -247,6 +322,19 @@ export async function alignEditorVideosToMusic(input: {
         sampleRate: ALIGN_SAMPLE_RATE,
       })
       if (!aligned.ok) {
+        if (sceneNumber != null) {
+          const fromCut = placementFromCut({
+            assetId: video.id,
+            sceneNumber,
+            cuts,
+            needlePath: music.sourcePath,
+          })
+          if (fromCut) {
+            placements.push(fromCut)
+            usedCuts = true
+            continue
+          }
+        }
         skipped.push({ assetId: video.id, reason: aligned.reason })
         continue
       }
@@ -260,36 +348,59 @@ export async function alignEditorVideosToMusic(input: {
         sceneNumber,
         needlePath,
       })
+      usedPcm = true
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
+      if (sceneNumber != null) {
+        const fromCut = placementFromCut({
+          assetId: video.id,
+          sceneNumber,
+          cuts,
+          needlePath: music.sourcePath,
+        })
+        if (fromCut) {
+          placements.push(fromCut)
+          usedCuts = true
+          continue
+        }
+      }
       logger.warn('editor.audio_align.failed', { assetId: video.id, needlePath, error: reason })
       skipped.push({ assetId: video.id, reason })
     }
   }
 
+  const modes = [usedNumbered, usedCuts, usedPcm].filter(Boolean).length
+  if (modes > 1) mode = 'mixed'
+  else if (usedNumbered) mode = 'numbered-scaled'
+  else if (usedCuts) mode = 'music-cuts'
+  else mode = 'pcm-match'
+
   placements.sort((a, b) => a.start - b.start || (a.sceneNumber ?? 0) - (b.sceneNumber ?? 0))
 
-  // Cada clipe termina onde o próximo começa (ou no fim da música) — sem acumular padding.
+  // Soma dos N.mp3 / PCM: encaixa um no outro. Cortes da faixa já têm start/end corretos.
   const musicDuration = (await probeAudioDuration(music.sourcePath)) ?? music.duration
-  for (let index = 0; index < placements.length; index += 1) {
-    if (index + 1 < placements.length) {
-      const abut = Math.max(0.1, placements[index + 1].start - placements[index].start)
-      placements[index] = { ...placements[index], duration: abut }
-      continue
-    }
-    const untilEnd = Math.max(0.1, musicDuration - placements[index].start)
-    placements[index] = {
-      ...placements[index],
-      duration: Math.min(placements[index].duration, untilEnd),
+  if (mode === 'numbered-scaled' || mode === 'pcm-match') {
+    for (let index = 0; index < placements.length; index += 1) {
+      if (index + 1 < placements.length) {
+        const abut = Math.max(0.1, placements[index + 1].start - placements[index].start)
+        placements[index] = { ...placements[index], duration: abut }
+        continue
+      }
+      const untilEnd = Math.max(0.1, musicDuration - placements[index].start)
+      placements[index] = {
+        ...placements[index],
+        duration: Math.min(placements[index].duration, untilEnd),
+      }
     }
   }
 
   logger.info('editor.audio_align.done', {
     musicAssetId: music.id,
-    mode: cumulative ? 'numbered-scaled' : 'pcm-match',
+    mode,
     placed: placements.length,
     skipped: skipped.length,
     musicDuration,
+    cuts: cuts.length,
   })
   return { placements, skipped, musicAssetId: music.id }
 }

@@ -493,23 +493,6 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
     [api],
   )
 
-  const importLipsync = useCallback(
-    async (paths: string[], addToTimeline: boolean) => {
-      const imported = await importPaths(paths, 'lipsync')
-      if (!addToTimeline || imported.length === 0) return
-      const byPath = new Map(imported.map((asset) => [asset.sourcePath.toLowerCase(), asset]))
-      const ordered = paths
-        .map((item) => byPath.get(item.toLowerCase()))
-        .filter((asset): asset is EditorAsset => Boolean(asset))
-      insertAssets(ordered.length > 0 ? ordered : imported)
-      push(
-        ordered.length === 1 ? 'Vídeo adicionado à timeline.' : `${ordered.length} vídeos adicionados à timeline.`,
-        'success',
-      )
-    },
-    [importPaths, insertAssets, push],
-  )
-
   const confirmRemoveAsset = useCallback(async () => {
     const asset = assetToRemove
     if (!asset) return
@@ -545,7 +528,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   )
 
   const syncAssetsToMusic = useCallback(
-    async (inputAssets: EditorAsset[]) => {
+    async (inputAssets: EditorAsset[]): Promise<boolean> => {
       const videos = inputAssets
         .filter((asset) => asset.kind === 'video' && asset.available !== false)
         .slice()
@@ -556,12 +539,12 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
         })
       if (videos.length === 0) {
         push('Selecione pelo menos um vídeo para sincronizar.', 'error')
-        return
+        return false
       }
 
       setBusy(true)
       try {
-        // Alinha pelo mesmo áudio do trecho (1.mp3… / áudio do vídeo) dentro da música da timeline.
+        // Prioridade: N.mp3 em sequência → cortes da faixa → match PCM.
         const aligned = await api.editor.alignToMusic(
           project.id,
           videos.map((asset) => asset.id),
@@ -608,10 +591,10 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
         if (total === 0) {
           push(
             firstError ??
-              'Não consegui alinhar os vídeos. Deixe a música na timeline e os arquivos 1.mp3, 2.mp3… na mesma pasta.',
+              'Não consegui alinhar os vídeos. Coloque a música na timeline e confira os cortes da faixa.',
             'error',
           )
-          return
+          return false
         }
 
         commit(current)
@@ -625,19 +608,44 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
         store.seek(Math.max(0, lastStart))
         if (total === 1) {
           const label = lastScene != null ? `Trecho ${lastScene}` : 'Vídeo'
-          push(`${label} alinhado em ${formatTimecode(lastStart, current.fps)} pelo áudio.`, 'success')
+          push(`${label} alinhado em ${formatTimecode(lastStart, current.fps)}.`, 'success')
         } else if (skipped > 0) {
           push(`${total} vídeos alinhados e cortados no trecho · ${skipped} ignorados.`, 'success')
         } else {
           push(`${total} vídeos alinhados e cortados no trecho da música.`, 'success')
         }
+        return true
       } catch (error) {
         pushError(error, 'Falha ao sincronizar com a música')
+        return false
       } finally {
         setBusy(false)
       }
     },
     [api, assetMap, commit, project.id, push, pushError, store],
+  )
+
+  const importLipsync = useCallback(
+    async (paths: string[], addToTimeline: boolean) => {
+      const imported = await importPaths(paths, 'lipsync')
+      if (!addToTimeline || imported.length === 0) return
+      const byPath = new Map(imported.map((asset) => [asset.sourcePath.toLowerCase(), asset]))
+      const ordered = paths
+        .map((item) => byPath.get(item.toLowerCase()))
+        .filter((asset): asset is EditorAsset => Boolean(asset))
+      const list = ordered.length > 0 ? ordered : imported
+      const ok = await syncAssetsToMusic(list)
+      if (!ok) {
+        insertAssets(list)
+        push(
+          list.length === 1
+            ? 'Vídeo adicionado à timeline (sem sync automático).'
+            : `${list.length} vídeos adicionados à timeline (sem sync automático).`,
+          'success',
+        )
+      }
+    },
+    [importPaths, insertAssets, push, syncAssetsToMusic],
   )
 
   const syncAssetToMusic = useCallback(

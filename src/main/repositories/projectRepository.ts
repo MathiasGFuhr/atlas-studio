@@ -14,6 +14,7 @@ type ProjectRow = {
   project_type: string
   folder_path: string | null
   channel_id: string | null
+  workspace?: string | null
   channel_name?: string | null
   created_at: string
   updated_at: string
@@ -39,6 +40,7 @@ function mapProject(row: ProjectRow): Project {
     songLyrics: row.song_lyrics ?? '',
     projectType: 'music',
     channelId,
+    workspace: row.workspace === 'flow' ? 'flow' : 'music',
     channelName: row.channel_name ?? null,
     projectFolderPath: folderPath,
     folderExists: folderExists(folderPath),
@@ -88,13 +90,22 @@ function resolveChannelId(projectType: ProjectType, channelId?: string | null): 
 }
 
 export const projectRepository = {
-  list(filters?: { projectType?: ProjectType; query?: string }): Project[] {
+  list(filters?: {
+    projectType?: ProjectType
+    query?: string
+    workspace?: 'music' | 'flow' | 'all'
+  }): Project[] {
     let sql = `${SELECT_WITH_COUNTS} WHERE 1=1`
     const params: unknown[] = []
 
     if (filters?.projectType) {
       sql += ' AND p.project_type = ?'
       params.push(filters.projectType)
+    }
+    if (filters?.workspace === 'flow') {
+      sql += ` AND p.workspace = 'flow'`
+    } else if (filters?.workspace !== 'all') {
+      sql += ` AND COALESCE(p.workspace, 'music') != 'flow'`
     }
     if (filters?.query?.trim()) {
       sql += ' AND (p.name LIKE ? OR p.description LIKE ?)'
@@ -146,18 +157,20 @@ export const projectRepository = {
     projectType: ProjectType
     channelId?: string | null
     projectFolderPath?: string | null
+    workspace?: 'music' | 'flow'
   }): Project {
     const name = input.name?.trim()
     if (!name) throw new Error('Informe o nome do projeto.')
     if (!isProjectType(input.projectType)) throw new Error('Tipo de projeto inválido.')
     const channelId = resolveChannelId(input.projectType, input.channelId)
+    const workspace = input.workspace === 'flow' ? 'flow' : 'music'
 
     const id = randomUUID()
     const timestamp = new Date().toISOString()
     getDb()
       .prepare(
-        `INSERT INTO projects (id, name, description, project_type, folder_path, channel_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO projects (id, name, description, project_type, folder_path, channel_id, workspace, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -166,6 +179,7 @@ export const projectRepository = {
         input.projectType,
         input.projectFolderPath?.trim() || null,
         channelId,
+        workspace,
         timestamp,
         timestamp,
       )

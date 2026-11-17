@@ -590,5 +590,16 @@ export function startComfyBatch(projectId: string | null, refIds?: string[] | nu
     only.length > 0 ? { refIds: only } : undefined,
   )
   const view = withProjectName(comfyQueueService.startBatch({ projectId, outputDir, scenes }))!
+
+  // Garante projeto do Editor (cantor + música) antes dos vídeos começarem a cair.
+  void import('../editor/editorComfyIngest')
+    .then(({ seedEditorForMusicProject }) => seedEditorForMusicProject(projectId))
+    .catch((error) => {
+      logger.warn('editor.seed_after_comfy_batch_failed', {
+        projectId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+
   return { view, skipped: problems }
 }

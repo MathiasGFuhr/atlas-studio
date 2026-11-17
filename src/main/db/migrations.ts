@@ -250,6 +250,42 @@ const SCHEMA_STEPS: SchemaStep[] = [
     backup: false,
     up: applyEditorChannelLink,
   },
+  {
+    version: 46,
+    name: 'atlas-flow-v1-schema',
+    backup: true,
+    up: applyAtlasFlowV1Schema,
+  },
+  {
+    version: 47,
+    name: 'flow-result-approved-at',
+    backup: false,
+    up: applyFlowResultApprovedAt,
+  },
+  {
+    version: 48,
+    name: 'project-workspace',
+    backup: false,
+    up: applyProjectWorkspace,
+  },
+  {
+    version: 49,
+    name: 'flow-reference-role',
+    backup: false,
+    up: applyFlowReferenceRole,
+  },
+  {
+    version: 50,
+    name: 'flow-hidden-outputs',
+    backup: false,
+    up: applyFlowHiddenOutputs,
+  },
+  {
+    version: 51,
+    name: 'flow-result-lipsync-sent-at',
+    backup: false,
+    up: applyFlowResultLipSyncSentAt,
+  },
 ]
 
 /** Versão lógica do schema: sempre o último passo de SCHEMA_STEPS. */
@@ -1530,4 +1566,349 @@ function normalizeProjectTypes(database: AppDatabase) {
 function nonEmpty(raw: unknown, fallback: string): string {
   const value = String(raw ?? '').trim()
   return value || fallback
+}
+
+/**
+ * Schema atlas-flow-v1 (aditivo). Não altera tabelas google_flow_* legadas.
+ * Integração real com o Flow permanece NÃO VALIDADA até observação autenticada.
+ */
+function applyAtlasFlowV1Schema(database: AppDatabase): SchemaStepResult {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS flow_installations (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      atlas_user_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      extension_id TEXT,
+      extension_version TEXT,
+      protocol_version INTEGER NOT NULL DEFAULT 1,
+      adapter_version TEXT,
+      token_hash TEXT,
+      token_epoch INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_seen_at TEXT,
+      created_at TEXT NOT NULL,
+      revoked_at TEXT,
+      transport_kind TEXT NOT NULL DEFAULT 'loopback-http-ws'
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_principals (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      installation_id TEXT NOT NULL,
+      email_observed TEXT,
+      display_name TEXT,
+      identity_source TEXT NOT NULL,
+      verification_status TEXT NOT NULL,
+      verified_at TEXT,
+      last_observed_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_capability_snapshots (
+      id TEXT PRIMARY KEY,
+      principal_id TEXT NOT NULL,
+      adapter_version TEXT NOT NULL,
+      observed_at TEXT NOT NULL,
+      expires_at TEXT,
+      model_options_json TEXT NOT NULL DEFAULT '[]',
+      aspect_ratios_json TEXT NOT NULL DEFAULT '[]',
+      output_counts_json TEXT NOT NULL DEFAULT '[]',
+      max_refs INTEGER,
+      result_sizes_json TEXT NOT NULL DEFAULT '[]',
+      background_verified INTEGER NOT NULL DEFAULT 0,
+      passive_correlation_verified INTEGER NOT NULL DEFAULT 0,
+      plan_label TEXT,
+      credits INTEGER,
+      credits_status TEXT NOT NULL DEFAULT 'unknown',
+      evidence_summary TEXT,
+      unknown_fields_json TEXT NOT NULL DEFAULT '{}'
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_project_links (
+      id TEXT PRIMARY KEY,
+      atlas_project_id TEXT NOT NULL,
+      principal_id TEXT NOT NULL,
+      flow_origin TEXT NOT NULL,
+      flow_project_id TEXT,
+      flow_project_url TEXT,
+      link_state TEXT NOT NULL,
+      requested_title TEXT NOT NULL,
+      observed_title TEXT,
+      create_action_id TEXT,
+      last_verified_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 1,
+      archived_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_references (
+      id TEXT PRIMARY KEY,
+      atlas_project_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      alias_normalized TEXT NOT NULL,
+      active_version_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      archived_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_reference_versions (
+      id TEXT PRIMARY KEY,
+      reference_id TEXT NOT NULL,
+      source_asset_id TEXT,
+      source_sha256 TEXT NOT NULL,
+      effective_asset_id TEXT,
+      effective_sha256 TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      byte_size INTEGER NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_reference_bindings (
+      id TEXT PRIMARY KEY,
+      project_link_id TEXT NOT NULL,
+      reference_version_id TEXT NOT NULL,
+      flow_media_id TEXT,
+      external_locator TEXT,
+      binding_state TEXT NOT NULL,
+      upload_action_id TEXT,
+      evidence_kind TEXT,
+      verified_at TEXT,
+      invalidated_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_prompts (
+      id TEXT PRIMARY KEY,
+      atlas_project_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      active_revision_id TEXT,
+      selected_asset_id TEXT,
+      approved_asset_id TEXT,
+      archived_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_prompt_revisions (
+      id TEXT PRIMARY KEY,
+      prompt_id TEXT NOT NULL,
+      revision_number INTEGER NOT NULL,
+      raw_text TEXT NOT NULL,
+      compiled_text TEXT NOT NULL,
+      raw_text_sha256 TEXT NOT NULL,
+      reference_snapshot_json TEXT NOT NULL DEFAULT '[]',
+      generation_settings_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      created_by TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_batches (
+      id TEXT PRIMARY KEY,
+      atlas_project_id TEXT NOT NULL,
+      principal_id TEXT NOT NULL,
+      batch_index INTEGER NOT NULL,
+      state TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      finished_at TEXT,
+      policy_version TEXT,
+      revision INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_batch_members (
+      batch_id TEXT NOT NULL,
+      attempt_id TEXT NOT NULL,
+      order_in_batch INTEGER NOT NULL,
+      PRIMARY KEY (batch_id, attempt_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_attempts (
+      id TEXT PRIMARY KEY,
+      prompt_revision_id TEXT NOT NULL,
+      project_link_id TEXT NOT NULL,
+      batch_id TEXT,
+      trigger_kind TEXT NOT NULL,
+      parent_attempt_id TEXT,
+      state TEXT NOT NULL,
+      execution_stage TEXT,
+      submission_certainty TEXT NOT NULL DEFAULT 'not_sent',
+      expected_outputs INTEGER NOT NULL DEFAULT 1,
+      observed_outputs INTEGER NOT NULL DEFAULT 0,
+      retrieved_outputs INTEGER NOT NULL DEFAULT 0,
+      settings_snapshot_json TEXT NOT NULL DEFAULT '{}',
+      failure_code TEXT,
+      cancel_requested_at TEXT,
+      cancel_requested_by TEXT,
+      completion_kind TEXT,
+      partial_accepted_at TEXT,
+      partial_accepted_by TEXT,
+      accepted_output_count INTEGER,
+      created_at TEXT NOT NULL,
+      submitted_at TEXT,
+      finished_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_commands (
+      id TEXT PRIMARY KEY,
+      installation_id TEXT NOT NULL,
+      attempt_id TEXT,
+      operation TEXT NOT NULL,
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      payload_json TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      status TEXT NOT NULL,
+      delivery_count INTEGER NOT NULL DEFAULT 0,
+      lease_id TEXT,
+      lease_epoch INTEGER,
+      expires_at TEXT,
+      acknowledged_at TEXT,
+      result_digest TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_external_actions (
+      id TEXT PRIMARY KEY,
+      command_id TEXT NOT NULL,
+      attempt_id TEXT,
+      kind TEXT NOT NULL,
+      state TEXT NOT NULL,
+      intent_at TEXT,
+      click_started_at TEXT,
+      external_request_id TEXT,
+      external_media_ids_json TEXT NOT NULL DEFAULT '[]',
+      evidence_digest TEXT,
+      submission_certainty TEXT NOT NULL DEFAULT 'not_sent',
+      reconciled_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_events (
+      id TEXT PRIMARY KEY,
+      aggregate_type TEXT NOT NULL,
+      aggregate_id TEXT NOT NULL,
+      aggregate_revision INTEGER NOT NULL DEFAULT 0,
+      installation_id TEXT,
+      command_id TEXT,
+      attempt_id TEXT,
+      event_type TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      occurred_at_client TEXT,
+      received_at_server TEXT NOT NULL,
+      sequence INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_result_bindings (
+      id TEXT PRIMARY KEY,
+      attempt_id TEXT NOT NULL,
+      flow_media_id TEXT NOT NULL,
+      output_index INTEGER,
+      retrieval_state TEXT NOT NULL,
+      source_locator_encrypted TEXT,
+      source_expires_at TEXT,
+      atlas_asset_id TEXT,
+      mime_type TEXT,
+      byte_size INTEGER,
+      sha256 TEXT,
+      width INTEGER,
+      height INTEGER,
+      created_at TEXT NOT NULL,
+      retrieved_at TEXT,
+      error_code TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS flow_executor_leases (
+      id TEXT PRIMARY KEY,
+      resource_key TEXT NOT NULL,
+      installation_id TEXT NOT NULL,
+      epoch INTEGER NOT NULL DEFAULT 0,
+      state TEXT NOT NULL,
+      renewed_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      quarantine_reason TEXT,
+      revision INTEGER NOT NULL DEFAULT 1
+    );
+  `)
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_flow_installations_tenant
+      ON flow_installations(tenant_id, enabled, revoked_at);
+    CREATE INDEX IF NOT EXISTS idx_flow_principals_installation
+      ON flow_principals(installation_id, verification_status);
+    CREATE INDEX IF NOT EXISTS idx_flow_project_links_atlas
+      ON flow_project_links(atlas_project_id, principal_id, archived_at);
+    CREATE INDEX IF NOT EXISTS idx_flow_references_project
+      ON flow_references(atlas_project_id, alias_normalized, archived_at);
+    CREATE INDEX IF NOT EXISTS idx_flow_reference_bindings_link
+      ON flow_reference_bindings(project_link_id, reference_version_id);
+    CREATE INDEX IF NOT EXISTS idx_flow_prompts_project
+      ON flow_prompts(atlas_project_id, position);
+    CREATE INDEX IF NOT EXISTS idx_flow_attempts_state
+      ON flow_attempts(state, project_link_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_flow_commands_installation
+      ON flow_commands(installation_id, status, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_flow_commands_idempotency
+      ON flow_commands(installation_id, idempotency_key);
+    CREATE INDEX IF NOT EXISTS idx_flow_events_aggregate
+      ON flow_events(aggregate_type, aggregate_id, sequence);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_flow_events_id ON flow_events(id);
+    CREATE INDEX IF NOT EXISTS idx_flow_result_bindings_media
+      ON flow_result_bindings(flow_media_id, attempt_id);
+    CREATE INDEX IF NOT EXISTS idx_flow_external_actions_uncertain
+      ON flow_external_actions(submission_certainty, state);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_flow_batch_members_attempt
+      ON flow_batch_members(attempt_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_flow_leases_resource_active
+      ON flow_executor_leases(resource_key);
+  `)
+
+  // Bancos que já aplicaram o v46 sem esta coluna recebem o passo 47.
+  ensureColumn(database, 'flow_result_bindings', 'approved_at', 'TEXT')
+
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyFlowResultApprovedAt(database: AppDatabase): SchemaStepResult {
+  ensureColumn(database, 'flow_result_bindings', 'approved_at', 'TEXT')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyFlowResultLipSyncSentAt(database: AppDatabase): SchemaStepResult {
+  ensureColumn(database, 'flow_result_bindings', 'lipsync_sent_at', 'TEXT')
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+/** Personagem entra no Flow como personagem; referência entra como imagem. */
+function applyFlowHiddenOutputs(database: AppDatabase): SchemaStepResult {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS flow_hidden_outputs (
+      attempt_id TEXT NOT NULL,
+      output_index INTEGER NOT NULL,
+      hidden_at TEXT NOT NULL,
+      PRIMARY KEY (attempt_id, output_index)
+    );
+  `)
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+function applyFlowReferenceRole(database: AppDatabase): SchemaStepResult {
+  ensureColumn(database, 'flow_references', 'use_as_character', 'INTEGER NOT NULL DEFAULT 0')
+  database.exec(
+    `UPDATE flow_references
+     SET use_as_character = 1
+     WHERE lower(alias_normalized) = 'cantor'`,
+  )
+  return { historyCreated: 0, musicCreated: 0 }
+}
+
+/** Separa projetos criados no Flow dos vídeos de música já existentes. */
+function applyProjectWorkspace(database: AppDatabase): SchemaStepResult {
+  ensureColumn(database, 'projects', 'workspace', "TEXT NOT NULL DEFAULT 'music'")
+  database.exec(`UPDATE projects SET workspace = 'music' WHERE workspace IS NULL OR TRIM(workspace) = ''`)
+  return { historyCreated: 0, musicCreated: 0 }
 }

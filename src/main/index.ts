@@ -12,6 +12,7 @@ import {
   setMainWindow,
 } from './boot'
 import { flushDatabasePersist } from './db/database'
+import { atlasFlowCoordinatorServer } from './services/atlas-flow-v1'
 import { killActiveFfmpegProcesses } from './services/audio/ffmpeg'
 import { comfyQueueService, remapActiveComfyOutputDirs } from './services/comfy'
 import {
@@ -211,6 +212,7 @@ app.on('before-quit', () => {
   splashController = null
   comfyQueueService.stop()
   killActiveFfmpegProcesses()
+  void atlasFlowCoordinatorServer.stop()
   void getCodexService()?.disconnect()
   void getRuntimeManager()?.shutdown()
 })

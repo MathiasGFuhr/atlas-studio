@@ -141,6 +141,39 @@ function seedLegacyContent(db: AppDatabase) {
   ).run(at, at)
 }
 
+describe('atlas-flow-v1 schema', () => {
+  it('cria as tabelas flow_* na versão 46 sem remover google_flow_*', async () => {
+    const db = await createLegacyDatabase()
+    seedLegacyContent(db)
+    const result = migrateSchema(db)
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    const tables = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>
+    ).map((row) => row.name)
+    expect(tables).toEqual(
+      expect.arrayContaining([
+        'flow_installations',
+        'flow_principals',
+        'flow_project_links',
+        'flow_references',
+        'flow_reference_versions',
+        'flow_reference_bindings',
+        'flow_prompts',
+        'flow_prompt_revisions',
+        'flow_batches',
+        'flow_batch_members',
+        'flow_attempts',
+        'flow_commands',
+        'flow_external_actions',
+        'flow_events',
+        'flow_result_bindings',
+        'flow_executor_leases',
+        'google_flow_projects',
+      ]),
+    )
+  })
+})
+
 describe('projetos Google Flow', () => {
   it('cria a tabela google_flow_projects na versão 38', async () => {
     const db = await createLegacyDatabase()

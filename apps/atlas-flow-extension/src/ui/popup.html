@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atlas Flow v1</title>
+    <style>
+      :root {
+        --brand: #6d28d9;
+        --brand-hover: #5b21b6;
+        --bg: #0f172a;
+        --surface: #1e293b;
+        --surface-hover: #334155;
+        --text: #f8fafc;
+        --text-muted: #94a3b8;
+        --border: #334155;
+        --success: #22c55e;
+        --warning: #eab308;
+        --danger: #ef4444;
+        --input-bg: #0f172a;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-width: 340px;
+        max-width: 420px;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      /* Header */
+      header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .app-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--brand);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 14px;
+        color: #fff;
+        box-shadow: 0 2px 6px rgba(109, 40, 217, 0.4);
+      }
+
+      .app-title {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+
+      .app-sub {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+
+      /* Status */
+      .status-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 16px;
+      }
+
+      .status-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 6px;
+        font-size: 12px;
+      }
+
+      .status-label { color: var(--text-muted); }
+      .status-value { color: var(--text); font-weight: 600; }
+      .status-value.connected { color: var(--success); }
+      .status-value.disconnected { color: var(--danger); }
+
+      .badge-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      .badge-connected {
+        background: rgba(34, 197, 94, 0.15);
+        color: var(--success);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+      }
+      .badge-disconnected {
+        background: rgba(239, 68, 68, 0.15);
+        color: var(--danger);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+      }
+
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 14px 0;
+      }
+
+      /* Form fields */
+      .field {
+        margin-bottom: 12px;
+      }
+
+      .field-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+
+      input {
+        width: 100%;
+        background: var(--input-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 9px 11px;
+        color: var(--text);
+        font-size: 12px;
+        outline: none;
+      }
+      input:focus {
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px rgba(109, 40, 217, 0.15);
+      }
+      input::placeholder { color: var(--text-muted); opacity: 0.6; }
+
+      .hint {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin: 6px 0 0;
+        line-height: 1.4;
+      }
+      .hint strong { color: var(--text); }
+
+      /* Buttons */
+      .btn-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      button:active { transform: scale(0.98); }
+      button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+      .btn-primary {
+        background: var(--brand);
+        color: #fff;
+        box-shadow: 0 3px 8px rgba(109, 40, 217, 0.35);
+      }
+      .btn-primary:hover { background: var(--brand-hover); }
+      .btn-primary:disabled { background: #6366f1; }
+
+      .btn-secondary {
+        background: var(--surface-hover);
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .btn-secondary:hover { background: var(--surface); border-color: var(--text-muted); }
+
+      .btn-danger {
+        background: rgba(239, 68, 68, 0.1);
+        color: var(--danger);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+      }
+      .btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
+
+      /* Result & logs */
+      .section-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-muted);
+        margin: 0 0 8px;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+
+      .result-box {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+        font-size: 11px;
+        color: var(--text);
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 160px;
+        overflow: auto;
+      }
+
+      .logs-box {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 10px;
+        color: var(--text-muted);
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 140px;
+        overflow: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      .logs-empty { color: var(--text-muted); font-style: italic; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="app-icon">A</div>
+      <div>
+        <div class="app-title">Atlas Flow v1</div>
+        <div class="app-sub">Executor para o Atlas Studio</div>
+      </div>
+    </header>
+
+    <div class="status-card">
+      <span id="badge" class="badge-pill badge-disconnected">Diagnóstico</span>
+      <div class="status-row">
+        <span class="status-label">Status</span>
+        <span id="status-value" class="status-value disconnected">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Endpoint</span>
+        <span id="status-endpoint" class="status-value">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Instalação</span>
+        <span id="status-install" class="status-value">—</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="field">
+      <label class="field-label" for="endpoint">Endpoint de pareamento</label>
+      <input id="endpoint" placeholder="cole o endpoint ativo do Atlas" />
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="pairingCode">Código de pareamento</label>
+      <input id="pairingCode" placeholder="ex.: A7K2MQ" autocomplete="off" />
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="token">Token permanente (opcional)</label>
+      <input id="token" placeholder="vazio mantém o salvo" type="password" autocomplete="off" />
+    </div>
+
+    <p class="hint">
+      Campo de token vazio <strong>não apaga</strong> a credencial. Use Desconectar para remover o pareamento.
+    </p>
+
+    <div class="btn-group">
+      <button id="run" class="btn-primary" type="button">Conectar / diagnóstico</button>
+      <button id="reconnect" class="btn-secondary" type="button">Reconectar agora</button>
+      <button id="disconnect" class="btn-danger" type="button">Desconectar</button>
+      <button id="inspect" class="btn-secondary" type="button">Inspecionar sessão Flow</button>
+      <button id="ensure" class="btn-secondary" type="button">Criar/vincular projeto</button>
+      <button id="inspectProject" class="btn-secondary" type="button">Inspecionar projeto vinculado</button>
+      <button id="openUpload" class="btn-secondary" type="button">Abrir UI de upload</button>
+      <button id="reconcileRefs" class="btn-secondary" type="button">Reconciliar referências</button>
+      <button id="attachBound" class="btn-secondary" type="button">Anexar 2 refs bound</button>
+      <button id="verifyComposer" class="btn-secondary" type="button">Verificar compositor + escrita CDP</button>
+      <button id="promptGenerate" class="btn-secondary" type="button">Prompt + gerar (2 attached)</button>
+      <button id="observeGen" class="btn-secondary" type="button">Observar resultado da geração</button>
+      <button id="captureBytes" class="btn-secondary" type="button">Capturar bytes do resultado</button>
+      <button id="attachTwo" class="btn-secondary" type="button">Upload+anexar 2 refs → gerar</button>
+      <button id="clear" class="btn-secondary" type="button">Limpar logs</button>
+    </div>
+
+    <h3 class="section-title">Resultado</h3>
+    <div id="result" class="result-box">Aguardando ação…</div>
+
+    <h3 class="section-title">Logs</h3>
+    <div id="logs" class="logs-box logs-empty">Sem logs ainda.</div>
+
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>

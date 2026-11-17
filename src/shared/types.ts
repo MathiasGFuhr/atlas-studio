@@ -39,6 +39,11 @@ export interface Project {
   projectType: ProjectType
   /** Canal opcional vinculado ao projeto. `null` quando o usuário cria sem canal. */
   channelId: string | null
+  /**
+   * `music` é o vídeo/projeto do catálogo.
+   * `flow` existe só na aba Flow e não entra na lista de vídeos.
+   */
+  workspace?: 'music' | 'flow'
   /** Nome do canal no momento da leitura. Calculado na leitura. */
   channelName?: string | null
   /** Caminho absoluto da pasta física vinculada. `null` enquanto não houver vínculo. */
@@ -404,6 +409,8 @@ export const MUSIC_PROJECT_HAS_PUBLICATION_ERROR =
 export interface RemoveProjectOptions {
   /** Quando o projeto de Música tem publicação, também remove o vídeo do calendário. */
   alsoRemovePublication?: boolean
+  /** O projeto já foi apagado no Google Flow. Remove só o cadastro do Atlas. */
+  skipFlow?: boolean
 }
 
 export interface VideoListFilters {
@@ -813,6 +820,42 @@ export const IPC = {
     removeGenerationCard: 'flowProjects:removeGenerationCard',
     prepareGenerationCard: 'flowProjects:prepareGenerationCard',
     generateGenerationCard: 'flowProjects:generateGenerationCard',
+  },
+  /** Namespace novo atlas-flow-v1 — não misturar com flowProjects legado. */
+  atlasFlowV1: {
+    status: 'atlasFlowV1:status',
+    openExtensionFolder: 'atlasFlowV1:openExtensionFolder',
+    lastSessionObservation: 'atlasFlowV1:lastSessionObservation',
+    getBenchSnapshot: 'atlasFlowV1:getBenchSnapshot',
+    createPromptLine: 'atlasFlowV1:createPromptLine',
+    updatePromptDraft: 'atlasFlowV1:updatePromptDraft',
+    importPromptBlocks: 'atlasFlowV1:importPromptBlocks',
+    pickDirectionDocument: 'atlasFlowV1:pickDirectionDocument',
+    updateReferenceAlias: 'atlasFlowV1:updateReferenceAlias',
+    updateReferenceRole: 'atlasFlowV1:updateReferenceRole',
+    archivePromptLine: 'atlasFlowV1:archivePromptLine',
+    archiveReference: 'atlasFlowV1:archiveReference',
+    enqueueGenerate: 'atlasFlowV1:enqueueGenerate',
+    cancelAttempt: 'atlasFlowV1:cancelAttempt',
+    enqueueClearComposer: 'atlasFlowV1:enqueueClearComposer',
+    enqueueRecover: 'atlasFlowV1:enqueueRecover',
+    listRecoveryCandidates: 'atlasFlowV1:listRecoveryCandidates',
+    recoverExplicitSelection: 'atlasFlowV1:recoverExplicitSelection',
+    enqueueUploadStaged: 'atlasFlowV1:enqueueUploadStaged',
+    openResultFile: 'atlasFlowV1:openResultFile',
+    downloadResult: 'atlasFlowV1:downloadResult',
+    deleteResult: 'atlasFlowV1:deleteResult',
+    approveResult: 'atlasFlowV1:approveResult',
+    sendResultToLipSync: 'atlasFlowV1:sendResultToLipSync',
+    addReferenceFromPath: 'atlasFlowV1:addReferenceFromPath',
+    pickReferenceFiles: 'atlasFlowV1:pickReferenceFiles',
+    createPairingCode: 'atlasFlowV1:createPairingCode',
+    connectGoogleFlow: 'atlasFlowV1:connectGoogleFlow',
+    getConnectionStatus: 'atlasFlowV1:getConnectionStatus',
+    ensureProject: 'atlasFlowV1:ensureProject',
+    listProjectCovers: 'atlasFlowV1:listProjectCovers',
+    /** Push de progresso/resultado da bancada (main → renderer). */
+    benchUpdate: 'atlasFlowV1:benchUpdate',
   },
   comfy: {
     getConfig: 'comfy:getConfig',

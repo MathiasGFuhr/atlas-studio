@@ -1,0 +1,118 @@
+{
+  "inspectedAt": "2026-11-08T19:41:33.247Z",
+  "dryRun": true,
+  "mutationCalls": 0,
+  "baseUrl": "https://d3ewr3ge0uk002-8188.proxy.runpod.net",
+  "modelsRootConfirmed": "/workspace/runpod-slim/ComfyUI/models",
+  "models": [
+    {
+      "role": "checkpoint",
+      "fileName": "ltx-2.3-22b-dev-fp8.safetensors",
+      "folder": "checkpoints",
+      "versionHint": "LTX-2.3 22B FP8",
+      "absolutePath": "/workspace/runpod-slim/ComfyUI/models/checkpoints/ltx-2.3-22b-dev-fp8.safetensors",
+      "pathIndex": 0,
+      "size": {
+        "bytes": 29145431166,
+        "gib": 27.144
+      },
+      "modifiedUnix": 1794165957.5321221,
+      "createdUnix": 1794165957.533122,
+      "present": true,
+      "sha256": null,
+      "sha256Status": "pending_readonly_shell",
+      "sha256Command": "sha256sum -b \"/workspace/runpod-slim/ComfyUI/models/checkpoints/ltx-2.3-22b-dev-fp8.safetensors\""
+    },
+    {
+      "role": "lora",
+      "fileName": "ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
+      "folder": "loras",
+      "versionHint": "distilled 1.1",
+      "absolutePath": "/workspace/runpod-slim/ComfyUI/models/loras/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors",
+      "pathIndex": 0,
+      "size": {
+        "bytes": 2741024390,
+        "gib": 2.553
+      },
+      "modifiedUnix": 1794165969.8968759,
+      "createdUnix": 1794165969.8968759,
+      "present": true,
+      "sha256": null,
+      "sha256Status": "pending_readonly_shell",
+      "sha256Command": "sha256sum -b \"/workspace/runpod-slim/ComfyUI/models/loras/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors\""
+    },
+    {
+      "role": "lora",
+      "fileName": "gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors",
+      "folder": "loras",
+      "versionHint": "gemma abliterated rank64 bf16",
+      "absolutePath": "/workspace/runpod-slim/ComfyUI/models/loras/gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors",
+      "pathIndex": 0,
+      "size": {
+        "bytes": 628203616,
+        "gib": 0.585
+      },
+      "modifiedUnix": 1794166014.902979,
+      "createdUnix": 1794166014.902979,
+      "present": true,
+      "sha256": null,
+      "sha256Status": "pending_readonly_shell",
+      "sha256Command": "sha256sum -b \"/workspace/runpod-slim/ComfyUI/models/loras/gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors\""
+    },
+    {
+      "role": "text_encoder",
+      "fileName": "gemma_3_12B_it_fp4_mixed.safetensors",
+      "folder": "text_encoders",
+      "versionHint": "Gemma 3 12B FP4 mixed",
+      "absolutePath": "/workspace/runpod-slim/ComfyUI/models/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors",
+      "pathIndex": 0,
+      "size": {
+        "bytes": 9447702218,
+        "gib": 8.799
+      },
+      "modifiedUnix": 1794166005.4521673,
+      "createdUnix": 1794166005.4521673,
+      "present": true,
+      "sha256": null,
+      "sha256Status": "pending_readonly_shell",
+      "sha256Command": "sha256sum -b \"/workspace/runpod-slim/ComfyUI/models/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors\""
+    },
+    {
+      "role": "upscaler",
+      "fileName": "ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+      "folder": "latent_upscale_models",
+      "versionHint": "spatial upscaler x2 1.1",
+      "absolutePath": "/workspace/runpod-slim/ComfyUI/models/latent_upscale_models/ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+      "pathIndex": 0,
+      "size": {
+        "bytes": 995743560,
+        "gib": 0.927
+      },
+      "modifiedUnix": 1794166009.8660793,
+      "createdUnix": 1794166009.8660793,
+      "present": true,
+      "sha256": null,
+      "sha256Status": "pending_readonly_shell",
+      "sha256Command": "sha256sum -b \"/workspace/runpod-slim/ComfyUI/models/latent_upscale_models/ltx-2.3-spatial-upscaler-x2-1.1.safetensors\""
+    }
+  ],
+  "totals": {
+    "fileCount": 5,
+    "presentCount": 5,
+    "totalBytes": 42958104950,
+    "totalGib": 40.008,
+    "recommendedNetworkVolumeGb": 50,
+    "overheadFactor": 1.15,
+    "notes": [
+      "Tamanhos e caminhos via GET /experiment/models (somente leitura).",
+      "SHA-256 não é exposto pela API HTTP do ComfyUI; requer comando read-only no shell do Pod (não executado nesta etapa).",
+      "Originais não foram alterados nem excluídos."
+    ]
+  },
+  "checksumScript": {
+    "purpose": "Calcular SHA-256 sem alterar arquivos (autorização futura de shell read-only)",
+    "shell": "bash",
+    "script": "#!/usr/bin/env bash\nset -euo pipefail\nOUT=/workspace/ltx-model-sha256.txt\n: > \"$OUT\"\nsha256sum -b \"/workspace/runpod-slim/ComfyUI/models/checkpoints/ltx-2.3-22b-dev-fp8.safetensors\" | tee -a \"$OUT\"\nsha256sum -b \"/workspace/runpod-slim/ComfyUI/models/loras/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors\" | tee -a \"$OUT\"\nsha256sum -b \"/workspace/runpod-slim/ComfyUI/models/loras/gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors\" | tee -a \"$OUT\"\nsha256sum -b \"/workspace/runpod-slim/ComfyUI/models/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors\" | tee -a \"$OUT\"\nsha256sum -b \"/workspace/runpod-slim/ComfyUI/models/latent_upscale_models/ltx-2.3-spatial-upscaler-x2-1.1.safetensors\" | tee -a \"$OUT\"\necho \"DONE\" >> \"$OUT\"\ncat \"$OUT\"",
+    "writesOnly": "/workspace/ltx-model-sha256.txt (novo arquivo de relatório; não toca nos modelos)"
+  }
+}

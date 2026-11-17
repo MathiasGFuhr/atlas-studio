@@ -275,10 +275,21 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
       .map((clip) => assets.find((asset) => asset.id === clip.assetId))
       .filter((asset): asset is NonNullable<typeof asset> => Boolean(asset && asset.kind === 'audio'))
       .map((asset) => asset.id)
+
+    let cuts = project.musicTrackId ? (musicRepository.get(project.musicTrackId)?.cuts ?? []) : []
+    if (cuts.length === 0 && project.musicProjectId) {
+      const tracks = musicRepository
+        .list({ projectId: project.musicProjectId })
+        .filter((track) => track.cuts.length > 0)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      cuts = tracks[0]?.cuts ?? []
+    }
+
     return alignEditorVideosToMusic({
       assets,
       videoAssetIds: ids,
       timelineAudioAssetIds,
+      cuts,
     })
   })
 

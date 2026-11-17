@@ -7,6 +7,7 @@ import type { MusicCaption, MusicSegment } from '../../../shared/musicAnalysis'
 import { buildSrt, cuesForClip } from '../../../shared/shortsExport'
 import { lipSyncRefRepository } from '../../repositories/lipSyncRefRepository'
 import { musicRepository } from '../../repositories/musicRepository'
+import { logger } from '../logging/logger'
 import { exportMusicSegment } from './AudioExportService'
 
 export type MusicCutLipSyncInput = {
@@ -107,6 +108,18 @@ export async function exportMusicCutsToLipSync(
     if (!withAudio) throw new Error(`Não foi possível vincular o áudio do corte ${index + 1}.`)
     files.push(targetPath)
     refs.push(withAudio)
+  }
+
+  // Já abre o projeto do Editor (cantor + música na timeline) enquanto o Lipsync roda.
+  try {
+    const { seedEditorForMusicProject } = await import('../editor/editorComfyIngest')
+    await seedEditorForMusicProject(track.projectId, track.id)
+  } catch (error) {
+    // Não bloqueia o envio ao Lipsync se o Editor falhar.
+    logger.warn('editor.seed_after_lipsync_export_failed', {
+      projectId: track.projectId,
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 
   return { folder, files, refs }

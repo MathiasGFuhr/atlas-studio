@@ -1,0 +1,16 @@
+{
+  "name": "atlas-flow-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "node ./src/versionContract.test.mjs && node ./src/content/imageSettingsContract.test.mjs && node ./src/content/deleteMenuContract.test.mjs && node ./src/content/readinessContract.test.mjs && node ./src/content/directImageComposerContract.test.mjs && node ./src/content/resultIdentityContract.test.mjs && node ./src/content/uploadIdentity.test.mjs && node ./src/background/pairedAuthority.test.mjs && node ./src/background/pairingStore.test.mjs && node ./src/background/progressEventOrder.test.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.36",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.4"
+  }
+}

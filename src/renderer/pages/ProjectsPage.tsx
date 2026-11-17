@@ -480,7 +480,7 @@ export function ProjectsPage({ projectType }: { projectType: ProjectType }) {
         message={
           deleting?.scheduledVideoId
             ? 'Este projeto possui um vídeo no canal. Excluir o projeto também remove esse registro. Os arquivos físicos não serão apagados.'
-            : 'O projeto será removido do Atlas. Os arquivos da pasta do projeto não serão apagados.'
+            : 'O projeto será removido do Atlas. Se houver um projeto vinculado no Google Flow, ele também será excluído. Os arquivos da pasta não serão apagados.'
         }
         confirmLabel={deleting?.scheduledVideoId ? 'Excluir projeto e publicação' : 'Excluir projeto'}
         onConfirm={() => void confirmDelete()}

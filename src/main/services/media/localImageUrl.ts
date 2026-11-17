@@ -19,8 +19,14 @@ function isInside(root: string, candidate: string): boolean {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
 }
 
+/** Pasta onde o Flow grava as imagens geradas do projeto. */
+export function flowResultsRoot(): string {
+  return path.resolve(process.cwd(), 'docs', 'atlas-flow', 'results')
+}
+
 export function isAllowedImagePath(resolved: string): boolean {
   if (!IMAGE_EXT.has(path.extname(resolved).toLowerCase())) return false
+  if (isInside(flowResultsRoot(), resolved)) return true
   const userData = getUserDataPath()
   const target = resolved.toLowerCase()
   return IMAGE_ROOTS.some((dir) => isInside(path.join(userData, dir).toLowerCase(), target))
@@ -39,8 +45,8 @@ export function localImageUrl(filePath: string | null | undefined): string | nul
 }
 
 /**
- * Miniatura redimensionada (gerada sob demanda e em cache). Só para imagens do userData;
- * caminhos legados retornam null e a tela usa `localImageUrl`.
+ * Miniatura redimensionada (gerada sob demanda e em cache). Só para imagens
+ * liberadas em `isAllowedImagePath`; caminhos legados retornam null.
  */
 export function localImageThumbUrl(filePath: string | null | undefined, width: number): string | null {
   if (!filePath?.trim()) return null
