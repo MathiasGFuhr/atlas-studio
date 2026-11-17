@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { IdeaItem, IdeaKind } from '../shared/ideas'
 import type {
   AdjustScriptRequest,
   AppSettings,
@@ -803,6 +804,10 @@ const api = {
       ipcRenderer.invoke(IPC.editor.setAssetOrigin, assetId, origin) as Promise<EditorAsset | null>,
     waveform: (assetId: string) =>
       ipcRenderer.invoke(IPC.editor.waveform, assetId) as Promise<EditorWaveform | null>,
+    transcribeAsset: (assetId: string, language?: MusicCaptionLanguage) =>
+      ipcRenderer.invoke(IPC.editor.transcribeAsset, assetId, language) as Promise<
+        Array<{ start: number; end: number; text: string }>
+      >,
     listLipsync: () => ipcRenderer.invoke(IPC.editor.listLipsync) as Promise<EditorLipsyncGroup[]>,
     alignToMusic: (projectId: string, assetIds: string[]) =>
       ipcRenderer.invoke(IPC.editor.alignToMusic, projectId, assetIds) as Promise<EditorAudioAlignResult>,
@@ -831,6 +836,24 @@ const api = {
         ipcRenderer.removeListener(IPC.editor.projectChanged, listener)
       }
     },
+  },
+  ideas: {
+    list: () => ipcRenderer.invoke(IPC.ideas.list) as Promise<IdeaItem[]>,
+    add: (input: {
+      url: string
+      note?: string
+      kind?: IdeaKind
+      channelId?: string | null
+      channelName?: string | null
+    }) => ipcRenderer.invoke(IPC.ideas.add, input) as Promise<IdeaItem>,
+    update: (input: {
+      id: string
+      note?: string
+      kind?: IdeaKind
+      channelId?: string | null
+      channelName?: string | null
+    }) => ipcRenderer.invoke(IPC.ideas.update, input) as Promise<IdeaItem | null>,
+    remove: (id: string) => ipcRenderer.invoke(IPC.ideas.remove, id) as Promise<boolean>,
   },
   system: {
     copyText: (text: string) => ipcRenderer.invoke(IPC.system.copyText, text) as Promise<boolean>,

@@ -130,7 +130,7 @@ export function ShortsProjectCard({
             {menuOpen ? (
               <div
                 role="menu"
-                className="absolute right-0 z-20 mt-1 min-w-[200px] rounded-xl border border-border-soft bg-elevated py-1 shadow-popover"
+                className="atlas-pop absolute right-0 z-20 mt-1 min-w-[200px] rounded-xl border border-border-soft bg-elevated py-1 shadow-popover"
                 onClick={(event) => event.stopPropagation()}
               >
                 <MenuItem

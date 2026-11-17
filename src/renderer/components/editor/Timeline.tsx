@@ -445,19 +445,36 @@ export function Timeline({
     [store, timeFromClientX],
   )
 
+  /** Clique na área das faixas (não no cabeçalho) leva o playhead até o mouse. */
+  const startScrubInLane = useCallback(
+    (event: ReactPointerEvent) => {
+      const rect = contentRef.current?.getBoundingClientRect()
+      if (!rect || event.clientX < rect.left + TIMELINE_HEADER_WIDTH) return
+      startScrub(event)
+    },
+    [startScrub],
+  )
+
   /** Arrastar a área vazia embaixo das faixas move a timeline horizontalmente. */
   const startPan = useCallback((event: ReactPointerEvent) => {
     if (event.button !== 0) return
     const node = scrollerRef.current
     if (!node) return
+    const rect = contentRef.current?.getBoundingClientRect()
+    if (rect && event.clientX < rect.left + TIMELINE_HEADER_WIDTH) return
     event.preventDefault()
     event.stopPropagation()
+    store.pause()
+    store.seek(timeFromClientX(event.clientX))
     const startX = event.clientX
     const startScroll = node.scrollLeft
+    let panning = false
     const target = event.currentTarget
     target.setPointerCapture(event.pointerId)
 
     const move = (e: PointerEvent) => {
+      if (!panning && Math.abs(e.clientX - startX) < DRAG_THRESHOLD_PX) return
+      panning = true
       node.scrollLeft = Math.max(0, startScroll - (e.clientX - startX))
     }
     const up = (e: PointerEvent) => {
@@ -471,7 +488,7 @@ export function Timeline({
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
-  }, [])
+  }, [store, timeFromClientX])
 
   const contentPointFromClient = useCallback((clientX: number, clientY: number) => {
     const rect = contentRef.current?.getBoundingClientRect()
@@ -500,6 +517,7 @@ export function Timeline({
         baseIds,
       }
       store.pause()
+      store.seek(timeFromClientX(event.clientX))
 
       const move = (e: PointerEvent) => {
         const state = marqueeRef.current
@@ -553,6 +571,8 @@ export function Timeline({
     (event: ReactPointerEvent, clip: EditorClip, mode: DragMode) => {
       if (event.button !== 0) return
       event.stopPropagation()
+      store.pause()
+      store.seek(timeFromClientX(event.clientX))
       if (event.shiftKey || event.ctrlKey || event.metaKey) {
         onSelect(selectedIds.includes(clip.id) ? selectedIds.filter((id) => id !== clip.id) : [...selectedIds, clip.id])
         return
@@ -639,7 +659,7 @@ export function Timeline({
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
     },
-    [isAboveTracks, onSelect, selectedIds, store, timeline, trackAtClientY],
+    [isAboveTracks, onSelect, selectedIds, store, timeFromClientX, timeline, trackAtClientY],
   )
 
   const acceptsDrop = (event: ReactDragEvent) =>
@@ -820,6 +840,7 @@ export function Timeline({
           )}
           style={{ width: TIMELINE_HEADER_WIDTH + laneWidth }}
           title="Solte mídia ou efeito para criar faixa no topo"
+          onPointerDown={startScrubInLane}
           onDragOver={(event) => handleDragOver(event, null, 'top')}
           onDrop={(event) => handleDrop(event, null)}
         >
@@ -918,6 +939,7 @@ export function Timeline({
             dropHint?.trackId === null && dropHint.zone === 'bottom' && 'bg-accent-subtle/40',
           )}
           style={{ width: TIMELINE_HEADER_WIDTH + laneWidth }}
+          onPointerDown={startScrubInLane}
           onDragOver={(event) => handleDragOver(event, null, 'bottom')}
           onDrop={(event) => handleDrop(event, null)}
         >

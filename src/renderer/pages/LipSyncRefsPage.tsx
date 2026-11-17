@@ -2384,7 +2384,7 @@ export function LipSyncRefsPage() {
         <div
           ref={menuRef}
           role="menu"
-          className="fixed z-50 min-w-[11.5rem] rounded-xl border border-border-soft bg-elevated py-1 shadow-popover"
+          className="atlas-pop [--pop-origin:top_left] fixed z-50 min-w-[11.5rem] rounded-xl border border-border-soft bg-elevated py-1 shadow-popover"
           style={{
             top: menu.top,
             left: menu.left,

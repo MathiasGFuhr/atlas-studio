@@ -496,7 +496,7 @@ export function ChatPage({
                   <MoreVertical className="h-4 w-4" />
                 </button>
                 {sizeMenuOpen ? (
-                  <div className="absolute right-0 top-full z-30 mt-1 min-w-[10.5rem] rounded-xl border border-border bg-elevated py-1 shadow-popover">
+                  <div className="atlas-pop absolute right-0 top-full z-30 mt-1 min-w-[10.5rem] rounded-xl border border-border bg-elevated py-1 shadow-popover">
                     <button
                       type="button"
                       className="block w-full px-3 py-2 text-left text-xs text-text hover:bg-hover"

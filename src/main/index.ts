@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
+
 import { startAppUpdateService } from './services/updates/AppUpdateService'
 import { getMainDir } from './paths'
 import {
@@ -94,6 +95,20 @@ function createWindow() {
   mainWindow.webContents.on('did-fail-load', (_event, code, description, validatedURL) => {
     console.error('[atlas] renderer did-fail-load', { code, description, validatedURL })
   })
+  mainWindow.webContents.on('console-message', (event, level, message) => {
+    const payload = typeof event === 'object' && event && 'message' in event
+      ? (event as { level?: string | number; message?: string })
+      : null
+    const text = String(payload?.message ?? message ?? '')
+    const severity = String(payload?.level ?? level ?? '')
+    if (!text) return
+    const isError = severity === 'error' || severity === 'warning' || Number(severity) >= 2
+    if (!isError) return
+    console.error('[atlas] renderer console', { level: severity, message: text })
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[atlas] renderer process gone', details)
+  })
 
   // Em desenvolvimento, falhas do serviço de rede do Chromium podem impedir
   // o ready-to-show mesmo com o renderer carregado. Nunca deixe a janela oculta.
@@ -103,9 +118,17 @@ function createWindow() {
 
   if (process.env.VITE_DEV_SERVER_URL) {
     // vite-plugin-electron + base './' pode gerar "http://localhost:5173./"
+    // Vite está em host 127.0.0.1; localhost pode ir para ::1 e a janela fica preta.
     const raw = process.env.VITE_DEV_SERVER_URL
-    const devUrl = raw.replace(/\.\/?$/, '/')
-    void mainWindow.loadURL(devUrl)
+    const devUrl = raw
+      .replace(/\.\/?$/, '/')
+      .replace(/^http:\/\/localhost(?=:\d+)/i, 'http://127.0.0.1')
+      .replace(/^http:\/\/\[::1\](?=:\d+)/i, 'http://127.0.0.1')
+    console.log('[atlas] loading renderer', { raw, devUrl })
+    void mainWindow.loadURL(devUrl).then(
+      () => console.log('[atlas] renderer loadURL ok', devUrl),
+      (error) => console.error('[atlas] renderer loadURL failed', error),
+    )
   } else {
     void mainWindow.loadFile(path.join(getMainDir(), '../dist/index.html'))
   }

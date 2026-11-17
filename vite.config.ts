@@ -13,9 +13,13 @@ function stripE2eArtifactsPlugin(): Plugin {
     closeBundle() {
       const dir = path.resolve('dist-electron')
       if (!fs.existsSync(dir)) return
-      const keep = new Set(['main.js', 'preload.js', 'preload.cjs', 'splash'])
+      // Só remove artefatos e2e. Não apagar chunks do main (index-*.js, etc.)
+      // — main.js importa esses arquivos e o Electron falha sem eles.
       for (const name of fs.readdirSync(dir)) {
-        if (keep.has(name)) continue
+        const isE2e =
+          name.startsWith('e2e-main') ||
+          name.includes('runRealFlowTest')
+        if (!isE2e) continue
         fs.rmSync(path.join(dir, name), { force: true, recursive: true })
       }
     },
@@ -35,6 +39,20 @@ function copySplashPlugin(): Plugin {
   }
 }
 
+/** Em serve, o Vite injeta script inline (@react-refresh). CSP script-src 'self' deixa a janela preta. */
+function relaxCspForViteDevPlugin(): Plugin {
+  return {
+    name: 'atlas-relax-csp-vite-dev',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      return html.replace(
+        /script-src 'self'/g,
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      )
+    },
+  }
+}
+
 export default defineConfig(({ command }) => ({
   // Em serve, '/' evita VITE_DEV_SERVER_URL inválida (…5173./) do vite-plugin-electron.
   // No build, './' continua obrigatório para loadFile() no Electron empacotado.
@@ -42,6 +60,7 @@ export default defineConfig(({ command }) => ({
   plugins: [
     react(),
     tailwindcss(),
+    relaxCspForViteDevPlugin(),
     electron({
       main: {
         entry: 'src/main/index.ts',
@@ -49,12 +68,18 @@ export default defineConfig(({ command }) => ({
           plugins: [stripE2eArtifactsPlugin(), copySplashPlugin()],
           build: {
             outDir: 'dist-electron',
+            emptyOutDir: false,
             rollupOptions: {
               external: ['electron', 'electron-updater', 'sql.js', 'ffmpeg-static'],
-              output: {
-                entryFileNames: 'main.js',
-                format: 'es',
-              },
+              // Array de propósito: no modo lib o Vite descarta output.format
+              // quando output é um objeto e usa lib.formats ("es", porque
+              // package.json tem "type": "module"). O entry precisa ser .js.
+              output: [
+                {
+                  entryFileNames: 'main.js',
+                  format: 'es',
+                },
+              ],
             },
           },
         },
@@ -64,6 +89,7 @@ export default defineConfig(({ command }) => ({
         vite: {
           build: {
             outDir: 'dist-electron',
+            emptyOutDir: false,
             rollupOptions: {
               output: {
                 // .cjs obrigatório: package.json tem "type": "module"
@@ -84,8 +110,15 @@ export default defineConfig(({ command }) => ({
       '@mocks': path.resolve(import.meta.dirname ?? path.dirname(fileURLToPath(import.meta.url)), 'mocks'),
     },
   },
+  optimizeDeps: {
+    // Evita varrer '**/*.html' nas dezenas de pastas release-* na raiz durante o boot do dev server.
+    entries: ['index.html'],
+  },
   build: {
     outDir: 'dist',
+    // Electron 37 = Chromium 138: sem transpilar sintaxe moderna → bundle menor e mais rápido de parsear.
+    target: 'chrome130',
+    reportCompressedSize: false,
   },
   server: {
     port: 5173,
@@ -93,8 +126,25 @@ export default defineConfig(({ command }) => ({
     // Não abrir o navegador — o Atlas Studio real é a janela Electron.
     open: false,
     watch: {
-      // Evita EBUSY ao observar instaladores .exe em pastas de release.
-      ignored: ['**/release/**', '**/release-*/**'],
+      // Evita EBUSY e varredura pesada em pastas de build/artefatos fora do renderer.
+      ignored: [
+        '**/release',
+        '**/release/**',
+        '**/release-*',
+        '**/release-*/**',
+        '**/dist-electron',
+        '**/dist-electron/**',
+        '**/docs',
+        '**/docs/**',
+        '**/resources',
+        '**/resources/**',
+        '**/workspace',
+        '**/workspace/**',
+        '**/extensions',
+        '**/extensions/**',
+        '**/apps',
+        '**/apps/**',
+      ],
     },
   },
 }))

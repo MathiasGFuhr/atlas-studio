@@ -39,7 +39,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         onChange={onChange}
         className={cn(
           'min-h-[120px] w-full min-w-0 resize-y rounded-xl border border-border bg-input px-3.5 py-3 text-sm leading-relaxed break-words text-text placeholder:text-muted-2',
-          'transition-colors hover:border-border-strong focus:border-accent/70 focus:outline-none disabled:cursor-not-allowed disabled:text-disabled disabled:hover:border-border',
+          'transition-[border-color,box-shadow] duration-200 ease-out hover:border-border-strong focus:border-accent/70 focus:outline-none disabled:cursor-not-allowed disabled:text-disabled disabled:hover:border-border',
           autoGrow && 'resize-none overflow-hidden',
           className,
         )}

@@ -1854,6 +1854,34 @@ function buildExpandedTextPack(): EditorTextTemplateDef[] {
   }
 
   // Legendas / captions
+  pack.push(
+    t({
+      id: 'cap-auto',
+      category: 'caption',
+      label: 'Legenda automática',
+      description: 'Fala sincronizada com o áudio',
+      defaultTitle: 'legenda',
+      defaultSubtitle: '',
+      titleStyle: {
+        fontFamily: '"Segoe UI", sans-serif',
+        fontSize: '4.2%',
+        fontWeight: 700,
+        color: '#ffffff',
+        textTransform: 'none',
+        textShadow: '0 2px 8px rgba(0,0,0,0.9)',
+      },
+      plate: {
+        background: 'rgba(0,0,0,0.55)',
+        paddingX: '2.2%',
+        paddingY: '0.8%',
+        borderRadius: '8px',
+      },
+      yPercent: 84,
+      previewBg: 'linear-gradient(145deg,#0f172a,#1e293b)',
+      defaultInId: null,
+      defaultOutId: null,
+    }),
+  )
   const captions = [
     'quando isso acontece',
     'ninguém: eu:',

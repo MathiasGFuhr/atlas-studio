@@ -221,7 +221,7 @@ function FinanceHero() {
           </p>
         </div>
 
-        <div className="justify-self-start rounded-2xl border border-border-soft bg-bg/40 px-4 py-3.5 backdrop-blur-md lg:justify-self-end">
+        <div className="justify-self-start rounded-2xl border border-border-soft bg-bg/70 px-4 py-3.5 lg:justify-self-end">
           <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-2">Foco</p>
           <p className="home-greeting mt-1.5 text-[1.15rem] leading-snug text-text/95 sm:text-[1.3rem]">
             Receita e gasto mostram o lucro. Investimento move a meta.

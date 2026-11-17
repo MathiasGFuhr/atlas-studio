@@ -77,7 +77,9 @@ import {
   updateClip,
   updateTextContent,
 } from '@shared/editor/timelineOps'
+import { applyAutomaticCaptions, AUTO_CAPTION_TEMPLATE_ID, pickCaptionAssetId } from '@shared/editor/autoCaptions'
 import { sceneNumberFromAsset, syncClipToMusicStart } from '@shared/editor/syncToMusic'
+import type { MusicCaptionLanguage } from '@shared/musicAnalysis'
 import { editorAnimationById, type EditorAnimationKind } from '@shared/editor/animationsCatalog'
 import { editorEffectById, type EditorEffectId } from '@shared/editor/effectsCatalog'
 import { editorTextTemplateById } from '@shared/editor/textTemplatesCatalog'
@@ -200,6 +202,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   const [snapping, setSnapping] = useState(true)
   const [timelineHeight, setTimelineHeight] = useState(320)
   const [busy, setBusy] = useState(false)
+  const [captionBusy, setCaptionBusy] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [assetToRemove, setAssetToRemove] = useState<EditorAsset | null>(null)
@@ -855,6 +858,41 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
     [commit, push, store],
   )
 
+  const captionAsset = useMemo(() => {
+    const assetId = pickCaptionAssetId(timeline)
+    if (!assetId) return null
+    return assets.find((asset) => asset.id === assetId) ?? null
+  }, [assets, timeline])
+
+  const generateCaptions = useCallback(
+    async (language: MusicCaptionLanguage) => {
+      if (!captionAsset || captionBusy) return
+      setCaptionBusy(true)
+      store.pause()
+      try {
+        const cues = await api.editor.transcribeAsset(captionAsset.id, language)
+        const next = applyAutomaticCaptions(timelineRef.current, captionAsset.id, cues)
+        if (next === timelineRef.current) {
+          push('Não encontrei fala nesse áudio para legendar.', 'error')
+          return
+        }
+        commit(next, `auto-captions:${language}`)
+        const count = next.clips.filter(
+          (clip) => isTextClip(clip) && clip.text?.templateId === AUTO_CAPTION_TEMPLATE_ID,
+        ).length
+        push(
+          count === 1 ? '1 legenda adicionada na timeline.' : `${count} legendas adicionadas na timeline.`,
+          'success',
+        )
+      } catch (error) {
+        pushError(error, 'Falha ao gerar a legenda')
+      } finally {
+        setCaptionBusy(false)
+      }
+    },
+    [api, captionAsset, captionBusy, commit, push, pushError, store],
+  )
+
   const applyAnimation = useCallback(
     (kind: EditorAnimationKind, id: string) => {
       const def = editorAnimationById(id)
@@ -1179,6 +1217,9 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
             onPickAnimation={applyAnimation}
             onClearAnimationKind={clearAnimationKind}
             onPickTextTemplate={placeTextTemplate}
+            captionSourceName={captionAsset?.name ?? null}
+            captionBusy={captionBusy}
+            onGenerateCaptions={(language) => void generateCaptions(language)}
             onPickTransition={(id: EditorTransitionId) => {
               const transition = editorTransitionById(id)
               if (!transition) return

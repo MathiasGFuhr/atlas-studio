@@ -11,7 +11,6 @@ import {
 } from 'react'
 import {
   AlertTriangle,
-  Captions,
   CheckSquare,
   Clapperboard,
   Crosshair,
@@ -42,7 +41,9 @@ import type { EditorAnimationKind } from '@shared/editor/animationsCatalog'
 import type { EditorEffectId } from '@shared/editor/effectsCatalog'
 import type { EditorTransitionId } from '@shared/editor/transitionsCatalog'
 import type { EditorLibraryTool } from './editorLibraryTools'
+import type { MusicCaptionLanguage } from '@shared/musicAnalysis'
 import { AnimationsLibraryPanel } from './AnimationsLibraryPanel'
+import { CaptionsLibraryPanel } from './CaptionsLibraryPanel'
 import { EffectsLibraryPanel } from './EffectsLibraryPanel'
 import { TextLibraryPanel } from './TextLibraryPanel'
 import { TransitionsLibraryPanel } from './TransitionsLibraryPanel'
@@ -328,6 +329,9 @@ export function MediaPanel({
   onPickAnimation,
   onClearAnimationKind,
   onPickTextTemplate,
+  captionSourceName,
+  captionBusy,
+  onGenerateCaptions,
 }: {
   tool: EditorLibraryTool
   assets: EditorAsset[]
@@ -351,6 +355,9 @@ export function MediaPanel({
   onPickAnimation?: (kind: EditorAnimationKind, id: string) => void
   onClearAnimationKind?: (kind: EditorAnimationKind) => void
   onPickTextTemplate?: (templateId: string) => void
+  captionSourceName?: string | null
+  captionBusy?: boolean
+  onGenerateCaptions?: (language: MusicCaptionLanguage) => void
 }) {
   const api = getAtlasApi()
   const [dragOver, setDragOver] = useState(false)
@@ -491,10 +498,10 @@ export function MediaPanel({
 
   if (tool === 'captions') {
     return (
-      <LibraryPlaceholder
-        Icon={Captions}
-        title="Legendas"
-        description="Em breve: legendas sincronizadas com a narração e estilos prontos."
+      <CaptionsLibraryPanel
+        sourceName={captionSourceName ?? null}
+        busy={captionBusy === true}
+        onGenerate={(language) => onGenerateCaptions?.(language)}
       />
     )
   }

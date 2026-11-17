@@ -1472,6 +1472,61 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.updates.download, () => downloadAppUpdate())
   ipcMain.handle(IPC.updates.install, () => installAppUpdate())
 
+  ipcMain.handle(IPC.ideas.list, async () => {
+    const { ideaStore } = await import('../services/ideas/ideaStore')
+    return ideaStore.list()
+  })
+  ipcMain.handle(
+    IPC.ideas.add,
+    async (
+      _e,
+      input: {
+        url: string
+        note?: string
+        kind?: 'clipe' | 'musica' | 'geral'
+        channelId?: string | null
+        channelName?: string | null
+      },
+    ) => {
+      const { parseIdeaLinks } = await import('../../shared/ideas')
+      const { ideaStore } = await import('../services/ideas/ideaStore')
+      const [url] = parseIdeaLinks(String(input?.url || ''))
+      if (!url) throw new Error('Cole um link de vídeo válido.')
+      return ideaStore.add({
+        url,
+        note: input?.note,
+        kind: input?.kind,
+        channelId: input?.channelId,
+        channelName: input?.channelName,
+      })
+    },
+  )
+  ipcMain.handle(
+    IPC.ideas.update,
+    async (
+      _e,
+      input: {
+        id: string
+        note?: string
+        kind?: 'clipe' | 'musica' | 'geral'
+        channelId?: string | null
+        channelName?: string | null
+      },
+    ) => {
+      const { ideaStore } = await import('../services/ideas/ideaStore')
+      return ideaStore.update(String(input?.id || ''), {
+        note: input?.note,
+        kind: input?.kind,
+        channelId: input?.channelId,
+        channelName: input?.channelName,
+      })
+    },
+  )
+  ipcMain.handle(IPC.ideas.remove, async (_e, id: string) => {
+    const { ideaStore } = await import('../services/ideas/ideaStore')
+    return ideaStore.remove(String(id || ''))
+  })
+
   ipcMain.handle(IPC.system.copyText, (_e, text: string) => {
     clipboard.writeText(text)
     return true

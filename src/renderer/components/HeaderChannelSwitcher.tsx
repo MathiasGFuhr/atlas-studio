@@ -123,7 +123,7 @@ export function HeaderChannelSwitcher() {
                 aria-pressed={current}
                 onClick={() => selectChannel(channel)}
                 className={cn(
-                  'group flex shrink-0 items-center gap-2 rounded-full transition-all duration-200',
+                  'group flex shrink-0 items-center gap-2 rounded-full transition-[background-color,color,border-color,box-shadow,transform] duration-200',
                   current ? 'bg-accent/14 py-1 pl-1 pr-3.5' : 'p-1 hover:bg-hover/70',
                 )}
               >
@@ -167,7 +167,7 @@ export function HeaderChannelSwitcher() {
         <div
           role="menu"
           aria-label="Canais"
-          className="absolute left-1/2 top-[calc(100%+10px)] z-50 w-[260px] -translate-x-1/2 overflow-hidden rounded-2xl border border-border/80 bg-elevated shadow-popover md:left-auto md:right-0 md:translate-x-0"
+          className="atlas-pop [--pop-origin:top_center] absolute left-1/2 top-[calc(100%+10px)] z-50 w-[260px] -translate-x-1/2 overflow-hidden rounded-2xl border border-border/80 bg-elevated shadow-popover md:left-auto md:right-0 md:translate-x-0"
         >
           <div className="border-b border-border-soft px-3.5 py-2.5">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-2">

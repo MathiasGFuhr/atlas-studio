@@ -122,7 +122,7 @@ export function ShortsClipCopyEditor({
             Regenerar
           </Button>
           {menuOpen ? (
-            <div className="absolute right-0 z-20 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-border bg-elevated shadow-popover">
+            <div className="atlas-pop absolute right-0 z-20 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-border bg-elevated shadow-popover">
               {(
                 [
                   ['title', 'Título'],

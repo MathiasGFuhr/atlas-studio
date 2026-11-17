@@ -17,7 +17,7 @@ export function Card({ children, className, padding = 'md', ...props }: CardProp
   return (
     <div
       className={cn(
-        'min-w-0 rounded-2xl border border-border-soft/90 bg-card shadow-card',
+        'atlas-surface min-w-0 rounded-2xl border border-border-soft/90 bg-card shadow-card',
         paddings[padding],
         className,
       )}

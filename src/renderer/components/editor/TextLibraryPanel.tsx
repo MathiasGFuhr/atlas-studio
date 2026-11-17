@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { AUTO_CAPTION_TEMPLATE_ID } from '@shared/editor/autoCaptions'
 import {
   EDITOR_TEXT_CATEGORY_LABEL,
   EDITOR_TEXT_CATEGORY_ORDER,
@@ -75,12 +76,16 @@ export function TextLibraryPanel({ onPickTemplate }: Props) {
   const categoryCounts = useMemo(() => {
     const counts: Partial<Record<EditorTextCategory, number>> = {}
     for (const item of EDITOR_TEXT_TEMPLATES) {
+      if (item.id === AUTO_CAPTION_TEMPLATE_ID) continue
       counts[item.category] = (counts[item.category] ?? 0) + 1
     }
     return counts
   }, [])
   const items = useMemo(() => {
-    const base = category === 'all' ? EDITOR_TEXT_TEMPLATES : editorTextTemplatesByCategory(category)
+    const visible = (category === 'all' ? EDITOR_TEXT_TEMPLATES : editorTextTemplatesByCategory(category)).filter(
+      (item) => item.id !== AUTO_CAPTION_TEMPLATE_ID,
+    )
+    const base = visible
     const q = query.trim().toLowerCase()
     if (!q) return base
     return base.filter(

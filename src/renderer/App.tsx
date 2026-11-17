@@ -10,6 +10,7 @@ import { CodexLinkModal } from './components/CodexLinkModal'
 import { CodexOnboarding } from './components/CodexOnboarding'
 import { INTRO_TOUR_STEPS, ProductTour } from './components/ProductTour'
 import { PageTourHost } from './components/PageTourHost'
+import { RouteLoadingBar, RouteTransition } from './components/RouteTransition'
 import { PRODUCT_TOUR_REPLAY_EVENT } from './lib/productTourEvents'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
@@ -73,6 +74,7 @@ const pageLoaders = {
   shortsProjects: () => import('./pages/ShortsProjectsPage'),
   editorProjects: () => import('./pages/EditorProjectsPage'),
   editor: () => import('./pages/EditorPage'),
+  ideas: () => import('./pages/IdeasPage'),
   tasks: () => import('./pages/TasksPage'),
   teamChat: () => import('./pages/TeamChatPage'),
   financeiro: () => import('./pages/FinanceiroPage'),
@@ -112,6 +114,7 @@ const EditorProjectsPage = lazy(() =>
   pageLoaders.editorProjects().then((m) => ({ default: m.EditorProjectsPage })),
 )
 const EditorPage = lazy(() => pageLoaders.editor().then((m) => ({ default: m.EditorPage })))
+const IdeasPage = lazy(() => pageLoaders.ideas().then((m) => ({ default: m.IdeasPage })))
 const TasksPage = lazy(() => pageLoaders.tasks().then((m) => ({ default: m.TasksPage })))
 const TeamChatPage = lazy(() => pageLoaders.teamChat().then((m) => ({ default: m.TeamChatPage })))
 const FinanceiroPage = lazy(() =>
@@ -119,15 +122,30 @@ const FinanceiroPage = lazy(() =>
 )
 
 function preloadPages() {
-  for (const load of Object.values(pageLoaders)) {
-    void load().catch(() => {
-      /* o lazy() da rota tenta de novo e mostra o erro se falhar */
-    })
+  // Um chunk por janela ociosa: antes os ~20 imports disparavam juntos e
+  // travavam a UI logo após o login enquanto o V8 compilava tudo de uma vez.
+  const queue = Object.values(pageLoaders)
+  let handle = 0
+  const next = () => {
+    const load = queue.shift()
+    if (!load) return
+    void load()
+      .catch(() => {
+        /* o lazy() da rota tenta de novo e mostra o erro se falhar */
+      })
+      .finally(() => {
+        handle = window.requestIdleCallback(next, { timeout: 2500 })
+      })
+  }
+  handle = window.requestIdleCallback(next, { timeout: 4000 })
+  return () => {
+    queue.length = 0
+    window.cancelIdleCallback(handle)
   }
 }
 
 function RouteFallback() {
-  return <div className="h-full w-full" aria-busy="true" />
+  return <RouteLoadingBar />
 }
 
 /** Mantém links antigos funcionando sem duplicar telas. */
@@ -197,8 +215,7 @@ export default function App() {
   const signedIn = session !== 'loading' && Boolean(session.user)
   useEffect(() => {
     if (!signedIn) return
-    const handle = window.requestIdleCallback(preloadPages, { timeout: 4000 })
-    return () => window.cancelIdleCallback(handle)
+    return preloadPages()
   }, [signedIn])
 
   useEffect(() => {
@@ -247,9 +264,14 @@ export default function App() {
 
   if (session === 'loading') {
     return (
-      <div className="atlas-shell flex h-full w-full flex-col items-center justify-center gap-4 text-sm text-muted">
-        <AtlasLogo variant="mark" className="h-14 w-14 rounded-2xl" />
-        Abrindo o Atlas...
+      <div className="atlas-shell flex h-full w-full flex-col items-center justify-center gap-5 text-sm text-muted">
+        <AtlasLogo variant="mark" className="atlas-rise h-14 w-14 rounded-2xl shadow-popover" />
+        <div className="atlas-fade flex flex-col items-center gap-3" style={{ animationDelay: '120ms' }}>
+          <span className="tracking-[-0.01em]">Abrindo o Atlas...</span>
+          <span className="relative block h-0.5 w-28 overflow-hidden rounded-full bg-border-soft">
+            <span className="atlas-route-bar" />
+          </span>
+        </div>
       </div>
     )
   }
@@ -276,6 +298,7 @@ export default function App() {
             <TopBar settings={settings} />
             <main className="min-h-0 flex-1 overflow-hidden bg-transparent">
               <Suspense fallback={<RouteFallback />}>
+              <RouteTransition>
               <Routes>
                 <Route path="/" element={<HomePage />} />
 
@@ -297,6 +320,7 @@ export default function App() {
                 <Route path="/shorts/:jobId" element={<ShortsStudioPage />} />
                 <Route path="/editor" element={<EditorProjectsPage />} />
                 <Route path="/editor/:id" element={<EditorPage />} />
+                <Route path="/ideias" element={<IdeasPage />} />
                 <Route path="/tarefas" element={<TasksPage />} />
                 <Route path="/financeiro" element={<FinanceiroPage />} />
                 <Route path="/equipe" element={<TeamChatPage account={session.user} />} />
@@ -335,6 +359,7 @@ export default function App() {
                 <Route path="/settings" element={<Navigate to="/configuracoes" replace />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              </RouteTransition>
               </Suspense>
             </main>
           </div>

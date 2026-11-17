@@ -42,7 +42,7 @@ export function HomePipeline({
               key={video.id}
               type="button"
               onClick={() => onOpen(video)}
-              className="group w-[220px] shrink-0 overflow-hidden rounded-2xl border border-border-soft bg-bg/20 text-left transition-all hover:-translate-y-0.5 hover:border-border-strong"
+              className="group w-[220px] shrink-0 overflow-hidden rounded-2xl border border-border-soft bg-bg/20 text-left transition-[transform,border-color,background-color,box-shadow] duration-300 ease-out hover:-translate-y-0.5 hover:border-border-strong"
             >
               <div
                 className="relative aspect-video overflow-hidden bg-elevated"

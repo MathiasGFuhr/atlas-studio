@@ -94,7 +94,7 @@ export function NewMenuButton() {
         <div
           role="menu"
           aria-label="Criar"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 min-w-[240px] rounded-xl border border-border bg-elevated p-1.5 shadow-popover"
+          className="atlas-pop absolute right-0 top-[calc(100%+8px)] z-50 min-w-[240px] rounded-xl border border-border bg-elevated p-1.5 shadow-popover"
         >
           {items.map((id, index) => {
             const meta = LABELS[id]

@@ -189,7 +189,7 @@ export function GlobalSearch() {
       {open ? (
         <div
           id={listId}
-          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-border bg-card shadow-popover"
+          className="atlas-pop [--pop-origin:top_center] absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-border bg-card shadow-popover"
         >
           {query.trim().length < MIN_CHARS ? (
             <p className="px-4 py-3 text-xs text-muted">Digite pelo menos {MIN_CHARS} letras.</p>

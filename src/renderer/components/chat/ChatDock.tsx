@@ -444,7 +444,7 @@ export function ChatDock() {
       {open ? (
         <div
           className={cn(
-            'fixed right-5 z-[44] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-bg shadow-popover',
+            'atlas-pop [--pop-origin:bottom_right] fixed right-5 z-[44] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-bg shadow-popover',
             dragging ? 'select-none' : null,
           )}
           style={{ width: size.width, height: size.height, bottom: panelBottom }}

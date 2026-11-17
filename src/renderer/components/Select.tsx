@@ -16,7 +16,7 @@ export function Select({ className, label, id, options, ...props }: SelectProps)
           id={id}
           className={cn(
             'h-11 w-full min-w-0 appearance-none rounded-xl border border-border bg-input px-3.5 pr-10 text-sm text-text',
-            'transition-colors hover:border-border-strong focus:border-accent/70 focus:outline-none disabled:cursor-not-allowed disabled:text-disabled disabled:hover:border-border',
+            'transition-[border-color,box-shadow] duration-200 ease-out hover:border-border-strong focus:border-accent/70 focus:outline-none disabled:cursor-not-allowed disabled:text-disabled disabled:hover:border-border',
             className,
           )}
           {...props}

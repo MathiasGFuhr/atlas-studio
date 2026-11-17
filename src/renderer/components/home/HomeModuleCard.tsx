@@ -58,7 +58,7 @@ export function HomeModuleCard({
             <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-muted">{description}</p>
           </div>
         </div>
-        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-soft bg-elevated text-muted-2 opacity-0 transition-all duration-200 group-hover:opacity-100">
+        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-soft bg-elevated text-muted-2 opacity-0 transition-[opacity,transform,background-color,color] duration-200 group-hover:opacity-100">
           <ArrowUpRight className="h-3.5 w-3.5" />
         </div>
       </div>

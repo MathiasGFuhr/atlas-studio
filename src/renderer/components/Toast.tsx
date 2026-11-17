@@ -128,7 +128,7 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
     <div
       role={item.tone === 'error' ? 'alert' : 'status'}
       className={cn(
-        'pointer-events-auto atlas-toast-enter flex items-start gap-3 rounded-2xl border px-3.5 py-3 shadow-popover',
+        'pointer-events-auto atlas-toast-enter atlas-surface flex items-start gap-3 rounded-2xl border px-3.5 py-3 shadow-popover',
         item.tone === 'success' && 'border-accent/25 bg-elevated text-text',
         item.tone === 'error' && 'border-danger/30 bg-elevated text-text',
         item.tone === 'default' && 'border-border-soft bg-elevated text-text',

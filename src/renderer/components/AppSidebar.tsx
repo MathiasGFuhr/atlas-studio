@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { startTransition, useEffect, useRef, useState, type ComponentType, type MouseEvent } from 'react'
+import { startTransition, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type MouseEvent } from 'react'
 import {
   CheckSquare,
   ChevronLeft,
@@ -7,6 +7,7 @@ import {
   Clapperboard,
   Film,
   Home,
+  Lightbulb,
   Loader2,
   MessageSquareText,
   MessagesSquare,
@@ -66,6 +67,7 @@ const navSections: NavSection[] = [
       { to: MUSIC_LIPSYNC_PATH, label: 'Lipsync', icon: Mic2 },
       { to: MUSIC_FLOW_PATH, label: 'Flow', icon: Workflow },
       { to: '/editor', label: 'Editor', icon: Film },
+      { to: '/ideias', label: 'Ideias', icon: Lightbulb },
       { to: '/shorts', label: 'Shorts', icon: Clapperboard },
     ],
   },
@@ -217,6 +219,36 @@ export function AppSidebar({
 
   const collapseLabel = collapsed ? 'Expandir menu' : 'Recolher menu'
 
+  // Indicador deslizante (transitions.dev · sliding indicator): mede o link ativo
+  // e move uma única barra via transform — sem re-render, sem layout animado.
+  const navRef = useRef<HTMLElement>(null)
+  const indicatorRef = useRef<HTMLSpanElement>(null)
+  const indicatorPlacedRef = useRef(false)
+  useLayoutEffect(() => {
+    const nav = navRef.current
+    const indicator = indicatorRef.current
+    if (!nav || !indicator) return
+    const link = nav.querySelector('[data-nav-active]')?.closest('a') as HTMLElement | null
+    if (!link) {
+      indicator.style.opacity = '0'
+      return
+    }
+    const height = 24
+    const y = link.offsetTop + (link.offsetHeight - height) / 2
+    if (!indicatorPlacedRef.current) {
+      // Primeira medida: posiciona sem animar o deslize.
+      const previous = indicator.style.transition
+      indicator.style.transition = 'none'
+      indicator.style.transform = `translateY(${y}px)`
+      void indicator.offsetWidth
+      indicator.style.transition = previous
+      indicatorPlacedRef.current = true
+    } else {
+      indicator.style.transform = `translateY(${y}px)`
+    }
+    indicator.style.opacity = '1'
+  }, [pathname, collapsed])
+
   function goToTab(event: MouseEvent<HTMLAnchorElement>, to: string) {
     if (
       event.defaultPrevented ||
@@ -246,9 +278,9 @@ export function AppSidebar({
         className={({ isActive }) => {
           const active = isSidebarLinkActive(item.to, pathname, isActive)
           return cn(
-            'group relative flex items-center rounded-xl text-[13px] font-medium tracking-[-0.01em] transition-colors',
+            'atlas-press group relative flex items-center rounded-xl text-[13px] font-medium tracking-[-0.01em]',
             collapsed ? 'h-12 justify-center px-0' : 'h-12 gap-3 px-1.5',
-            active ? 'text-text' : 'text-muted hover:text-text',
+            active ? 'text-text' : 'text-muted hover:bg-white/[0.025] hover:text-text',
           )
         }}
       >
@@ -256,11 +288,12 @@ export function AppSidebar({
           const active = isSidebarLinkActive(item.to, pathname, isActive)
           return (
             <>
+              {active ? <span data-nav-active hidden /> : null}
               <span
                 className={cn(
-                  'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border transition-colors',
+                  'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border transition-[background-color,color,border-color,box-shadow] duration-200',
                   active
-                    ? 'border-transparent bg-accent-subtle text-accent'
+                    ? 'border-accent/15 bg-accent-subtle text-accent shadow-[inset_0_1px_0_rgb(255_255_255/0.05)]'
                     : 'border-transparent bg-elevated/70 text-muted group-hover:bg-hover group-hover:text-text',
                 )}
               >
@@ -302,7 +335,7 @@ export function AppSidebar({
                   {item.to === '/shorts' && shortsGeneration.hasActiveAnalysis ? (
                     <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
                   ) : item.badge ? null : (
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-2/80 transition-colors group-hover:text-muted" />
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-2/80 transition-[color,transform] duration-200 group-hover:translate-x-0.5 group-hover:text-muted" />
                   )}
                 </>
               )}
@@ -354,7 +387,15 @@ export function AppSidebar({
         )}
       </div>
 
-      <nav className="sidebar-nav flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-2 pt-3">
+      <nav
+        ref={navRef}
+        className="sidebar-nav relative flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-2 pt-3"
+      >
+        <span
+          ref={indicatorRef}
+          aria-hidden
+          className="atlas-nav-indicator pointer-events-none absolute left-0 top-0 h-6 w-[3px] rounded-r-full bg-accent opacity-0 shadow-[0_0_12px_rgb(53_191_155/0.45)]"
+        />
         {navSections.map((section) => (
           <div key={section.id} className="flex flex-col gap-1.5">
             {collapsed ? (

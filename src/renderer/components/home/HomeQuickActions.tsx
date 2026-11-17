@@ -10,6 +10,7 @@ import {
 import { Card } from '../Card'
 import quickActionsBg from '../../assets/quick-actions-bg.jpg'
 import { cn } from '../../lib/utils'
+import { spotlightMove } from '../bits/spotlight'
 
 type QuickAction = {
   id: string
@@ -54,18 +55,19 @@ export function HomeQuickActions({
               key={action.id}
               type="button"
               onClick={action.onClick}
+              onPointerMove={spotlightMove}
               className={cn(
-                'group flex min-h-[92px] flex-col items-start justify-between gap-3 rounded-2xl border px-3.5 py-3.5 text-left transition-all duration-200',
+                'atlas-spotlight atlas-lift group flex min-h-[92px] flex-col items-start justify-between gap-3 rounded-2xl border px-3.5 py-3.5 text-left',
                 featured
                   ? 'border-accent/35 bg-accent/12 hover:border-accent/55 hover:bg-accent/18'
-                  : 'border-border-soft/90 bg-bg/40 backdrop-blur-sm hover:border-accent/30 hover:bg-accent/10',
+                  : 'border-border-soft/90 bg-bg/55 hover:border-accent/30 hover:bg-accent/10',
               )}
             >
               <span
                 className={cn(
-                  'flex h-9 w-9 items-center justify-center rounded-xl transition-colors',
+                  'flex h-9 w-9 items-center justify-center rounded-xl transition-[background-color,transform] duration-300 ease-out group-hover:scale-105',
                   featured
-                    ? 'bg-accent text-on-accent'
+                    ? 'bg-accent text-on-accent shadow-[inset_0_1px_0_rgb(255_255_255/0.25)]'
                     : 'bg-accent/15 text-accent group-hover:bg-accent/20',
                 )}
               >

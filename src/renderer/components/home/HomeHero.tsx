@@ -2,6 +2,8 @@ import { ArrowRight, Sparkles } from 'lucide-react'
 import heroImage from '../../assets/home-hero.jpg'
 import { AtlasLogo } from '../AtlasLogo'
 import { quoteForDate } from './homeQuotes'
+import { BlurText } from '../bits/BlurText'
+import { ShinyText } from '../bits/ShinyText'
 
 export function HomeHero({
   hello,
@@ -35,7 +37,7 @@ export function HomeHero({
             <AtlasLogo variant="mark" className="h-9 w-9 rounded-xl shadow-card" />
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-accent">
-                Era 2.0
+                <ShinyText speed={5}>Era 2.0</ShinyText>
               </p>
               <p className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-2">
                 Atlas Studio · {dateLabel}
@@ -44,29 +46,35 @@ export function HomeHero({
           </div>
 
           <h1 className="home-greeting text-[2.35rem] leading-[1.02] tracking-[-0.03em] text-text sm:text-[3.15rem] lg:text-[3.4rem]">
-            <span className="home-greeting__hello">{hello}{firstName ? ',' : ''}</span>
+            <BlurText
+              text={`${hello}${firstName ? ',' : ''}`}
+              delay={140}
+              className="home-greeting__hello"
+            />
             {firstName ? (
               <>
                 {' '}
-                <span className="home-v2-hero__name">{firstName}</span>
+                <span className="atlas-blur-word" style={{ animationDelay: '320ms' }}>
+                  <span className="home-v2-hero__name">{firstName}</span>
+                </span>
               </>
             ) : null}
           </h1>
 
-          <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-muted sm:text-base">
+          <p className="atlas-rise mt-4 max-w-lg text-[15px] leading-relaxed text-pretty text-muted sm:text-base" style={{ animationDelay: '420ms' }}>
             O centro de comando da produção musical com IA — mais preciso, mais rápido, mais seu.
           </p>
 
-          <div className="mt-7 flex flex-wrap items-center gap-3">
+          <div className="atlas-rise mt-7 flex flex-wrap items-center gap-3" style={{ animationDelay: '520ms' }}>
             {onPrimaryAction ? (
               <button
                 type="button"
                 onClick={onPrimaryAction}
-                className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-hover"
+                className="atlas-press group/cta inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-on-accent shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_10px_28px_-12px_rgb(53_191_155/0.7)] hover:bg-accent-hover"
               >
                 <Sparkles className="h-4 w-4" />
                 Novo projeto
-                <ArrowRight className="h-4 w-4 opacity-80" />
+                <ArrowRight className="h-4 w-4 opacity-80 transition-transform duration-300 ease-out group-hover/cta:translate-x-0.5" />
               </button>
             ) : null}
             <p className="home-greeting max-w-sm text-[0.95rem] leading-snug text-muted-2 sm:text-[1.05rem]">

@@ -102,7 +102,7 @@ export function HomeScheduledVideoCard({
           <div className="relative shrink-0" ref={menuRef}>
             <button
               type="button"
-              className="rounded-lg p-1.5 text-muted-2 opacity-0 transition-all hover:bg-hover hover:text-text group-hover:opacity-100 focus-visible:opacity-100"
+              className="rounded-lg p-1.5 text-muted-2 opacity-0 transition-[opacity,background-color,color] hover:bg-hover hover:text-text group-hover:opacity-100 focus-visible:opacity-100"
               aria-label="Ações rápidas"
               onClick={(event) => {
                 event.stopPropagation()
@@ -114,7 +114,7 @@ export function HomeScheduledVideoCard({
             {menuOpen ? (
               <div
                 role="menu"
-                className="absolute right-0 z-20 mt-1 min-w-[168px] overflow-hidden rounded-xl border border-border-soft/90 bg-elevated py-1 shadow-popover"
+                className="atlas-pop absolute right-0 z-20 mt-1 min-w-[168px] overflow-hidden rounded-xl border border-border-soft/90 bg-elevated py-1 shadow-popover"
                 onClick={(event) => event.stopPropagation()}
               >
                 <button

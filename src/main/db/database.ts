@@ -442,6 +442,8 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
         schedulePersist()
       }
     }, PERSIST_DEBOUNCE_MS)
+    // O Electron mantém o processo vivo; o timer não pode segurar o encerramento de testes.
+    persistTimer.unref?.()
   }
 
   flushPendingPersist = flush
@@ -481,7 +483,9 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
         },
       }
     },
-    persist: flush,
+    // Agrupa os flush explícitos no mesmo debounce das escritas SQL.
+    // flushDatabasePersist() ainda grava na hora ao sair.
+    persist: schedulePersist,
   }
 }
 

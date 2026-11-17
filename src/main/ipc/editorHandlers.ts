@@ -1,7 +1,11 @@
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { dialog, ipcMain } from 'electron'
 import type { BrowserWindow } from 'electron'
+import { parseMusicCaptionLanguage, resolveWhisperModelName } from '../../shared/musicAnalysis'
 import { IPC } from '../../shared/types'
+import { transcribeLocalAudio } from '../services/shorts/transcribeLocal'
 import {
   EDITOR_ASPECTS,
   EDITOR_AUDIO_EXTENSIONS,
@@ -236,6 +240,28 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
   })
 
   ipcMain.handle(IPC.editor.waveform, (_e, assetId: string) => readEditorWaveform(String(assetId ?? '')))
+
+  ipcMain.handle(IPC.editor.transcribeAsset, async (_e, assetId: string, language?: string) => {
+    const asset = editorRepository.getAsset(String(assetId ?? ''))
+    if (!asset) throw new Error('Mídia não encontrada')
+    if (asset.kind === 'image') throw new Error('Imagem não tem áudio para legendar.')
+    if (!asset.sourcePath || !fs.existsSync(asset.sourcePath)) {
+      throw new Error('Arquivo de áudio não encontrado')
+    }
+    const captionLanguage = parseMusicCaptionLanguage(language)
+    const outputDir = path.join(os.tmpdir(), 'atlas-studio-captions', asset.id, captionLanguage)
+    const result = await transcribeLocalAudio(asset.sourcePath, outputDir, {
+      language: captionLanguage,
+      model: resolveWhisperModelName('medium', captionLanguage),
+    })
+    if (result.cues.length === 0) {
+      throw new Error(
+        result.detail ||
+          'Não foi possível gerar a legenda. Instale o modelo com: py -3 -m pip install faster-whisper',
+      )
+    }
+    return result.cues.map((cue) => ({ start: cue.start, end: cue.end, text: cue.text }))
+  })
 
   ipcMain.handle(IPC.editor.listLipsync, () => listEditorLipsyncGroups())
 

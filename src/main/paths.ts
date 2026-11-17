@@ -55,7 +55,10 @@ export function getWorkspaceRoot(): string {
 }
 
 export function getUserDataPath(): string {
-  return app.getPath('userData')
+  if (typeof app?.getPath === 'function') {
+    return app.getPath('userData')
+  }
+  return path.join(process.env.APPDATA || process.cwd(), 'Atlas Studio')
 }
 
 export function getDatabasePath(): string {

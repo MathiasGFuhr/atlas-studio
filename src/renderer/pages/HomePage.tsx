@@ -33,6 +33,7 @@ import { HomeQuickActions, HOME_QUICK_ICONS } from '../components/home/HomeQuick
 import { HomeActivityCard } from '../components/home/HomeActivityCard'
 import { HomeTasksCard } from '../components/home/HomeTasksCard'
 import { Card } from '../components/Card'
+import { AnimatedContent } from '../components/bits/AnimatedContent'
 import { notifySettingsChanged } from '../lib/settingsEvents'
 import {
   EMPTY_PROJECT_FORM,
@@ -273,7 +274,7 @@ export function HomePage() {
               onPrimaryAction={() => openCreate('music')}
             />
 
-            <Card padding="sm" className="home-v2-panel overflow-hidden !p-0">
+            <Card padding="sm" className="home-v2-panel atlas-rise overflow-hidden !p-0" style={{ animationDelay: '120ms' }}>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
                 <HomeStatCard
                   className="border-b border-border-soft/80 sm:border-r xl:border-b-0 xl:border-r"
@@ -308,7 +309,7 @@ export function HomePage() {
               </div>
             </Card>
 
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div className="atlas-rise grid grid-cols-1 gap-5 lg:grid-cols-3" style={{ animationDelay: '200ms' }}>
               <div className="min-w-0 lg:col-span-2">
                 <HomeCalendarCard
                   channels={channels}
@@ -359,15 +360,17 @@ export function HomePage() {
               />
             </div>
 
-            <HomePipeline
-              videos={pipelineVideos}
-              onOpen={(video) => navigate(channelVideoPath(video.channelId, video.id))}
-              onSeeAll={() => navigate(channelAgendaPath())}
-            />
+            <AnimatedContent delay={280}>
+              <HomePipeline
+                videos={pipelineVideos}
+                onOpen={(video) => navigate(channelVideoPath(video.channelId, video.id))}
+                onSeeAll={() => navigate(channelAgendaPath())}
+              />
+            </AnimatedContent>
           </div>
 
           {/* Coluna direita */}
-          <div className="flex min-w-0 flex-col gap-5">
+          <div className="atlas-rise flex min-w-0 flex-col gap-5" style={{ animationDelay: '160ms' }}>
             <div id="team-chat-incoming-slot" className="contents" />
             <HomeMarketsCard
               clocks={worldClocks}

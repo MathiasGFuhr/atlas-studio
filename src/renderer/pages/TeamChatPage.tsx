@@ -702,7 +702,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                           </button>
                           <button
                             type="button"
-                            className="mr-1.5 hidden shrink-0 self-center rounded-lg p-1.5 text-muted opacity-0 transition-all hover:bg-danger/10 hover:text-danger group-hover/room:inline-flex group-hover/room:opacity-100"
+                            className="mr-1.5 hidden shrink-0 self-center rounded-lg p-1.5 text-muted opacity-0 transition-[opacity,background-color,color] hover:bg-danger/10 hover:text-danger group-hover/room:inline-flex group-hover/room:opacity-100"
                             aria-label={`Apagar conversa ${room.title} só para mim`}
                             title="Apagar só para mim"
                             disabled={busyAction}
@@ -804,7 +804,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
                         <MoreVertical className="h-4 w-4" />
                       </button>
                       {roomMenuOpen ? (
-                        <div className="absolute right-0 top-full z-30 mt-1.5 min-w-[13rem] overflow-hidden rounded-xl border border-border-soft/90 bg-elevated py-1 shadow-popover">
+                        <div className="atlas-pop absolute right-0 top-full z-30 mt-1.5 min-w-[13rem] overflow-hidden rounded-xl border border-border-soft/90 bg-elevated py-1 shadow-popover">
                           <button
                             type="button"
                             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-danger hover:bg-danger/10"
@@ -1149,7 +1149,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
 
       {composer ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center atlas-modal-backdrop bg-overlay/80 p-4"
           onClick={closeComposer}
           role="dialog"
           aria-modal="true"
@@ -1253,7 +1253,7 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
 
       {lightbox ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/85 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center atlas-modal-backdrop bg-overlay/90 p-4"
           onClick={() => setLightbox(null)}
           role="dialog"
           aria-modal="true"

@@ -993,6 +993,12 @@ export const IPC = {
     readText: 'system:readText',
     openPath: 'system:openPath',
   },
+  ideas: {
+    list: 'ideas:list',
+    add: 'ideas:add',
+    update: 'ideas:update',
+    remove: 'ideas:remove',
+  },
   updates: {
     status: 'updates:status',
     check: 'updates:check',
@@ -1012,6 +1018,7 @@ export const IPC = {
     removeAsset: 'editor:removeAsset',
     setAssetOrigin: 'editor:setAssetOrigin',
     waveform: 'editor:waveform',
+    transcribeAsset: 'editor:transcribeAsset',
     listLipsync: 'editor:listLipsync',
     alignToMusic: 'editor:alignToMusic',
     export: 'editor:export',

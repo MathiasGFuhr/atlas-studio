@@ -147,6 +147,8 @@ PUNCT = " .,!?:;()[]{}*-" + chr(34) + chr(39) + chr(0x266A) + chr(0x266B)
 PROMPTS = {
     "pt": "Letra de música cantada em português do Brasil.",
     "en": "Sung song lyrics in English.",
+    "es": "Letra de canción cantada en español.",
+    "de": "Gesungener Liedtext auf Deutsch.",
 }
 
 def folded_token(token):

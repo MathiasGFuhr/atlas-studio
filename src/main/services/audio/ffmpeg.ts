@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url)
 
 export function resolveFfmpegPath(): string {
   const packaged = path.join(process.resourcesPath ?? '', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
-  if (app.isPackaged && packaged && fs.existsSync(packaged)) return packaged
+  if (app?.isPackaged && packaged && fs.existsSync(packaged)) return packaged
 
   try {
     const fromPackage = require('ffmpeg-static') as string | null

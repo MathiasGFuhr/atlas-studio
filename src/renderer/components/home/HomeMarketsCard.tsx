@@ -108,7 +108,7 @@ export function HomeMarketsCard({
 
         <div className="@container relative flex flex-col gap-2">
           {visible.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border-soft bg-bg/20 px-4 py-8 text-center backdrop-blur-sm">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border-soft bg-bg/55 px-4 py-8 text-center">
               <p className="text-sm font-medium text-text">Nenhum fuso configurado</p>
               <p className="mt-1 text-xs text-muted-2">
                 Adicione mercados para publicar no horário certo.
@@ -121,7 +121,7 @@ export function HomeMarketsCard({
               return (
                 <div
                   key={clock.id}
-                  className="group relative overflow-hidden rounded-2xl border border-border-soft bg-bg/30 backdrop-blur-md"
+                  className="group relative overflow-hidden rounded-2xl border border-border-soft bg-bg/70 transition-[border-color] duration-200 hover:border-border"
                 >
                   {countryCode ? (
                     <div

@@ -259,7 +259,7 @@ export function ProductTour({
           }}
         />
       ) : (
-        <div className="absolute inset-0 bg-overlay/80 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-overlay/82" />
       )}
 
       <div

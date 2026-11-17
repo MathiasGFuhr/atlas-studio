@@ -95,7 +95,7 @@ export function HomePromptsCard({
                 </div>
                 <button
                   type="button"
-                  className="rounded-lg p-1.5 text-muted opacity-0 transition-all hover:bg-hover hover:text-text group-hover:opacity-100"
+                  className="rounded-lg p-1.5 text-muted opacity-0 transition-[opacity,background-color,color] hover:bg-hover hover:text-text group-hover:opacity-100"
                   aria-label={`Copiar ${prompt.name}`}
                   onClick={() => onCopy(prompt.text, prompt.name)}
                 >

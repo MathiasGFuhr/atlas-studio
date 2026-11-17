@@ -19,6 +19,7 @@ export const ATLAS_SCREENS: AtlasScreen[] = [
   { id: 'agenda', label: 'Agenda', path: '/canais/agenda', aliases: ['calendario', 'calendário'] },
   { id: 'publicados', label: 'Publicados', path: '/canais/publicados', aliases: ['publicados'] },
   { id: 'shorts', label: 'Shorts', path: '/shorts', aliases: ['short', 'cortes de video', 'cortes de vídeo'] },
+  { id: 'ideias', label: 'Ideias', path: '/ideias', aliases: ['ideia', 'inspiracao', 'inspiração', 'referencias de video'] },
   { id: 'tarefas', label: 'Tarefas', path: '/tarefas', aliases: ['tasks'] },
   { id: 'financeiro', label: 'Financeiro', path: '/financeiro', aliases: ['capital', 'finanças', 'financas'] },
   { id: 'equipe', label: 'Equipe', path: '/equipe', aliases: ['chat', 'mensagens'] },
@@ -101,6 +102,6 @@ export const ATLAS_SYSTEM_GUIDE = [
   'Apagar (delete_*) pede confirmação. Não diga que já apagou antes da confirmação.',
   'Importar áudio ou vídeo sem caminho abre o seletor de arquivo do Windows.',
   'Análise automática e exportação de Shorts rodam na tela do Shorts. Abra o projeto com open_short em vez de fingir que a análise terminou.',
-  'Telas: Início, Projetos, Faixas, Prompts, Lipsync, Flow, Canais, Agenda, Publicados, Shorts, Tarefas, Equipe, Configurações.',
+  'Telas: Início, Projetos, Faixas, Prompts, Lipsync, Flow, Editor, Ideias, Canais, Agenda, Publicados, Shorts, Tarefas, Equipe, Configurações.',
   'Status de vídeo na agenda: colocando, editando, agendando, publicado.',
 ].join(' ')

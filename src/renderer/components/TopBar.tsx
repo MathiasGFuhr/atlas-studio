@@ -12,7 +12,7 @@ export function TopBar({ settings }: { settings: AppSettings | null }) {
   return (
     <header
       data-tour="topbar"
-      className="flex h-14 shrink-0 items-center gap-2 border-b border-border-soft bg-topbar px-3 sm:h-[68px] sm:gap-4 sm:px-6"
+      className="relative flex h-14 shrink-0 items-center gap-2 border-b border-border-soft bg-topbar px-3 sm:h-[68px] sm:gap-4 sm:px-6"
     >
       <div className="min-w-0 flex-1 basis-[12rem] max-w-[22rem]">
         <GlobalSearch />
@@ -29,17 +29,19 @@ export function TopBar({ settings }: { settings: AppSettings | null }) {
         <button
           type="button"
           aria-label="Abrir configurações"
-          className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-hover"
+          className="atlas-press group flex items-center gap-3 rounded-xl px-2 py-1.5 hover:bg-hover"
           onClick={() => navigate('/configuracoes')}
         >
-          <div className="h-9 w-9 overflow-hidden rounded-full border border-border bg-hover">
+          <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border bg-hover text-[12px] font-semibold uppercase text-muted ring-2 ring-transparent transition-[box-shadow] duration-300 group-hover:ring-accent/25">
             {settings?.accountPhotoDataUrl ? (
               <img
                 src={settings.accountPhotoDataUrl}
                 alt=""
                 className="h-full w-full object-cover"
               />
-            ) : null}
+            ) : (
+              (settings?.accountName?.trim() || 'A').charAt(0)
+            )}
           </div>
           <div className="hidden min-w-0 text-left lg:block">
             <div className="max-w-[140px] truncate text-sm font-medium text-text">
