@@ -93,7 +93,7 @@ type Props = {
 }
 
 export function EffectsLibraryPanel({ activeEffectIds = [], onPickEffect }: Props) {
-  const [category, setCategory] = useState<EditorEffectCategory>('pixi')
+  const [category, setCategory] = useState<EditorEffectCategory>('popular')
   const [applyToAll, setApplyToAll] = useState(true)
   const active = useMemo(() => new Set(activeEffectIds), [activeEffectIds])
   const items = useMemo(

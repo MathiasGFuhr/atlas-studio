@@ -49,17 +49,16 @@ function easeInCubic(t: number): number {
   return p ** 3
 }
 
+function easeOutExpo(t: number): number {
+  const p = clamp01(t)
+  return p === 1 ? 1 : 1 - 2 ** (-10 * p)
+}
+
 function easeOutBack(t: number): number {
   const p = clamp01(t)
   const c1 = 1.70158
   const c3 = c1 + 1
   return 1 + c3 * (p - 1) ** 3 + c1 * (p - 1) ** 2
-}
-
-function easeOutElastic(t: number): number {
-  const p = clamp01(t)
-  if (p === 0 || p === 1) return p
-  return 2 ** (-10 * p) * Math.sin((p * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1
 }
 
 function easeOutBounce(t: number): number {
@@ -86,7 +85,8 @@ function a(
   return { source: 'atlas', ...partial }
 }
 
-const BASE_ANIMATIONS: EditorAnimationDef[] = [
+export const EDITOR_ANIMATIONS: EditorAnimationDef[] = [
+  // ======================== ENTRADA (IN) ========================
   a({
     id: 'in-fade',
     kind: 'in',
@@ -97,90 +97,200 @@ const BASE_ANIMATIONS: EditorAnimationDef[] = [
     css: (p) => ({ opacity: easeOutCubic(p), transform: 'none' }),
   }),
   a({
+    id: 'in-zoom',
+    kind: 'in',
+    label: 'Zoom In',
+    description: 'Aproxima rápido do centro (estilo CapCut)',
+    source: 'gsap',
+    previewAnimation: 'atlas-anim-zoom-in 1.2s ease-out infinite',
+    ffmpegHint: 'zoom-in',
+    css: (p) => {
+      const t = easeOutExpo(p)
+      return { opacity: Math.min(1, p * 2.5), transform: `scale(${0.6 + 0.4 * t})` }
+    },
+  }),
+  a({
+    id: 'in-zoom-out',
+    kind: 'in',
+    label: 'Zoom Out Entrada',
+    description: 'Começa ampliado e encaixa no quadro',
+    source: 'gsap',
+    previewAnimation: 'atlas-anim-zoom-in 1.2s ease-out infinite',
+    ffmpegHint: 'zoom-out',
+    css: (p) => {
+      const t = easeOutExpo(p)
+      return { opacity: Math.min(1, p * 2.5), transform: `scale(${1.35 - 0.35 * t})` }
+    },
+  }),
+  a({
+    id: 'in-shake',
+    kind: 'in',
+    label: 'Shake Entrada',
+    description: 'Entra com tremor rápido de câmera',
+    source: 'anime',
+    previewAnimation: 'atlas-anim-wobble 0.6s ease-in-out infinite',
+    ffmpegHint: 'fade',
+    css: (p) => {
+      const decay = 1 - easeOutCubic(p)
+      const x = Math.sin(p * Math.PI * 10) * 5 * decay
+      const y = Math.cos(p * Math.PI * 8) * 3 * decay
+      const r = Math.sin(p * Math.PI * 10) * 2.5 * decay
+      return {
+        opacity: Math.min(1, p * 3),
+        transform: `translate(${x}%, ${y}%) rotate(${r}deg) scale(${1 + 0.08 * decay})`,
+      }
+    },
+  }),
+  a({
+    id: 'in-bounce',
+    kind: 'in',
+    label: 'Bounce',
+    description: 'Quica com gravidade real ao entrar',
+    source: 'anime',
+    previewAnimation: 'atlas-anim-pop-in 1.2s ease-out infinite',
+    ffmpegHint: 'zoom-in',
+    css: (p) => {
+      const t = easeOutBounce(p)
+      return { opacity: Math.min(1, p * 3), transform: `translateY(${(1 - t) * -32}%)` }
+    },
+  }),
+  a({
+    id: 'in-pop',
+    kind: 'in',
+    label: 'Pop Elástico',
+    description: 'Salto com overshoot estilo Motion/Spring',
+    source: 'motion',
+    previewAnimation: 'atlas-anim-pop-in 1.2s ease-out infinite',
+    ffmpegHint: 'zoom-in',
+    css: (p) => {
+      const t = spring(p)
+      return { opacity: Math.min(1, p * 2.8), transform: `scale(${0.5 + 0.5 * t})` }
+    },
+  }),
+  a({
+    id: 'in-swing-top',
+    kind: 'in',
+    label: 'Pêndulo Topo',
+    description: 'Balança a partir do topo até estabilizar',
+    source: 'anime',
+    previewAnimation: 'atlas-anim-sway 1.2s ease-out infinite',
+    ffmpegHint: 'fade',
+    css: (p) => {
+      const decay = 1 - easeOutCubic(p)
+      const deg = Math.sin(p * Math.PI * 3.5) * 14 * decay
+      return { opacity: Math.min(1, p * 2.5), transform: `rotate(${deg}deg)` }
+    },
+  }),
+  a({
     id: 'in-slide-left',
     kind: 'in',
     label: 'Deslizar ←',
-    description: 'Entra pela direita',
+    description: 'Entra deslizando pela direita',
     previewAnimation: 'atlas-anim-slide-left 1.2s ease-out infinite',
     ffmpegHint: 'slide-left',
     css: (p) => {
-      const t = easeOutCubic(p)
-      return { opacity: t, transform: `translateX(${(1 - t) * 40}%)` }
+      const t = easeOutExpo(p)
+      return { opacity: Math.min(1, p * 2.2), transform: `translateX(${(1 - t) * 45}%)` }
     },
   }),
   a({
     id: 'in-slide-right',
     kind: 'in',
     label: 'Deslizar →',
-    description: 'Entra pela esquerda',
+    description: 'Entra deslizando pela esquerda',
     previewAnimation: 'atlas-anim-slide-right 1.2s ease-out infinite',
     ffmpegHint: 'slide-right',
     css: (p) => {
-      const t = easeOutCubic(p)
-      return { opacity: t, transform: `translateX(${(1 - t) * -40}%)` }
+      const t = easeOutExpo(p)
+      return { opacity: Math.min(1, p * 2.2), transform: `translateX(${(1 - t) * -45}%)` }
     },
   }),
   a({
     id: 'in-slide-up',
     kind: 'in',
     label: 'Deslizar ↑',
-    description: 'Entra por baixo',
+    description: 'Sobe por baixo com desaceleração',
     previewAnimation: 'atlas-anim-slide-up 1.2s ease-out infinite',
     ffmpegHint: 'slide-up',
     css: (p) => {
-      const t = easeOutCubic(p)
-      return { opacity: t, transform: `translateY(${(1 - t) * 35}%)` }
+      const t = easeOutExpo(p)
+      return { opacity: Math.min(1, p * 2.2), transform: `translateY(${(1 - t) * 38}%)` }
     },
   }),
   a({
     id: 'in-slide-down',
     kind: 'in',
     label: 'Deslizar ↓',
-    description: 'Entra por cima',
+    description: 'Desce por cima com desaceleração',
     previewAnimation: 'atlas-anim-slide-down 1.2s ease-out infinite',
     ffmpegHint: 'slide-down',
     css: (p) => {
-      const t = easeOutCubic(p)
-      return { opacity: t, transform: `translateY(${(1 - t) * -35}%)` }
-    },
-  }),
-  a({
-    id: 'in-zoom',
-    kind: 'in',
-    label: 'Zoom in',
-    description: 'Aproxima do centro',
-    previewAnimation: 'atlas-anim-zoom-in 1.2s ease-out infinite',
-    ffmpegHint: 'zoom-in',
-    css: (p) => {
-      const t = easeOutCubic(p)
-      return { opacity: t, transform: `scale(${0.7 + 0.3 * t})` }
-    },
-  }),
-  a({
-    id: 'in-pop',
-    kind: 'in',
-    label: 'Pop',
-    description: 'Salto elástico',
-    previewAnimation: 'atlas-anim-pop-in 1.2s ease-out infinite',
-    ffmpegHint: 'zoom-in',
-    css: (p) => {
-      const t = easeOutCubic(p)
-      const scale = t < 0.7 ? 0.6 + (t / 0.7) * 0.55 : 1.15 - ((t - 0.7) / 0.3) * 0.15
-      return { opacity: Math.min(1, t * 1.4), transform: `scale(${scale})` }
+      const t = easeOutExpo(p)
+      return { opacity: Math.min(1, p * 2.2), transform: `translateY(${(1 - t) * -38}%)` }
     },
   }),
   a({
     id: 'in-spin',
     kind: 'in',
-    label: 'Girar entrada',
-    description: 'Gira e aparece',
+    label: 'Girar Entrada',
+    description: 'Rotaciona e amplia ao entrar',
+    previewAnimation: 'atlas-anim-spin-in 1.2s ease-out infinite',
+    ffmpegHint: 'fade',
+    css: (p) => {
+      const t = easeOutBack(p)
+      return { opacity: Math.min(1, p * 2), transform: `rotate(${(1 - t) * -25}deg) scale(${0.78 + 0.22 * t})` }
+    },
+  }),
+  a({
+    id: 'in-blur',
+    kind: 'in',
+    label: 'Desfoque Entrada',
+    description: 'Entra desfocado e ganha nitidez',
+    source: 'react-bits',
+    previewAnimation: 'atlas-anim-fade-in 1.2s ease-out infinite',
+    ffmpegHint: 'fade',
+    css: (p) => {
+      const t = easeOutCubic(p)
+      return {
+        opacity: t,
+        transform: `scale(${1.08 - 0.08 * t})`,
+        filter: `blur(${((1 - t) * 10).toFixed(1)}px)`,
+      }
+    },
+  }),
+  a({
+    id: 'in-glitch',
+    kind: 'in',
+    label: 'Glitch Entrada',
+    description: 'Corte digital RGB ao entrar',
+    source: 'react-bits',
+    previewAnimation: 'atlas-anim-wobble 0.8s ease-out infinite',
+    ffmpegHint: 'fade',
+    css: (p) => {
+      const jitter = p < 0.7 ? Math.sin(p * 42) * (1 - p) * 14 : 0
+      const sat = p < 0.7 ? 1.8 : 1
+      return {
+        opacity: Math.min(1, p * 2.5),
+        transform: `translateX(${jitter.toFixed(1)}px) skewX(${(jitter * 0.4).toFixed(1)}deg)`,
+        filter: `saturate(${sat}) contrast(${p < 0.7 ? 1.3 : 1})`,
+      }
+    },
+  }),
+  a({
+    id: 'in-flip',
+    kind: 'in',
+    label: 'Flip 3D Entrada',
+    description: 'Gira em perspectiva 3D para aparecer',
+    source: 'three',
     previewAnimation: 'atlas-anim-spin-in 1.2s ease-out infinite',
     ffmpegHint: 'fade',
     css: (p) => {
       const t = easeOutCubic(p)
-      return { opacity: t, transform: `rotate(${(1 - t) * -18}deg) scale(${0.85 + 0.15 * t})` }
+      return { opacity: t, transform: `perspective(800px) rotateY(${(1 - t) * 85}deg)` }
     },
   }),
+
+  // ======================== SAÍDA (OUT) ========================
   a({
     id: 'out-fade',
     kind: 'out',
@@ -191,27 +301,51 @@ const BASE_ANIMATIONS: EditorAnimationDef[] = [
     css: (p) => ({ opacity: 1 - easeInCubic(p), transform: 'none' }),
   }),
   a({
+    id: 'out-zoom',
+    kind: 'out',
+    label: 'Zoom Out',
+    description: 'Amplia e desaparece',
+    previewAnimation: 'atlas-anim-zoom-out 1.2s ease-in infinite',
+    ffmpegHint: 'zoom-out',
+    css: (p) => {
+      const t = easeInCubic(p)
+      return { opacity: 1 - t, transform: `scale(${1 + 0.3 * t})` }
+    },
+  }),
+  a({
+    id: 'out-pop',
+    kind: 'out',
+    label: 'Encolher',
+    description: 'Encolhe para o centro e some',
+    previewAnimation: 'atlas-anim-pop-out 1.2s ease-in infinite',
+    ffmpegHint: 'zoom-out',
+    css: (p) => {
+      const t = easeInCubic(p)
+      return { opacity: 1 - t, transform: `scale(${1 - 0.55 * t})` }
+    },
+  }),
+  a({
     id: 'out-slide-left',
     kind: 'out',
     label: 'Deslizar ←',
-    description: 'Sai para a esquerda',
+    description: 'Sai deslizando para a esquerda',
     previewAnimation: 'atlas-anim-slide-out-left 1.2s ease-in infinite',
     ffmpegHint: 'slide-left',
     css: (p) => {
       const t = easeInCubic(p)
-      return { opacity: 1 - t, transform: `translateX(${t * -40}%)` }
+      return { opacity: 1 - t, transform: `translateX(${t * -45}%)` }
     },
   }),
   a({
     id: 'out-slide-right',
     kind: 'out',
     label: 'Deslizar →',
-    description: 'Sai para a direita',
+    description: 'Sai deslizando para a direita',
     previewAnimation: 'atlas-anim-slide-out-right 1.2s ease-in infinite',
     ffmpegHint: 'slide-right',
     css: (p) => {
       const t = easeInCubic(p)
-      return { opacity: 1 - t, transform: `translateX(${t * 40}%)` }
+      return { opacity: 1 - t, transform: `translateX(${t * 45}%)` }
     },
   }),
   a({
@@ -223,7 +357,7 @@ const BASE_ANIMATIONS: EditorAnimationDef[] = [
     ffmpegHint: 'slide-up',
     css: (p) => {
       const t = easeInCubic(p)
-      return { opacity: 1 - t, transform: `translateY(${t * -35}%)` }
+      return { opacity: 1 - t, transform: `translateY(${t * -38}%)` }
     },
   }),
   a({
@@ -235,39 +369,152 @@ const BASE_ANIMATIONS: EditorAnimationDef[] = [
     ffmpegHint: 'slide-down',
     css: (p) => {
       const t = easeInCubic(p)
-      return { opacity: 1 - t, transform: `translateY(${t * 35}%)` }
+      return { opacity: 1 - t, transform: `translateY(${t * 38}%)` }
     },
   }),
   a({
-    id: 'out-zoom',
+    id: 'out-blur',
     kind: 'out',
-    label: 'Zoom out',
-    description: 'Afasta e some',
-    previewAnimation: 'atlas-anim-zoom-out 1.2s ease-in infinite',
-    ffmpegHint: 'zoom-out',
+    label: 'Desfoque Saída',
+    description: 'Desfoca e dissolve ao sair',
+    source: 'remotion-bits',
+    previewAnimation: 'atlas-anim-fade-out 1.2s ease-in infinite',
+    ffmpegHint: 'fade',
     css: (p) => {
       const t = easeInCubic(p)
-      return { opacity: 1 - t, transform: `scale(${1 + 0.25 * t})` }
+      return { opacity: 1 - t, transform: `scale(${1 + 0.08 * t})`, filter: `blur(${(t * 10).toFixed(1)}px)` }
     },
   }),
   a({
-    id: 'out-pop',
+    id: 'out-flip',
     kind: 'out',
-    label: 'Pop out',
-    description: 'Encolhe e some',
+    label: 'Flip 3D Saída',
+    description: 'Gira em 3D e desaparece',
+    source: 'gsap',
+    previewAnimation: 'atlas-anim-fade-out 1.2s ease-in infinite',
+    ffmpegHint: 'fade',
+    css: (p) => {
+      const t = easeInCubic(p)
+      return { opacity: 1 - t, transform: `perspective(800px) rotateX(${t * 85}deg)` }
+    },
+  }),
+  a({
+    id: 'out-spin',
+    kind: 'out',
+    label: 'Girar Saída',
+    description: 'Gira e encolhe ao sair',
     previewAnimation: 'atlas-anim-pop-out 1.2s ease-in infinite',
     ffmpegHint: 'zoom-out',
     css: (p) => {
       const t = easeInCubic(p)
-      return { opacity: 1 - t, transform: `scale(${1 - 0.45 * t})` }
+      return { opacity: 1 - t, transform: `rotate(${t * 25}deg) scale(${1 - 0.3 * t})` }
+    },
+  }),
+  a({
+    id: 'out-glitch',
+    kind: 'out',
+    label: 'Glitch Saída',
+    description: 'Quebra digital ao sair',
+    source: 'gl-transitions',
+    previewAnimation: 'atlas-anim-fade-out 1.2s ease-in infinite',
+    ffmpegHint: 'fade',
+    css: (p) => {
+      const jitter = Math.sin(p * 42) * p * 14
+      return {
+        opacity: 1 - easeInCubic(p),
+        transform: `translateX(${jitter.toFixed(1)}px) skewX(${(jitter * 0.4).toFixed(1)}deg)`,
+        filter: `saturate(${1 + p})`,
+      }
+    },
+  }),
+
+  // ======================== COMBINAÇÃO (COMBO) ========================
+  a({
+    id: 'combo-pendulum-1',
+    kind: 'combo',
+    label: 'Pêndulo 1',
+    description: 'Balanço suave contínuo (clássico CapCut)',
+    source: 'motion',
+    previewAnimation: 'atlas-anim-sway 1.6s ease-in-out infinite',
+    ffmpegHint: 'none',
+    css: (p) => {
+      const wave = Math.sin(p * Math.PI * 2)
+      return { opacity: 1, transform: `rotate(${wave * 4.5}deg) scale(1.06)` }
+    },
+  }),
+  a({
+    id: 'combo-pendulum-2',
+    kind: 'combo',
+    label: 'Pêndulo 2',
+    description: 'Balanço amplo com deslocamento lateral',
+    source: 'gsap',
+    previewAnimation: 'atlas-anim-sway 1.2s ease-in-out infinite',
+    ffmpegHint: 'none',
+    css: (p) => {
+      const wave = Math.sin(p * Math.PI * 2)
+      return { opacity: 1, transform: `translateX(${wave * 3}%) rotate(${wave * 7}deg) scale(1.1)` }
+    },
+  }),
+  a({
+    id: 'combo-shake',
+    kind: 'combo',
+    label: 'Camera Shake',
+    description: 'Vibração contínua de câmera no ritmo',
+    source: 'anime',
+    previewAnimation: 'atlas-anim-wobble 0.45s ease-in-out infinite',
+    ffmpegHint: 'none',
+    css: (p) => {
+      const x = Math.sin(p * Math.PI * 8) * 2.2
+      const y = Math.cos(p * Math.PI * 6) * 1.8
+      const r = Math.sin(p * Math.PI * 8) * 1.4
+      return { opacity: 1, transform: `translate(${x}%, ${y}%) rotate(${r}deg) scale(1.06)` }
+    },
+  }),
+  a({
+    id: 'combo-wobble',
+    kind: 'combo',
+    label: 'Wobble / Gelatina',
+    description: 'Distorção elástica e divertida',
+    source: 'anime',
+    previewAnimation: 'atlas-anim-wobble 1.2s ease-in-out infinite',
+    ffmpegHint: 'none',
+    css: (p) => {
+      const w = Math.sin(p * Math.PI * 4)
+      return { opacity: 1, transform: `rotate(${w * 3.5}deg) skewX(${w * 2.5}deg) scale(${1 + Math.abs(w) * 0.04})` }
+    },
+  }),
+  a({
+    id: 'combo-yoyo',
+    kind: 'combo',
+    label: 'Yo-yo',
+    description: 'Vai e volta vertical com energia',
+    source: 'motion',
+    previewAnimation: 'atlas-anim-float 1.2s ease-in-out infinite',
+    ffmpegHint: 'none',
+    css: (p) => {
+      const wave = Math.sin(p * Math.PI * 2)
+      return { opacity: 1, transform: `translateY(${wave * 5}%) scale(${1.04 + Math.abs(wave) * 0.04})` }
+    },
+  }),
+  a({
+    id: 'combo-zoom-bounce',
+    kind: 'combo',
+    label: 'Zoom & Bounce',
+    description: 'Pulso forte no beat da música',
+    source: 'gsap',
+    previewAnimation: 'atlas-anim-pulse 1.0s ease-in-out infinite',
+    ffmpegHint: 'none',
+    css: (p) => {
+      const beat = Math.abs(Math.sin(p * Math.PI * 2)) ** 2
+      return { opacity: 1, transform: `scale(${1 + beat * 0.12})` }
     },
   }),
   a({
     id: 'combo-pulse',
     kind: 'combo',
-    label: 'Pulso',
-    description: 'Escala em ciclo',
-    previewAnimation: 'atlas-anim-pulse 1.4s ease-in-out infinite',
+    label: 'Pulso Suave',
+    description: 'Respiração contínua para fotos e takes',
+    previewAnimation: 'atlas-anim-pulse 1.6s ease-in-out infinite',
     ffmpegHint: 'none',
     css: (p) => {
       const wave = Math.sin(p * Math.PI * 2) * 0.5 + 0.5
@@ -278,8 +525,8 @@ const BASE_ANIMATIONS: EditorAnimationDef[] = [
     id: 'combo-float',
     kind: 'combo',
     label: 'Flutuar',
-    description: 'Sobe e desce leve',
-    previewAnimation: 'atlas-anim-float 1.6s ease-in-out infinite',
+    description: 'Sobe e desce leve sem perder o foco',
+    previewAnimation: 'atlas-anim-float 1.8s ease-in-out infinite',
     ffmpegHint: 'none',
     css: (p) => {
       const wave = Math.sin(p * Math.PI * 2)
@@ -287,758 +534,113 @@ const BASE_ANIMATIONS: EditorAnimationDef[] = [
     },
   }),
   a({
-    id: 'combo-sway',
-    kind: 'combo',
-    label: 'Balanço',
-    description: 'Inclina suavemente',
-    previewAnimation: 'atlas-anim-sway 1.6s ease-in-out infinite',
-    ffmpegHint: 'none',
-    css: (p) => {
-      const wave = Math.sin(p * Math.PI * 2)
-      return { opacity: 1, transform: `rotate(${wave * 3}deg)` }
-    },
-  }),
-  a({
     id: 'combo-glow',
     kind: 'combo',
-    label: 'Brilho suave',
-    description: 'Opacidade e brilho em ciclo',
+    label: 'Aura Pulsante',
+    description: 'Brilho respirando no tempo do clipe',
+    source: 'pixi',
     previewAnimation: 'atlas-anim-glow 1.5s ease-in-out infinite',
     ffmpegHint: 'none',
     css: (p) => {
       const wave = Math.sin(p * Math.PI * 2) * 0.5 + 0.5
       return {
-        opacity: 0.85 + wave * 0.15,
+        opacity: 1,
         transform: 'none',
-        filter: `brightness(${1 + wave * 0.12})`,
+        filter: `brightness(${1 + wave * 0.2}) drop-shadow(0 0 ${Math.round(8 + wave * 12)}px rgba(255,255,255,0.45))`,
       }
+    },
+  }),
+  a({
+    id: 'combo-glitch',
+    kind: 'combo',
+    label: 'Glitch Loop',
+    description: 'Interferência digital em ciclo',
+    source: 'gl-transitions',
+    previewAnimation: 'atlas-anim-wobble 0.9s steps(4) infinite',
+    ffmpegHint: 'none',
+    css: (p) => {
+      const burst = p > 0.75 ? Math.sin(p * 60) * 6 : 0
+      return {
+        opacity: 1,
+        transform: `translateX(${burst}px)`,
+        filter: p > 0.75 ? 'saturate(1.7) contrast(1.25)' : 'none',
+      }
+    },
+  }),
+  a({
+    id: 'combo-spin-3d',
+    kind: 'combo',
+    label: 'Rotação 3D',
+    description: 'Inclinação 3D suave em ciclo',
+    source: 'three',
+    previewAnimation: 'atlas-anim-sway 1.6s ease-in-out infinite',
+    ffmpegHint: 'none',
+    css: (p) => {
+      const deg = Math.sin(p * Math.PI * 2) * 14
+      return { opacity: 1, transform: `perspective(800px) rotateY(${deg}deg)` }
     },
   }),
 ]
 
-function buildLibraryAnimationPack(): EditorAnimationDef[] {
-  const pack: EditorAnimationDef[] = []
-
-  // —— Anime.js ——
-  pack.push(
-    a({
-      id: 'anime-in-elastic',
-      kind: 'in',
-      source: 'anime',
-      label: 'Elastic',
-      description: 'Entrada elástica Anime.js',
-      previewAnimation: 'atlas-anim-pop-in 1.3s ease-out infinite',
-      ffmpegHint: 'zoom-in',
-      css: (p) => {
-        const t = easeOutElastic(p)
-        return { opacity: clamp01(p * 1.4), transform: `scale(${0.55 + 0.45 * t})` }
-      },
-    }),
-    a({
-      id: 'anime-in-bounce',
-      kind: 'in',
-      source: 'anime',
-      label: 'Bounce',
-      description: 'Quique Anime.js',
-      previewAnimation: 'atlas-anim-pop-in 1.3s ease-out infinite',
-      ffmpegHint: 'slide-up',
-      css: (p) => {
-        const t = easeOutBounce(p)
-        return { opacity: clamp01(p * 1.5), transform: `translateY(${(1 - t) * 40}%)` }
-      },
-    }),
-    a({
-      id: 'anime-in-stagger-skew',
-      kind: 'in',
-      source: 'anime',
-      label: 'Skew in',
-      description: 'Inclina e entra',
-      previewAnimation: 'atlas-anim-slide-up 1.2s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `skewX(${(1 - t) * -12}deg) translateY(${(1 - t) * 20}%)` }
-      },
-    }),
-    a({
-      id: 'anime-out-shrink',
-      kind: 'out',
-      source: 'anime',
-      label: 'Shrink',
-      description: 'Encolhe com fade',
-      previewAnimation: 'atlas-anim-pop-out 1.2s ease-in infinite',
-      ffmpegHint: 'zoom-out',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `scale(${1 - 0.55 * t}) rotate(${t * -8}deg)` }
-      },
-    }),
-    a({
-      id: 'anime-combo-wobble',
-      kind: 'combo',
-      source: 'anime',
-      label: 'Wobble',
-      description: 'Oscilação Anime.js',
-      previewAnimation: 'atlas-anim-sway 1.2s ease-in-out infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const wave = Math.sin(p * Math.PI * 4)
-        return { opacity: 1, transform: `rotate(${wave * 5}deg) translateX(${wave * 2}%)` }
-      },
-    }),
-  )
-
-  // —— GSAP ——
-  pack.push(
-    a({
-      id: 'gsap-in-back',
-      kind: 'in',
-      source: 'gsap',
-      label: 'Back out',
-      description: 'Overshoot GSAP back.out',
-      previewAnimation: 'atlas-anim-pop-in 1.2s ease-out infinite',
-      ffmpegHint: 'zoom-in',
-      css: (p) => {
-        const t = easeOutBack(p)
-        return { opacity: clamp01(p * 1.6), transform: `scale(${0.6 + 0.4 * t})` }
-      },
-    }),
-    a({
-      id: 'gsap-in-power4',
-      kind: 'in',
-      source: 'gsap',
-      label: 'Power4',
-      description: 'Entrada power4.out',
-      previewAnimation: 'atlas-anim-slide-up 1.1s cubic-bezier(0.16,1,0.3,1) infinite',
-      ffmpegHint: 'slide-up',
-      css: (p) => {
-        const t = 1 - (1 - clamp01(p)) ** 4
-        return { opacity: t, transform: `translateY(${(1 - t) * 48}%)` }
-      },
-    }),
-    a({
-      id: 'gsap-in-expo',
-      kind: 'in',
-      source: 'gsap',
-      label: 'Expo',
-      description: 'Exponencial GSAP',
-      previewAnimation: 'atlas-anim-fade-in 1.1s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = p === 0 ? 0 : 2 ** (-10 * (1 - clamp01(p)))
-        const eased = 1 - t
-        return { opacity: eased, transform: `translateY(${(1 - eased) * 24}%) scale(${0.92 + 0.08 * eased})` }
-      },
-    }),
-    a({
-      id: 'gsap-out-flip',
-      kind: 'out',
-      source: 'gsap',
-      label: 'Flip out',
-      description: 'Flip 3D de saída',
-      previewAnimation: 'atlas-anim-spin-in 1.2s ease-in infinite reverse',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `rotateY(${t * 75}deg) scale(${1 - 0.15 * t})` }
-      },
-    }),
-    a({
-      id: 'gsap-combo-stagger-pulse',
-      kind: 'combo',
-      source: 'gsap',
-      label: 'Stagger pulse',
-      description: 'Pulso rítmico GSAP',
-      previewAnimation: 'atlas-anim-pulse 1.1s ease-in-out infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const wave = Math.sin(p * Math.PI * 2)
-        return { opacity: 1, transform: `scale(${1 + wave * 0.08}) rotate(${wave * 1.5}deg)` }
-      },
-    }),
-  )
-
-  // —— Motion (Framer) ——
-  pack.push(
-    a({
-      id: 'motion-in-spring',
-      kind: 'in',
-      source: 'motion',
-      label: 'Spring',
-      description: 'Spring Motion/Framer',
-      previewAnimation: 'atlas-anim-pop-in 1.25s ease-out infinite',
-      ffmpegHint: 'zoom-in',
-      css: (p) => {
-        const t = spring(p)
-        return { opacity: clamp01(p * 1.8), transform: `scale(${0.7 + 0.3 * t}) translateY(${(1 - t) * 18}%)` }
-      },
-    }),
-    a({
-      id: 'motion-in-layout',
-      kind: 'in',
-      source: 'motion',
-      label: 'Layout rise',
-      description: 'Layout animation rise',
-      previewAnimation: 'atlas-anim-slide-up 1.2s ease-out infinite',
-      ffmpegHint: 'slide-up',
-      css: (p) => {
-        const t = spring(p)
-        return { opacity: t, transform: `translateY(${(1 - t) * 30}%) scale(${0.96 + 0.04 * t})` }
-      },
-    }),
-    a({
-      id: 'motion-out-soft',
-      kind: 'out',
-      source: 'motion',
-      label: 'Soft exit',
-      description: 'Saída spring invertida',
-      previewAnimation: 'atlas-anim-fade-out 1.2s ease-in infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `translateY(${t * -12}%) scale(${1 - 0.08 * t})` }
-      },
-    }),
-    a({
-      id: 'motion-combo-breathe',
-      kind: 'combo',
-      source: 'motion',
-      label: 'Breathe',
-      description: 'Respiração suave',
-      previewAnimation: 'atlas-anim-pulse 2s ease-in-out infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const wave = Math.sin(p * Math.PI * 2) * 0.5 + 0.5
-        return { opacity: 0.92 + wave * 0.08, transform: `scale(${1 + wave * 0.035})` }
-      },
-    }),
-  )
-
-  // —— React Bits ——
-  pack.push(
-    a({
-      id: 'bits-in-blur',
-      kind: 'in',
-      source: 'react-bits',
-      label: 'BlurText',
-      description: 'Desfoque → nítido',
-      previewAnimation: 'atlas-anim-fade-in 1.2s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `translateY(${(1 - t) * 16}%)`, filter: `blur(${(1 - t) * 10}px)` }
-      },
-    }),
-    a({
-      id: 'bits-in-glitch',
-      kind: 'in',
-      source: 'react-bits',
-      label: 'GlitchText',
-      description: 'Glitch de entrada',
-      previewAnimation: 'atlas-anim-sway 0.8s linear infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        const j = (1 - t) * Math.sin(p * 40) * 4
-        return { opacity: t, transform: `translateX(${j}%)`, filter: t < 0.85 ? `hue-rotate(${(1 - t) * 40}deg)` : undefined }
-      },
-    }),
-    a({
-      id: 'bits-in-decrypt',
-      kind: 'in',
-      source: 'react-bits',
-      label: 'Decrypt',
-      description: 'Revelação decrypt',
-      previewAnimation: 'atlas-anim-fade-in 1.3s steps(8) infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: 0.35 + 0.65 * t, transform: `scale(${0.98 + 0.02 * t})`, filter: `contrast(${1 + (1 - t) * 0.4})` }
-      },
-    }),
-    a({
-      id: 'bits-combo-shiny',
-      kind: 'combo',
-      source: 'react-bits',
-      label: 'Shiny',
-      description: 'Brilho varrendo',
-      previewAnimation: 'atlas-anim-glow 1.4s ease-in-out infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const wave = Math.sin(p * Math.PI * 2) * 0.5 + 0.5
-        return { opacity: 1, transform: 'none', filter: `brightness(${1 + wave * 0.25}) contrast(${1 + wave * 0.08})` }
-      },
-    }),
-  )
-
-  // —— Remotion Bits ——
-  pack.push(
-    a({
-      id: 'rb-in-word',
-      kind: 'in',
-      source: 'remotion-bits',
-      label: 'Word reveal',
-      description: 'Revelação palavra a palavra',
-      previewAnimation: 'atlas-anim-slide-up 1.2s ease-out infinite',
-      ffmpegHint: 'slide-up',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `translateY(${(1 - t) * 22}%)`, filter: `blur(${(1 - t) * 6}px)` }
-      },
-    }),
-    a({
-      id: 'rb-in-char-scale',
-      kind: 'in',
-      source: 'remotion-bits',
-      label: 'Char scale',
-      description: 'Chars em escala',
-      previewAnimation: 'atlas-anim-zoom-in 1.15s ease-out infinite',
-      ffmpegHint: 'zoom-in',
-      css: (p) => {
-        const t = easeOutBack(p)
-        return { opacity: clamp01(p * 1.5), transform: `scale(${0.2 + 0.8 * t})` }
-      },
-    }),
-    a({
-      id: 'rb-out-blur',
-      kind: 'out',
-      source: 'remotion-bits',
-      label: 'Blur out',
-      description: 'Saída com blur',
-      previewAnimation: 'atlas-anim-fade-out 1.2s ease-in infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `translateY(${t * -10}%)`, filter: `blur(${t * 8}px)` }
-      },
-    }),
-    a({
-      id: 'rb-combo-typewriter',
-      kind: 'combo',
-      source: 'remotion-bits',
-      label: 'Type pulse',
-      description: 'Pulso de digitação',
-      previewAnimation: 'atlas-anim-pulse 0.9s steps(2) infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const on = Math.sin(p * Math.PI * 8) > 0
-        return { opacity: on ? 1 : 0.75, transform: 'none' }
-      },
-    }),
-  )
-
-  // —— Remotion Transitions (as clip anims) ——
-  pack.push(
-    a({
-      id: 'rt-in-wipe',
-      kind: 'in',
-      source: 'remotion-transitions',
-      label: 'Wipe in',
-      description: 'Wipe Remotion',
-      previewAnimation: 'atlas-anim-slide-left 1.1s ease-out infinite',
-      ffmpegHint: 'slide-left',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `translateX(${(1 - t) * 55}%)` }
-      },
-    }),
-    a({
-      id: 'rt-in-clock',
-      kind: 'in',
-      source: 'remotion-transitions',
-      label: 'Clock in',
-      description: 'Clock wipe feel',
-      previewAnimation: 'atlas-anim-spin-in 1.2s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `rotate(${(1 - t) * -90}deg) scale(${0.85 + 0.15 * t})` }
-      },
-    }),
-    a({
-      id: 'rt-out-pixel',
-      kind: 'out',
-      source: 'remotion-transitions',
-      label: 'Pixelize out',
-      description: 'Pixelize de saída',
-      previewAnimation: 'atlas-anim-zoom-out 1.2s ease-in infinite',
-      ffmpegHint: 'zoom-out',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `scale(${1 + 0.12 * t})`, filter: `contrast(${1 + t * 0.4})` }
-      },
-    }),
-    a({
-      id: 'rt-combo-crosszoom',
-      kind: 'combo',
-      source: 'remotion-transitions',
-      label: 'CrossZoom',
-      description: 'Zoom cruzado em loop',
-      previewAnimation: 'atlas-anim-pulse 1.3s ease-in-out infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const wave = Math.sin(p * Math.PI * 2) * 0.5 + 0.5
-        return { opacity: 1, transform: `scale(${1 + wave * 0.1})`, filter: `blur(${wave * 1.2}px)` }
-      },
-    }),
-  )
-
-  // —— GL Transitions ——
-  pack.push(
-    a({
-      id: 'gl-in-ripple',
-      kind: 'in',
-      source: 'gl-transitions',
-      label: 'Ripple',
-      description: 'Ondulação GLSL',
-      previewAnimation: 'atlas-anim-pulse 1.2s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        const w = Math.sin((1 - t) * Math.PI * 4) * (1 - t) * 3
-        return { opacity: t, transform: `scale(${0.92 + 0.08 * t}) translateX(${w}%)` }
-      },
-    }),
-    a({
-      id: 'gl-in-dreamy',
-      kind: 'in',
-      source: 'gl-transitions',
-      label: 'Dreamy',
-      description: 'Sonho GLSL',
-      previewAnimation: 'atlas-anim-fade-in 1.4s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `scale(${1.08 - 0.08 * t})`, filter: `blur(${(1 - t) * 6}px) brightness(${0.9 + 0.1 * t})` }
-      },
-    }),
-    a({
-      id: 'gl-out-melt',
-      kind: 'out',
-      source: 'gl-transitions',
-      label: 'Melt',
-      description: 'Derrete na saída',
-      previewAnimation: 'atlas-anim-slide-out-down 1.3s ease-in infinite',
-      ffmpegHint: 'slide-down',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `translateY(${t * 20}%) scaleY(${1 + t * 0.25})`, filter: `blur(${t * 4}px)` }
-      },
-    }),
-    a({
-      id: 'gl-combo-glitch',
-      kind: 'combo',
-      source: 'gl-transitions',
-      label: 'Glitch loop',
-      description: 'Glitch GLSL em ciclo',
-      previewAnimation: 'atlas-anim-sway 0.7s linear infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const j = Math.sin(p * Math.PI * 16) * 1.5
-        return { opacity: 1, transform: `translateX(${j}%)`, filter: `hue-rotate(${Math.sin(p * 20) * 15}deg)` }
-      },
-    }),
-  )
-
-  // —— PixiJS Filters (as motion looks) ——
-  pack.push(
-    a({
-      id: 'pixi-in-glow',
-      kind: 'in',
-      source: 'pixi',
-      label: 'Glow in',
-      description: 'Entrada com glow Pixi',
-      previewAnimation: 'atlas-anim-glow 1.2s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `scale(${0.9 + 0.1 * t})`, filter: `brightness(${1 + (1 - t) * 0.4}) drop-shadow(0 0 ${12 * (1 - t)}px white)` }
-      },
-    }),
-    a({
-      id: 'pixi-in-rgb',
-      kind: 'in',
-      source: 'pixi',
-      label: 'RGB split in',
-      description: 'Aberração cromática',
-      previewAnimation: 'atlas-anim-fade-in 1.15s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `translateX(${(1 - t) * 2}%)`, filter: `contrast(${1.1 + (1 - t) * 0.3}) saturate(${1.2 + (1 - t) * 0.4})` }
-      },
-    }),
-    a({
-      id: 'pixi-combo-crt',
-      kind: 'combo',
-      source: 'pixi',
-      label: 'CRT flicker',
-      description: 'Flicker CRT Pixi',
-      previewAnimation: 'atlas-anim-glow 0.9s steps(3) infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const wave = Math.sin(p * Math.PI * 10) * 0.5 + 0.5
-        return { opacity: 0.9 + wave * 0.1, transform: 'none', filter: `contrast(${1.15 + wave * 0.1})` }
-      },
-    }),
-    a({
-      id: 'pixi-out-zoomblur',
-      kind: 'out',
-      source: 'pixi',
-      label: 'Zoom blur out',
-      description: 'Zoom blur de saída',
-      previewAnimation: 'atlas-anim-zoom-out 1.2s ease-in infinite',
-      ffmpegHint: 'zoom-out',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `scale(${1 + 0.35 * t})`, filter: `blur(${t * 5}px)` }
-      },
-    }),
-  )
-
-  // —— Lottie-like ——
-  pack.push(
-    a({
-      id: 'lottie-in-morph',
-      kind: 'in',
-      source: 'lottie',
-      label: 'Morph in',
-      description: 'Morph vetorial Lottie',
-      previewAnimation: 'atlas-anim-pop-in 1.25s ease-out infinite',
-      ffmpegHint: 'zoom-in',
-      css: (p) => {
-        const t = easeOutBack(p)
-        return { opacity: clamp01(p * 1.4), transform: `scale(${0.4 + 0.6 * t}) rotate(${(1 - t) * -25}deg)` }
-      },
-    }),
-    a({
-      id: 'lottie-in-draw',
-      kind: 'in',
-      source: 'lottie',
-      label: 'Draw in',
-      description: 'Traço revelando',
-      previewAnimation: 'atlas-anim-fade-in 1.3s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `scaleX(${0.2 + 0.8 * t})`, filter: `contrast(${1 + (1 - t) * 0.25})` }
-      },
-    }),
-    a({
-      id: 'lottie-combo-loop',
-      kind: 'combo',
-      source: 'lottie',
-      label: 'Lottie loop',
-      description: 'Loop orgânico',
-      previewAnimation: 'atlas-anim-float 1.8s ease-in-out infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const wave = Math.sin(p * Math.PI * 2)
-        return { opacity: 1, transform: `translateY(${wave * -5}%) rotate(${wave * 4}deg) scale(${1 + Math.abs(wave) * 0.03})` }
-      },
-    }),
-    a({
-      id: 'lottie-out-fold',
-      kind: 'out',
-      source: 'lottie',
-      label: 'Fold out',
-      description: 'Dobra e some',
-      previewAnimation: 'atlas-anim-pop-out 1.2s ease-in infinite',
-      ffmpegHint: 'zoom-out',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `scaleY(${1 - 0.7 * t}) rotateX(${t * 40}deg)` }
-      },
-    }),
-  )
-
-  // —— tsParticles ——
-  pack.push(
-    a({
-      id: 'tsp-in-burst',
-      kind: 'in',
-      source: 'tsparticles',
-      label: 'Burst',
-      description: 'Explosão de partículas',
-      previewAnimation: 'atlas-anim-pop-in 1.15s ease-out infinite',
-      ffmpegHint: 'zoom-in',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `scale(${0.3 + 0.7 * t})`, filter: `brightness(${1.3 - 0.3 * t})` }
-      },
-    }),
-    a({
-      id: 'tsp-combo-sparkle',
-      kind: 'combo',
-      source: 'tsparticles',
-      label: 'Sparkle',
-      description: 'Cintilação de partículas',
-      previewAnimation: 'atlas-anim-glow 1s ease-in-out infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const twinkle = Math.abs(Math.sin(p * Math.PI * 6))
-        return { opacity: 0.85 + twinkle * 0.15, transform: `scale(${1 + twinkle * 0.04})`, filter: `brightness(${1 + twinkle * 0.2})` }
-      },
-    }),
-    a({
-      id: 'tsp-out-scatter',
-      kind: 'out',
-      source: 'tsparticles',
-      label: 'Scatter',
-      description: 'Espalha e some',
-      previewAnimation: 'atlas-anim-zoom-out 1.2s ease-in infinite',
-      ffmpegHint: 'zoom-out',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `scale(${1 + 0.4 * t}) rotate(${t * 12}deg)`, filter: `blur(${t * 3}px)` }
-      },
-    }),
-    a({
-      id: 'tsp-in-emit',
-      kind: 'in',
-      source: 'tsparticles',
-      label: 'Emit up',
-      description: 'Emissão de baixo pra cima',
-      previewAnimation: 'atlas-anim-slide-up 1.2s ease-out infinite',
-      ffmpegHint: 'slide-up',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `translateY(${(1 - t) * 45}%) scale(${0.85 + 0.15 * t})` }
-      },
-    }),
-  )
-
-  // —— Theatre.js ——
-  pack.push(
-    a({
-      id: 'theatre-in-ease',
-      kind: 'in',
-      source: 'theatre',
-      label: 'Studio ease',
-      description: 'Curva de cena Theatre',
-      previewAnimation: 'atlas-anim-slide-up 1.35s cubic-bezier(0.22,1,0.36,1) infinite',
-      ffmpegHint: 'slide-up',
-      css: (p) => {
-        const t = 1 - (1 - clamp01(p)) ** 3
-        return { opacity: t, transform: `translateY(${(1 - t) * 28}%) scale(${0.94 + 0.06 * t})` }
-      },
-    }),
-    a({
-      id: 'theatre-in-hold',
-      kind: 'in',
-      source: 'theatre',
-      label: 'Hold reveal',
-      description: 'Hold + reveal',
-      previewAnimation: 'atlas-anim-fade-in 1.5s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = p < 0.25 ? 0 : easeOutCubic((p - 0.25) / 0.75)
-        return { opacity: t, transform: `translateY(${(1 - t) * 14}%)` }
-      },
-    }),
-    a({
-      id: 'theatre-combo-sequence',
-      kind: 'combo',
-      source: 'theatre',
-      label: 'Sequence',
-      description: 'Sequência de chave',
-      previewAnimation: 'atlas-anim-float 2s ease-in-out infinite',
-      ffmpegHint: 'none',
-      css: (p) => {
-        const phase = Math.floor(p * 4) % 4
-        const local = p * 4 - phase
-        const bounce = Math.sin(local * Math.PI)
-        const transforms = [
-          `translateY(${-bounce * 4}%)`,
-          `scale(${1 + bounce * 0.05})`,
-          `rotate(${bounce * 3}deg)`,
-          `translateX(${bounce * 3}%)`,
-        ]
-        return { opacity: 1, transform: transforms[phase] }
-      },
-    }),
-    a({
-      id: 'theatre-out-fade-hold',
-      kind: 'out',
-      source: 'theatre',
-      label: 'Fade hold',
-      description: 'Segura e some',
-      previewAnimation: 'atlas-anim-fade-out 1.4s ease-in infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = p < 0.3 ? 0 : easeInCubic((p - 0.3) / 0.7)
-        return { opacity: 1 - t, transform: 'none' }
-      },
-    }),
-  )
-
-  // —— Three.js ——
-  pack.push(
-    a({
-      id: 'three-in-orbit',
-      kind: 'in',
-      source: 'three',
-      label: 'Orbit in',
-      description: 'Órbita 3D',
-      previewAnimation: 'atlas-anim-spin-in 1.3s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return {
-          opacity: t,
-          transform: `perspective(800px) rotateY(${(1 - t) * -55}deg) translateZ(${(1 - t) * -80}px)`,
-        }
-      },
-    }),
-    a({
-      id: 'three-in-flip',
-      kind: 'in',
-      source: 'three',
-      label: 'Flip X',
-      description: 'Flip no eixo X',
-      previewAnimation: 'atlas-anim-spin-in 1.2s ease-out infinite',
-      ffmpegHint: 'fade',
-      css: (p) => {
-        const t = easeOutCubic(p)
-        return { opacity: t, transform: `perspective(700px) rotateX(${(1 - t) * 70}deg)` }
-      },
-    }),
-    a({
-      id: 'three-combo-spin',
-      kind: 'combo',
-      source: 'three',
-      label: 'Y spin',
-      description: 'Rotação contínua Y',
-      previewAnimation: 'atlas-anim-sway 2s linear infinite',
-      ffmpegHint: 'none',
-      css: (p) => ({ opacity: 1, transform: `perspective(900px) rotateY(${p * 360}deg)` }),
-    }),
-    a({
-      id: 'three-out-dive',
-      kind: 'out',
-      source: 'three',
-      label: 'Dive out',
-      description: 'Mergulha no Z',
-      previewAnimation: 'atlas-anim-zoom-out 1.2s ease-in infinite',
-      ffmpegHint: 'zoom-out',
-      css: (p) => {
-        const t = easeInCubic(p)
-        return { opacity: 1 - t, transform: `perspective(800px) translateZ(${t * -160}px) scale(${1 - 0.2 * t})` }
-      },
-    }),
-  )
-
-  return pack
+/** Aliases para manter compatibilidade com projetos e templates de texto existentes. */
+const LEGACY_ANIMATION_ALIASES: Record<string, string> = {
+  'anime-in-elastic': 'in-pop',
+  'anime-in-bounce': 'in-bounce',
+  'anime-in-stagger-skew': 'in-slide-left',
+  'anime-out-shrink': 'out-pop',
+  'anime-combo-wobble': 'combo-wobble',
+  'gsap-in-back': 'in-pop',
+  'gsap-in-power4': 'in-slide-up',
+  'gsap-in-expo': 'in-zoom',
+  'gsap-out-flip': 'out-flip',
+  'gsap-combo-stagger-pulse': 'combo-zoom-bounce',
+  'motion-in-spring': 'in-pop',
+  'motion-in-layout': 'in-slide-up',
+  'motion-out-soft': 'out-fade',
+  'motion-combo-breathe': 'combo-pulse',
+  'bits-in-blur': 'in-blur',
+  'bits-in-glitch': 'in-glitch',
+  'bits-in-decrypt': 'in-glitch',
+  'bits-combo-shiny': 'combo-glow',
+  'rb-in-word': 'in-slide-up',
+  'rb-in-char-scale': 'in-zoom',
+  'rb-out-blur': 'out-blur',
+  'rb-combo-typewriter': 'combo-pulse',
+  'rt-in-wipe': 'in-slide-right',
+  'rt-in-clock': 'in-spin',
+  'rt-out-pixel': 'out-blur',
+  'rt-combo-crosszoom': 'combo-zoom-bounce',
+  'gl-in-ripple': 'in-zoom',
+  'gl-in-dreamy': 'in-blur',
+  'gl-out-melt': 'out-slide-down',
+  'gl-combo-glitch': 'combo-glitch',
+  'pixi-in-glow': 'in-fade',
+  'pixi-in-rgb': 'in-glitch',
+  'pixi-combo-crt': 'combo-glitch',
+  'pixi-out-zoomblur': 'out-blur',
+  'lottie-in-morph': 'in-pop',
+  'lottie-in-draw': 'in-fade',
+  'lottie-combo-loop': 'combo-float',
+  'lottie-out-fold': 'out-flip',
+  'tsp-in-burst': 'in-zoom',
+  'tsp-combo-sparkle': 'combo-glow',
+  'tsp-out-scatter': 'out-zoom',
+  'tsp-in-emit': 'in-slide-up',
+  'theatre-in-ease': 'in-fade',
+  'theatre-in-hold': 'in-slide-up',
+  'theatre-combo-sequence': 'combo-pulse',
+  'theatre-out-fade-hold': 'out-fade',
+  'three-in-orbit': 'in-flip',
+  'three-in-flip': 'in-flip',
+  'three-combo-spin': 'combo-spin-3d',
+  'three-out-dive': 'out-zoom',
+  'combo-sway': 'combo-pendulum-1',
 }
-
-export const EDITOR_ANIMATIONS: EditorAnimationDef[] = [
-  ...BASE_ANIMATIONS,
-  ...buildLibraryAnimationPack(),
-]
 
 export function editorAnimationById(id: string | null | undefined): EditorAnimationDef | undefined {
   if (!id) return undefined
-  return EDITOR_ANIMATIONS.find((item) => item.id === id)
+  const canonical = LEGACY_ANIMATION_ALIASES[id] ?? id
+  return EDITOR_ANIMATIONS.find((item) => item.id === canonical)
 }
 
 export function editorAnimationsByKind(kind: EditorAnimationKind): EditorAnimationDef[] {
@@ -1099,8 +701,6 @@ export function resolveAnimationStyle(
     style = compose(style, outDef.css((local - (duration - outDur)) / outDur))
   } else if (comboDef) {
     const midStart = inDur
-    const midEnd = duration - outDur
-    const midLen = Math.max(0.001, midEnd - midStart)
     const midLocal = Math.max(0, local - midStart)
     const progress = (midLocal % 1.5) / 1.5
     style = compose(style, comboDef.css(progress))

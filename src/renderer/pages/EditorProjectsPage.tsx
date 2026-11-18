@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
+  Check,
   Film,
   FolderOpen,
+  GripVertical,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -141,6 +143,10 @@ export function EditorProjectsPage() {
 
   const [renaming, setRenaming] = useState<EditorProject | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [renameChannelId, setRenameChannelId] = useState('')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [draggingIds, setDraggingIds] = useState<string[]>([])
+  const [dropTargetChannelId, setDropTargetChannelId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<EditorProject | null>(null)
   const [deletingGroup, setDeletingGroup] = useState<SingerGroup | null>(null)
   const [menuId, setMenuId] = useState<string | null>(null)
@@ -188,6 +194,7 @@ export function EditorProjectsPage() {
     if (groupId && projects && !groups.some((group) => group.id === groupId)) {
       setGroupId(null)
     }
+    setSelectedIds([])
   }, [groupId, groups, projects])
 
   function openCreate() {
@@ -257,17 +264,51 @@ export function EditorProjectsPage() {
       push('Informe o nome do projeto.', 'error')
       return
     }
+    const nextChannelId = renameChannelId.trim() || null
     try {
-      const updated = await api.editor.update(renaming.id, { name })
+      const updated = await api.editor.update(renaming.id, { name, channelId: nextChannelId })
       if (updated) {
         setProjects((current) =>
           (current ?? []).map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
         )
       }
       setRenaming(null)
-      push('Projeto renomeado.', 'success')
+      push('Projeto atualizado.', 'success')
     } catch (error) {
-      pushError(error, 'Falha ao renomear o projeto')
+      pushError(error, 'Falha ao atualizar o projeto')
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
+  }
+
+  async function assignProjectsToChannel(projectIds: string[], targetChannelId: string | null, targetLabel: string) {
+    if (projectIds.length === 0) return
+    setBusy(true)
+    try {
+      const updatedList: EditorProject[] = []
+      for (const id of projectIds) {
+        const updated = await api.editor.update(id, { channelId: targetChannelId })
+        if (updated) updatedList.push(updated)
+      }
+      const map = new Map(updatedList.map((item) => [item.id, item]))
+      setProjects((current) =>
+        (current ?? []).map((item) => (map.has(item.id) ? { ...item, ...map.get(item.id)! } : item)),
+      )
+      setSelectedIds([])
+      setDraggingIds([])
+      setDropTargetChannelId(null)
+      push(
+        updatedList.length === 1
+          ? `Projeto vinculado a ${targetLabel}.`
+          : `${updatedList.length} projetos vinculados a ${targetLabel}.`,
+        'success',
+      )
+    } catch (error) {
+      pushError(error, 'Falha ao vincular projetos ao cantor')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -426,18 +467,143 @@ export function EditorProjectsPage() {
         </>
       ) : (
         <>
-          <p className="mb-4 text-xs text-muted-2">
-            {activeGroup!.projects.length}{' '}
-            {activeGroup!.projects.length === 1 ? 'projeto' : 'projetos'}
-          </p>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-2">
+              {activeGroup!.projects.length}{' '}
+              {activeGroup!.projects.length === 1 ? 'projeto' : 'projetos'}
+              {selectedIds.length > 0 ? ` · ${selectedIds.length} selecionado(s)` : ' · arraste ou selecione para mover de cantor'}
+            </p>
+            <div className="flex items-center gap-2">
+              {activeGroup!.projects.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedIds(
+                      selectedIds.length === activeGroup!.projects.length
+                        ? []
+                        : activeGroup!.projects.map((item) => item.id),
+                    )
+                  }
+                  className="text-xs font-medium text-accent hover:underline"
+                >
+                  {selectedIds.length === activeGroup!.projects.length ? 'Limpar seleção' : 'Selecionar todos'}
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {channels.length > 0 ? (
+            <div className="mb-4 rounded-xl border border-border-soft bg-elevated/60 p-2.5">
+              <p className="mb-2 text-[11px] font-medium text-muted">
+                {selectedIds.length > 0
+                  ? 'Arraste os selecionados ou clique no cantor para vincular:'
+                  : 'Arraste qualquer projeto para um cantor abaixo:'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {channels.map((channel) => {
+                  const isCurrent = activeGroup!.id === channel.id
+                  const isOver = dropTargetChannelId === channel.id
+                  return (
+                    <button
+                      key={channel.id}
+                      type="button"
+                      disabled={busy || (selectedIds.length === 0 && draggingIds.length === 0) || isCurrent}
+                      onDragOver={(event) => {
+                        if (isCurrent) return
+                        event.preventDefault()
+                        setDropTargetChannelId(channel.id)
+                      }}
+                      onDragLeave={() => {
+                        if (dropTargetChannelId === channel.id) setDropTargetChannelId(null)
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault()
+                        if (isCurrent) return
+                        const ids = draggingIds.length > 0 ? draggingIds : selectedIds
+                        void assignProjectsToChannel(ids, channel.id, channel.name)
+                      }}
+                      onClick={() => {
+                        if (selectedIds.length > 0 && !isCurrent) {
+                          void assignProjectsToChannel(selectedIds, channel.id, channel.name)
+                        }
+                      }}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+                        isOver
+                          ? 'scale-[1.03] border-accent bg-accent-subtle text-accent ring-2 ring-accent/40'
+                          : isCurrent
+                            ? 'border-border-soft bg-surface/50 text-muted-2 opacity-50'
+                            : selectedIds.length > 0
+                              ? 'border-border bg-surface text-text hover:border-accent/60 hover:bg-accent-subtle/40'
+                              : 'border-border-soft bg-surface text-muted',
+                      )}
+                    >
+                      <UserRound className="h-3.5 w-3.5" />
+                      {channel.name}
+                    </button>
+                  )
+                })}
+                {activeGroup!.id !== OTHER_GROUP_ID ? (
+                  <button
+                    type="button"
+                    disabled={busy || (selectedIds.length === 0 && draggingIds.length === 0)}
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      setDropTargetChannelId(OTHER_GROUP_ID)
+                    }}
+                    onDragLeave={() => {
+                      if (dropTargetChannelId === OTHER_GROUP_ID) setDropTargetChannelId(null)
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      const ids = draggingIds.length > 0 ? draggingIds : selectedIds
+                      void assignProjectsToChannel(ids, null, 'Sem cantor')
+                    }}
+                    onClick={() => {
+                      if (selectedIds.length > 0) {
+                        void assignProjectsToChannel(selectedIds, null, 'Sem cantor')
+                      }
+                    }}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+                      dropTargetChannelId === OTHER_GROUP_ID
+                        ? 'scale-[1.03] border-accent bg-accent-subtle text-accent ring-2 ring-accent/40'
+                        : selectedIds.length > 0
+                          ? 'border-border bg-surface text-text hover:border-accent/60'
+                          : 'border-border-soft bg-surface text-muted',
+                    )}
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    Sem cantor
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {activeGroup!.projects.map((project) => {
               const menuOpen = menuId === project.id
+              const isSelected = selectedIds.includes(project.id)
               return (
                 <Card
                   key={project.id}
                   padding="none"
-                  className="group/card overflow-hidden transition-colors hover:border-border-strong"
+                  draggable
+                  onDragStart={(event) => {
+                    const ids = isSelected && selectedIds.length > 0 ? selectedIds : [project.id]
+                    setDraggingIds(ids)
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', ids.join(','))
+                  }}
+                  onDragEnd={() => {
+                    setDraggingIds([])
+                    setDropTargetChannelId(null)
+                  }}
+                  className={cn(
+                    'group/card overflow-hidden transition-colors hover:border-border-strong',
+                    isSelected && 'border-accent/70 ring-2 ring-accent/40',
+                  )}
                 >
                   <div className="relative">
                     <button
@@ -455,6 +621,28 @@ export function EditorProjectsPage() {
                         </span>
                       </div>
                     </button>
+                    <button
+                      type="button"
+                      title={isSelected ? 'Desmarcar projeto' : 'Selecionar projeto'}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        toggleSelected(project.id)
+                      }}
+                      className={cn(
+                        'absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg border backdrop-blur-sm transition-all',
+                        isSelected
+                          ? 'border-accent bg-accent text-on-accent opacity-100'
+                          : 'border-white/25 bg-black/55 text-white opacity-0 hover:border-white/60 group-hover/card:opacity-100',
+                      )}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <span
+                      title="Arraste para vincular a um cantor"
+                      className="pointer-events-none absolute left-10 top-2 z-10 flex h-7 items-center rounded-lg bg-black/55 px-1.5 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover/card:opacity-100"
+                    >
+                      <GripVertical className="h-3.5 w-3.5" />
+                    </span>
                     <button
                       type="button"
                       title="Excluir projeto"
@@ -492,7 +680,7 @@ export function EditorProjectsPage() {
                         <MoreHorizontal className="h-4 w-4" />
                       </button>
                       {menuOpen ? (
-                        <div className="absolute right-0 z-10 mt-1 w-40 overflow-hidden rounded-xl border border-border bg-elevated shadow-card">
+                        <div className="absolute right-0 z-10 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated shadow-card">
                           <button
                             type="button"
                             className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-text hover:bg-hover"
@@ -500,10 +688,11 @@ export function EditorProjectsPage() {
                               setMenuId(null)
                               setRenaming(project)
                               setRenameValue(displayName(project))
+                              setRenameChannelId(project.channelId ?? '')
                             }}
                           >
                             <Pencil className="h-3.5 w-3.5" />
-                            Renomear
+                            Editar / Cantor
                           </button>
                           <button
                             type="button"
@@ -628,7 +817,7 @@ export function EditorProjectsPage() {
 
       <Modal
         open={Boolean(renaming)}
-        title="Renomear projeto"
+        title="Editar projeto e vincular cantor"
         onClose={() => setRenaming(null)}
         footer={
           <>
@@ -639,18 +828,38 @@ export function EditorProjectsPage() {
           </>
         }
       >
-        <Input
-          id="editor-project-rename"
-          label="Nome do projeto"
-          value={renameValue}
-          onChange={(event) => setRenameValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              void saveRename()
-            }
-          }}
-        />
+        <div className="space-y-4">
+          <Input
+            id="editor-project-rename"
+            label="Nome do projeto"
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void saveRename()
+              }
+            }}
+          />
+          <div>
+            <label htmlFor="editor-project-edit-channel" className="mb-1.5 block text-xs font-medium text-muted">
+              Cantor vinculado
+            </label>
+            <select
+              id="editor-project-edit-channel"
+              value={renameChannelId}
+              onChange={(event) => setRenameChannelId(event.target.value)}
+              className="h-11 w-full rounded-xl border border-border bg-input px-3.5 text-sm text-text focus:border-accent/50 focus:outline-none"
+            >
+              <option value="">Sem cantor</option>
+              {channels.map((channel) => (
+                <option key={channel.id} value={channel.id}>
+                  {channel.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </Modal>
 
       <ConfirmDialog
