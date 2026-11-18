@@ -124,6 +124,12 @@ export const EDITOR_DEFAULT_CLIP_ANIMATION: EditorClipAnimation = {
   outDuration: 0.6,
 }
 
+export type EditorClipTransition = {
+  id: string
+  /** Duração em segundos. */
+  duration: number
+}
+
 export type EditorClip = {
   id: string
   assetId: string
@@ -152,6 +158,8 @@ export type EditorClip = {
   effects: EditorClipEffect[]
   /** Animações de entrada/saída/combinação (vídeo/imagem/texto). */
   animation: EditorClipAnimation
+  /** Transição de saída entre este clipe e o próximo na faixa. */
+  transitionOut?: EditorClipTransition | null
   /** `effect` = bloco de efeito; `text` = modelo de texto. */
   role: EditorClipRole
   /** Id do catálogo quando `role === 'effect'`. */
@@ -287,6 +295,8 @@ export function isEditorExportResolution(value: unknown): value is EditorExportR
 export type EditorExportRequest = {
   projectId: string
   resolution: EditorExportResolution
+  videoOnly?: boolean
+  maxQuality?: boolean
 }
 
 export type EditorMakeShortRequest = {

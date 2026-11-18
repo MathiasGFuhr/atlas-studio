@@ -6,40 +6,55 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
-import { AlertTriangle, Sparkles, Type, VolumeX } from 'lucide-react'
+import { AlertTriangle, Sparkles, Type, VolumeX, X } from 'lucide-react'
 import { editorEffectById } from '@shared/editor/effectsCatalog'
 import { editorTextTemplateById } from '@shared/editor/textTemplatesCatalog'
+import { editorTransitionById } from '@shared/editor/transitionsCatalog'
 import { formatDuration, type EditorAsset, type EditorClip, type EditorWaveform } from '@shared/editor/types'
 import { clipDuration, isEffectClip, isTextClip } from '@shared/editor/timelineOps'
 import { loadWaveform } from '../../lib/editor/editorMedia'
 import { cn } from '../../lib/utils'
 
-const MAX_THUMB_SLOTS = 240
+const MAX_THUMB_SLOTS = 180
 const MIN_DURATION = 0.001
 
-function ThumbStrip({ asset, clip, width, height, zoom }: {
-  asset: EditorAsset
-  clip: EditorClip
+const ThumbStrip = memo(function ThumbStrip({
+  thumbsUrl,
+  thumbsCount,
+  thumbsTileWidth,
+  assetDuration,
+  isImage,
+  inPoint,
+  width,
+  height,
+  zoom,
+}: {
+  thumbsUrl: string
+  thumbsCount: number
+  thumbsTileWidth: number
+  assetDuration: number
+  isImage: boolean
+  inPoint: number
   width: number
   height: number
   zoom: number
 }) {
-  if (!asset.thumbsUrl || asset.thumbsCount < 1 || asset.thumbsTileWidth < 1) return null
+  if (!thumbsUrl || thumbsCount < 1 || thumbsTileWidth < 1) return null
   const scale = height / 72
-  let tile = Math.max(8, asset.thumbsTileWidth * scale)
+  let tile = Math.max(10, thumbsTileWidth * scale)
   const slots = Math.ceil(width / tile)
   if (slots > MAX_THUMB_SLOTS) tile = width / MAX_THUMB_SLOTS
   const count = Math.min(MAX_THUMB_SLOTS, Math.ceil(width / tile))
-  const stripWidth = asset.thumbsCount * asset.thumbsTileWidth * scale
-  const tileDrawn = asset.thumbsTileWidth * scale
+  const stripWidth = thumbsCount * thumbsTileWidth * scale
+  const tileDrawn = thumbsTileWidth * scale
   const items: ReactNode[] = []
   for (let index = 0; index < count; index += 1) {
     const x = index * tile
-    const time = clip.inPoint + (x + tile / 2) / zoom
+    const time = inPoint + (x + tile / 2) / zoom
     const frame =
-      asset.kind === 'image' || asset.duration <= 0
+      isImage || assetDuration <= 0
         ? 0
-        : Math.max(0, Math.min(asset.thumbsCount - 1, Math.floor((time / asset.duration) * asset.thumbsCount)))
+        : Math.max(0, Math.min(thumbsCount - 1, Math.floor((time / assetDuration) * thumbsCount)))
     items.push(
       <div
         key={index}
@@ -47,7 +62,7 @@ function ThumbStrip({ asset, clip, width, height, zoom }: {
         style={{
           left: x,
           width: Math.ceil(tile),
-          backgroundImage: `url("${asset.thumbsUrl}")`,
+          backgroundImage: `url("${thumbsUrl}")`,
           backgroundSize: `${stripWidth}px ${height}px`,
           backgroundPosition: `-${frame * tileDrawn}px 0`,
           backgroundRepeat: 'no-repeat',
@@ -56,11 +71,22 @@ function ThumbStrip({ asset, clip, width, height, zoom }: {
     )
   }
   return <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-80">{items}</div>
-}
+})
 
-function Waveform({ asset, clip, width, height }: {
+const Waveform = memo(function Waveform({
+  asset,
+  inPoint,
+  outPoint,
+  volume,
+  muted,
+  width,
+  height,
+}: {
   asset: EditorAsset
-  clip: EditorClip
+  inPoint: number
+  outPoint: number
+  volume: number
+  muted: boolean
   width: number
   height: number
 }) {
@@ -83,28 +109,30 @@ function Waveform({ asset, clip, width, height }: {
     const ratio = Math.min(2, window.devicePixelRatio || 1)
     const drawWidth = Math.min(4096, Math.max(1, Math.floor(width * ratio)))
     const drawHeight = Math.max(1, Math.floor(height * ratio))
-    canvas.width = drawWidth
-    canvas.height = drawHeight
+    if (canvas.width !== drawWidth) canvas.width = drawWidth
+    if (canvas.height !== drawHeight) canvas.height = drawHeight
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.clearRect(0, 0, drawWidth, drawHeight)
-    ctx.fillStyle = 'rgba(52, 211, 153, 0.85)'
+    ctx.fillStyle = muted ? 'rgba(148, 163, 184, 0.35)' : 'rgba(52, 211, 153, 0.85)'
     const mid = drawHeight / 2
     const peaks = waveform.peaks
     const pps = Math.max(1, waveform.peaksPerSecond)
-    const duration = Math.max(MIN_DURATION, clip.outPoint - clip.inPoint)
-    for (let x = 0; x < drawWidth; x += 1) {
-      const local = clip.inPoint + (x / drawWidth) * duration
+    const duration = Math.max(MIN_DURATION, outPoint - inPoint)
+    const volScale = Math.min(1.4, Math.max(0.2, volume))
+    const step = drawWidth > 1200 ? 2 : 1
+    for (let x = 0; x < drawWidth; x += step) {
+      const local = inPoint + (x / drawWidth) * duration
       const index = Math.max(0, Math.min(peaks.length - 1, Math.floor(local * pps)))
       const peak = peaks[index] ?? 0
-      const bar = Math.max(1, peak * (drawHeight - 4) * Math.min(1.4, Math.max(0.2, clip.volume)))
-      ctx.fillRect(x, mid - bar / 2, 1, bar)
+      const bar = Math.max(1, peak * (drawHeight - 4) * volScale)
+      ctx.fillRect(x, mid - bar / 2, step, bar)
     }
-  }, [clip, height, waveform, width])
+  }, [height, inPoint, muted, outPoint, volume, waveform, width])
 
   if (!waveform) return null
   return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
-}
+})
 
 export const TimelineClipView = memo(function TimelineClipView({
   clip,
@@ -113,7 +141,9 @@ export const TimelineClipView = memo(function TimelineClipView({
   height,
   selected,
   locked,
+  inView = true,
   onPointerDown,
+  onRemoveTransition,
 }: {
   clip: EditorClip
   asset: EditorAsset | undefined
@@ -121,7 +151,9 @@ export const TimelineClipView = memo(function TimelineClipView({
   height: number
   selected: boolean
   locked: boolean
+  inView?: boolean
   onPointerDown: (event: ReactPointerEvent, clip: EditorClip, mode: 'move' | 'trim-start' | 'trim-end') => void
+  onRemoveTransition?: (clipId: string) => void
 }) {
   const duration = clipDuration(clip)
   const width = Math.max(2, duration * zoom)
@@ -130,6 +162,7 @@ export const TimelineClipView = memo(function TimelineClipView({
   const text = isTextClip(clip)
   const effectDef = effect && clip.effectId ? editorEffectById(clip.effectId) : undefined
   const textTemplate = text && clip.text ? editorTextTemplateById(clip.text.templateId) : undefined
+  const transitionDef = clip.transitionOut ? editorTransitionById(clip.transitionOut.id) : undefined
   const kind = asset?.kind ?? 'video'
   const tone = effect
     ? 'bg-fuchsia-900/75 border-fuchsia-300/40'
@@ -178,11 +211,29 @@ export const TimelineClipView = memo(function TimelineClipView({
           }}
         />
       ) : null}
-      {!effect && !text && asset && kind !== 'audio' ? (
-        <ThumbStrip asset={asset} clip={clip} width={width} height={inner} zoom={zoom} />
+      {inView && !effect && !text && asset && kind !== 'audio' && asset.thumbsUrl ? (
+        <ThumbStrip
+          thumbsUrl={asset.thumbsUrl}
+          thumbsCount={asset.thumbsCount}
+          thumbsTileWidth={asset.thumbsTileWidth}
+          assetDuration={asset.duration}
+          isImage={asset.kind === 'image'}
+          inPoint={clip.inPoint}
+          width={width}
+          height={inner}
+          zoom={zoom}
+        />
       ) : null}
-      {!effect && !text && asset && kind === 'audio' ? (
-        <Waveform asset={asset} clip={clip} width={width} height={inner} />
+      {inView && !effect && !text && asset && kind === 'audio' ? (
+        <Waveform
+          asset={asset}
+          inPoint={clip.inPoint}
+          outPoint={clip.outPoint}
+          volume={clip.volume}
+          muted={clip.muted}
+          width={width}
+          height={inner}
+        />
       ) : null}
 
       {width > 36 ? (
@@ -193,6 +244,31 @@ export const TimelineClipView = memo(function TimelineClipView({
           {!effect && !text && clip.muted ? <VolumeX className="h-3 w-3 shrink-0" /> : null}
           <span className="truncate">{label}</span>
           {width > 120 ? <span className="shrink-0 text-white/60">{formatDuration(duration)}</span> : null}
+        </div>
+      ) : null}
+
+      {clip.transitionOut ? (
+        <div
+          title={`Transição: ${transitionDef?.label ?? clip.transitionOut.id} (${clip.transitionOut.duration.toFixed(1)}s) — clique no × para remover`}
+          onPointerDown={(event) => event.stopPropagation()}
+          className="absolute bottom-1 right-2.5 z-[5] flex max-w-[calc(100%-14px)] items-center gap-1 rounded bg-accent/90 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-on-accent shadow"
+        >
+          {width > 64 ? (
+            <span className="truncate">{transitionDef?.label ?? clip.transitionOut.id}</span>
+          ) : null}
+          {!locked && onRemoveTransition ? (
+            <button
+              type="button"
+              title={`Remover transição ${transitionDef?.label ?? clip.transitionOut.id}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                onRemoveTransition(clip.id)
+              }}
+              className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm hover:bg-black/25"
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          ) : null}
         </div>
       ) : null}
 

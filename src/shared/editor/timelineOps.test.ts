@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   addTrack,
+  adjacentEditPoint,
+  clearAllTransitions,
   clipEnd,
   clipsAt,
   createEmptyTimeline,
   deleteClips,
+  duplicateClips,
   extractShortTimeline,
   findClip,
   findFreeStart,
@@ -16,6 +19,7 @@ import {
   moveTrack,
   normalizeTimeline,
   normalizeWatermarks,
+  setClipTransition,
   snapClipStart,
   splitAt,
   splitClip,
@@ -345,5 +349,64 @@ describe('extractShortTimeline', () => {
   it('retorna null quando nenhum clipe está selecionado', () => {
     const { timeline } = withClips()
     expect(extractShortTimeline(timeline, [])).toBeNull()
+  })
+
+  it('remove transitionOut e fadeOut no corte antecipado', () => {
+    const { timeline: init, a } = withClips()
+    let timeline = updateClip(init, a, { fadeIn: 1, fadeOut: 2 })
+    timeline = setClipTransition(timeline, a, { id: 'fade', duration: 1.5 })
+    timeline = splitClip(timeline, a, 5).timeline
+    const firstHalf = findClip(timeline, a)!
+    const short = extractShortTimeline(timeline, [firstHalf.id])
+    expect(short).not.toBeNull()
+    expect(firstHalf.transitionOut).toBeUndefined()
+    expect(firstHalf.fadeOut).toBe(0)
+  })
+})
+
+describe('splitClip transições e fades', () => {
+  it('mantém transitionOut só na metade direita e limpa fadeOut/fadeIn do corte', () => {
+    const { timeline: init, a } = withClips()
+    let timeline = updateClip(init, a, { fadeIn: 0.8, fadeOut: 1.2 })
+    timeline = setClipTransition(timeline, a, { id: 'fade', duration: 0.6 })
+    const result = splitClip(timeline, a, 4)
+    const left = findClip(result.timeline, a)!
+    const right = findClip(result.timeline, result.rightId!)!
+    expect(left.transitionOut).toBeUndefined()
+    expect(left.fadeIn).toBeCloseTo(0.8, 3)
+    expect(left.fadeOut).toBe(0)
+    expect(right.transitionOut).toEqual({ id: 'fade', duration: 0.6 })
+    expect(right.fadeIn).toBe(0)
+    expect(right.fadeOut).toBeCloseTo(1.2, 3)
+  })
+})
+
+describe('duplicateClips e adjacentEditPoint', () => {
+  it('duplica clipes selecionados no próximo espaço livre da faixa', () => {
+    const { timeline, a } = withClips()
+    const dup = duplicateClips(timeline, [a])
+    expect(dup.clipIds).toHaveLength(1)
+    const copy = findClip(dup.timeline, dup.clipIds[0])!
+    expect(copy.assetId).toBe('asset-a')
+    expect(copy.start).toBe(16)
+    expect(copy.outPoint - copy.inPoint).toBe(10)
+  })
+
+  it('navega entre pontos de corte anteriores e próximos', () => {
+    const { timeline } = withClips()
+    expect(adjacentEditPoint(timeline, 0, 'next')).toBe(10)
+    expect(adjacentEditPoint(timeline, 10, 'next')).toBe(16)
+    expect(adjacentEditPoint(timeline, 16, 'prev')).toBe(10)
+    expect(adjacentEditPoint(timeline, 10, 'prev')).toBe(0)
+  })
+
+  it('clearAllTransitions remove transições apenas de faixas destravadas', () => {
+    const { timeline: init, a, b } = withClips()
+    let timeline = setClipTransition(init, a, { id: 'fade', duration: 0.5 })
+    timeline = setClipTransition(timeline, b, { id: 'wipe-left', duration: 0.5 })
+    const cleared = clearAllTransitions(timeline)
+    expect(findClip(cleared, a)!.transitionOut).toBeUndefined()
+    expect(findClip(cleared, b)!.transitionOut).toBeUndefined()
+    expect(clearAllTransitions(cleared)).toBe(cleared)
   })
 })

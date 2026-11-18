@@ -1,11 +1,11 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
@@ -95,33 +95,48 @@ function clipIdsInClientRect(
   return ids
 }
 
-function Playhead({ store, zoom, onScrubStart }: {
+const Playhead = memo(function Playhead({
+  store,
+  zoom,
+  onScrubStart,
+}: {
   store: PlaybackStore
   zoom: number
   onScrubStart: (event: ReactPointerEvent) => void
 }) {
-  const time = useSyncExternalStore(store.subscribe, store.getTime)
+  const lineRef = useRef<HTMLDivElement>(null)
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
+
+  useLayoutEffect(() => {
+    const update = () => {
+      if (lineRef.current) {
+        lineRef.current.style.transform = `translateX(${store.getTime() * zoomRef.current}px)`
+      }
+    }
+    update()
+    return store.subscribe(update)
+  }, [store, zoom])
+
   return (
     <div
-      className="pointer-events-none absolute bottom-0 top-0 z-30 overflow-hidden"
+      className="pointer-events-none absolute bottom-0 top-0 z-[45] overflow-hidden"
       style={{ left: TIMELINE_HEADER_WIDTH, right: 0 }}
     >
-      <div
-        className="absolute bottom-0 top-0"
-        style={{ transform: `translateX(${time * zoom}px)` }}
-      >
-        {/* Área larga em toda a altura — arrasta o playhead de qualquer ponto da linha */}
+      <div ref={lineRef} className="absolute bottom-0 top-0 will-change-transform">
+        {/* Alça de arraste na régua (sticky no topo): nunca bloqueia clipes nem trim abaixo */}
         <div
           onPointerDown={onScrubStart}
           title="Arrastar playhead"
-          className="pointer-events-auto absolute -left-2 bottom-0 top-0 z-10 w-4 cursor-ew-resize"
-        />
-        <div className="pointer-events-none absolute -left-[6px] top-0 h-3.5 w-3 rounded-b-sm bg-accent" />
+          className="pointer-events-auto sticky top-0 z-10 -ml-2 h-7 w-4 cursor-ew-resize"
+        >
+          <div className="mx-auto h-3.5 w-3 rounded-b-sm bg-accent shadow-sm" />
+        </div>
         <div className="pointer-events-none absolute bottom-0 left-0 top-0 w-px bg-accent" />
       </div>
     </div>
   )
-}
+})
 
 function Ruler({ zoom, from, to }: { zoom: number; from: number; to: number }) {
   const major = RULER_STEPS.find((step) => step * zoom >= 80) ?? RULER_STEPS[RULER_STEPS.length - 1]
@@ -281,6 +296,7 @@ export function Timeline({
   onDropAsset,
   onDropFiles,
   onDropEffect,
+  onRemoveTransition,
 }: {
   timeline: EditorTimeline
   assets: Map<string, EditorAsset>
@@ -294,6 +310,7 @@ export function Timeline({
   onDropAsset: (assetId: string, trackId: string | null, time: number) => void
   onDropFiles: (files: File[], trackId: string | null, time: number) => void
   onDropEffect?: (effectId: string, trackId: string | null, time: number) => void
+  onRemoveTransition?: (clipId: string) => void
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -310,17 +327,24 @@ export function Timeline({
   const [scrollLeft, setScrollLeft] = useState(0)
   const [viewWidth, setViewWidth] = useState(800)
   const [dropHint, setDropHint] = useState<DropHint | null>(null)
+  const [snapLineTime, setSnapLineTime] = useState<number | null>(null)
   const [reorderDragId, setReorderDragId] = useState<string | null>(null)
   const [reorderHint, setReorderHint] = useState<{ overId: string; edge: 'before' | 'after' } | null>(null)
   const scrollRafRef = useRef(0)
   const pendingScrollLeftRef = useRef(0)
 
+  const timelineRef = useRef(timeline)
+  timelineRef.current = timeline
+  const selectedIdsRef = useRef(selectedIds)
+  selectedIdsRef.current = selectedIds
   const zoomRef = useRef(zoom)
   zoomRef.current = zoom
   const snappingRef = useRef(snapping)
   snappingRef.current = snapping
   const onCommitRef = useRef(onCommit)
   onCommitRef.current = onCommit
+  const onSelectRef = useRef(onSelect)
+  onSelectRef.current = onSelect
 
   const view = draft ?? timeline
   const duration = timelineDuration(view)
@@ -368,25 +392,34 @@ export function Timeline({
     return clientY >= rect.top && clientY < rect.bottom
   }, [])
 
-  // Ctrl + roda = zoom ancorado no mouse. Precisa de listener nativo para poder cancelar o scroll.
+  // Ctrl + roda = zoom ancorado no mouse; Shift + roda = scroll horizontal.
   useEffect(() => {
     const node = scrollerRef.current
     if (!node) return
     const onWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey) return
-      event.preventDefault()
-      const rect = node.getBoundingClientRect()
-      const visible = Math.max(1, node.clientWidth - TIMELINE_HEADER_WIDTH)
-      const offset = Math.min(visible, Math.max(0, event.clientX - rect.left - TIMELINE_HEADER_WIDTH))
-      const time = (node.scrollLeft + offset) / zoomRef.current
-      const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15
-      const next = Math.max(TIMELINE_MIN_ZOOM, Math.min(TIMELINE_MAX_ZOOM, zoomRef.current * factor))
-      if (next === zoomRef.current) return
-      anchorRef.current = { time, offset }
-      onZoomChange(next)
+      if (event.ctrlKey) {
+        event.preventDefault()
+        const rect = node.getBoundingClientRect()
+        const visible = Math.max(1, node.clientWidth - TIMELINE_HEADER_WIDTH)
+        const offset = Math.min(visible, Math.max(0, event.clientX - rect.left - TIMELINE_HEADER_WIDTH))
+        const time = (node.scrollLeft + offset) / zoomRef.current
+        const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15
+        const next = Math.max(TIMELINE_MIN_ZOOM, Math.min(TIMELINE_MAX_ZOOM, zoomRef.current * factor))
+        if (next === zoomRef.current) return
+        anchorRef.current = { time, offset }
+        onZoomChange(next)
+        return
+      }
+      if (event.shiftKey && Math.abs(event.deltaY) > 0) {
+        event.preventDefault()
+        node.scrollLeft = Math.max(0, node.scrollLeft + event.deltaY)
+      }
     }
     node.addEventListener('wheel', onWheel, { passive: false })
-    return () => node.removeEventListener('wheel', onWheel)
+    return () => {
+      node.removeEventListener('wheel', onWheel)
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
+    }
   }, [onZoomChange])
 
   useLayoutEffect(() => {
@@ -438,21 +471,15 @@ export function Timeline({
       const up = () => {
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
+        window.removeEventListener('pointercancel', up)
+        window.removeEventListener('blur', up)
       }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
+      window.addEventListener('pointercancel', up)
+      window.addEventListener('blur', up)
     },
     [store, timeFromClientX],
-  )
-
-  /** Clique na área das faixas (não no cabeçalho) leva o playhead até o mouse. */
-  const startScrubInLane = useCallback(
-    (event: ReactPointerEvent) => {
-      const rect = contentRef.current?.getBoundingClientRect()
-      if (!rect || event.clientX < rect.left + TIMELINE_HEADER_WIDTH) return
-      startScrub(event)
-    },
-    [startScrub],
   )
 
   /** Arrastar a área vazia embaixo das faixas move a timeline horizontalmente. */
@@ -470,24 +497,34 @@ export function Timeline({
     const startScroll = node.scrollLeft
     let panning = false
     const target = event.currentTarget
-    target.setPointerCapture(event.pointerId)
+    try {
+      target.setPointerCapture(event.pointerId)
+    } catch {
+      /* ignore */
+    }
 
     const move = (e: PointerEvent) => {
       if (!panning && Math.abs(e.clientX - startX) < DRAG_THRESHOLD_PX) return
       panning = true
       node.scrollLeft = Math.max(0, startScroll - (e.clientX - startX))
     }
-    const up = (e: PointerEvent) => {
+    const up = (e: Event) => {
       try {
-        target.releasePointerCapture(e.pointerId)
+        if ('pointerId' in e && typeof (e as PointerEvent).pointerId === 'number') {
+          target.releasePointerCapture((e as PointerEvent).pointerId)
+        }
       } catch {
         /* already released */
       }
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      window.removeEventListener('blur', up)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    window.addEventListener('blur', up)
   }, [store, timeFromClientX])
 
   const contentPointFromClient = useCallback((clientX: number, clientY: number) => {
@@ -506,7 +543,7 @@ export function Timeline({
 
       const additive = event.shiftKey || event.ctrlKey || event.metaKey
       const origin = contentPointFromClient(event.clientX, event.clientY)
-      const baseIds = additive ? [...selectedIds] : []
+      const baseIds = additive ? [...selectedIdsRef.current] : []
       marqueeActiveRef.current = false
       marqueeRef.current = {
         x1: origin.x,
@@ -534,37 +571,42 @@ export function Timeline({
         marqueeRef.current = next
         setMarquee(next)
 
-        const left = Math.min(e.clientX, event.clientX)
-        const right = Math.max(e.clientX, event.clientX)
-        const top = Math.min(e.clientY, event.clientY)
-        const bottom = Math.max(e.clientY, event.clientY)
+        const rootRect = root.getBoundingClientRect()
+        const left = rootRect.left + Math.min(next.x1, next.x2)
+        const right = rootRect.left + Math.max(next.x1, next.x2)
+        const top = rootRect.top + Math.min(next.y1, next.y2)
+        const bottom = rootRect.top + Math.max(next.y1, next.y2)
         const hit = clipIdsInClientRect(root, { left, top, right, bottom })
         if (next.additive) {
           const merged = new Set(next.baseIds)
           for (const id of hit) merged.add(id)
-          onSelect([...merged])
+          onSelectRef.current([...merged])
         } else {
-          onSelect(hit)
+          onSelectRef.current(hit)
         }
       }
 
-      const up = (e: PointerEvent) => {
+      const up = (e: Event) => {
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
+        window.removeEventListener('pointercancel', up)
+        window.removeEventListener('blur', up)
         const wasMarquee = marqueeActiveRef.current
         marqueeRef.current = null
         marqueeActiveRef.current = false
         setMarquee(null)
         if (!wasMarquee) {
-          if (!additive) onSelect([])
-          store.seek(timeFromClientX(e.clientX))
+          if (!additive) onSelectRef.current([])
+          if (e instanceof PointerEvent) store.seek(timeFromClientX(e.clientX))
         }
       }
 
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
+      window.addEventListener('pointercancel', up)
+      window.addEventListener('blur', up)
     },
-    [contentPointFromClient, onSelect, selectedIds, store, timeFromClientX],
+    [contentPointFromClient, store, timeFromClientX],
   )
 
   const handleClipPointerDown = useCallback(
@@ -572,23 +614,30 @@ export function Timeline({
       if (event.button !== 0) return
       event.stopPropagation()
       store.pause()
-      store.seek(timeFromClientX(event.clientX))
+      const currentSelected = selectedIdsRef.current
       if (event.shiftKey || event.ctrlKey || event.metaKey) {
-        onSelect(selectedIds.includes(clip.id) ? selectedIds.filter((id) => id !== clip.id) : [...selectedIds, clip.id])
+        onSelectRef.current(
+          currentSelected.includes(clip.id)
+            ? currentSelected.filter((id) => id !== clip.id)
+            : [...currentSelected, clip.id],
+        )
         return
       }
-      if (!selectedIds.includes(clip.id) || selectedIds.length > 1) onSelect([clip.id])
-      const track = findTrack(timeline, clip.trackId)
+      if (!currentSelected.includes(clip.id) || currentSelected.length > 1) {
+        onSelectRef.current([clip.id])
+      }
+      const baseTimeline = timelineRef.current
+      const track = findTrack(baseTimeline, clip.trackId)
       if (!track || track.locked) return
       event.preventDefault()
 
       dragRef.current = {
         mode,
         origin: clip,
-        base: timeline,
+        base: baseTimeline,
         pointerX: event.clientX,
         pointerY: event.clientY,
-        candidates: snapCandidates(timeline, clip.id, [store.getTime()]),
+        candidates: snapCandidates(baseTimeline, clip.id, [store.getTime()]),
         started: false,
         newTrackAbove: false,
       }
@@ -609,24 +658,35 @@ export function Timeline({
         const threshold = SNAP_PX / currentZoom
         const snap = snappingRef.current
         let next: EditorTimeline
+        let activeSnap: number | null = null
         if (drag.mode === 'move') {
-          let start = Math.max(0, drag.origin.start + dx)
-          if (snap) start = snapClipStart(start, clipDuration(drag.origin), drag.candidates, threshold)
+          const rawStart = Math.max(0, drag.origin.start + dx)
+          const dur = clipDuration(drag.origin)
+          const start = snap ? snapClipStart(rawStart, dur, drag.candidates, threshold) : rawStart
+          if (snap) {
+            if (Math.abs(start - rawStart) > 1e-6) {
+              if (drag.candidates.some((c) => Math.abs(c - start) < 1e-4)) activeSnap = start
+              else if (drag.candidates.some((c) => Math.abs(c - (start + dur)) < 1e-4)) activeSnap = start + dur
+            }
+          }
           const hitTrack = trackAtClientY(e.clientY)
           drag.newTrackAbove = !hitTrack && isAboveTracks(e.clientY)
           const trackId = hitTrack ?? drag.origin.trackId
           next = moveClip(drag.base, drag.origin.id, { start, trackId })
         } else if (drag.mode === 'trim-start') {
           drag.newTrackAbove = false
-          let time = drag.origin.start + dx
-          if (snap) time = snapTime(time, drag.candidates, threshold)
+          const rawTime = drag.origin.start + dx
+          const time = snap ? snapTime(rawTime, drag.candidates, threshold) : rawTime
+          if (snap && Math.abs(time - rawTime) > 1e-6) activeSnap = time
           next = trimClip(drag.base, drag.origin.id, 'start', time)
         } else {
           drag.newTrackAbove = false
-          let time = clipEnd(drag.origin) + dx
-          if (snap) time = snapTime(time, drag.candidates, threshold)
+          const rawTime = clipEnd(drag.origin) + dx
+          const time = snap ? snapTime(rawTime, drag.candidates, threshold) : rawTime
+          if (snap && Math.abs(time - rawTime) > 1e-6) activeSnap = time
           next = trimClip(drag.base, drag.origin.id, 'end', time)
         }
+        setSnapLineTime((prev) => (prev === activeSnap ? prev : activeSnap))
         draftRef.current = next
         setDraft(next)
       }
@@ -634,11 +694,14 @@ export function Timeline({
       const up = () => {
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
+        window.removeEventListener('pointercancel', up)
+        window.removeEventListener('blur', up)
         const drag = dragRef.current
         let result = draftRef.current
         dragRef.current = null
         draftRef.current = null
         setDraft(null)
+        setSnapLineTime(null)
         if (!drag?.started || !result || result === drag.base) return
         if (drag.newTrackAbove && drag.mode === 'move') {
           const kind = findTrack(drag.base, drag.origin.trackId)?.kind
@@ -658,8 +721,10 @@ export function Timeline({
 
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
+      window.addEventListener('pointercancel', up)
+      window.addEventListener('blur', up)
     },
-    [isAboveTracks, onSelect, selectedIds, store, timeFromClientX, timeline, trackAtClientY],
+    [isAboveTracks, store, trackAtClientY],
   )
 
   const acceptsDrop = (event: ReactDragEvent) =>
@@ -900,8 +965,8 @@ export function Timeline({
                       ? reorderHint.edge
                       : null
                   }
-                  onPatch={(patch) => onCommit(updateTrack(timeline, track.id, patch))}
-                  onRemove={() => onCommit(removeTrack(timeline, track.id))}
+                  onPatch={(patch) => onCommitRef.current(updateTrack(timelineRef.current, track.id, patch))}
+                  onRemove={() => onCommitRef.current(removeTrack(timelineRef.current, track.id))}
                   onReorderDragStart={(event) => beginTrackReorder(track.id, event)}
                   onReorderDragOver={(event) => updateTrackReorderHint(track.id, event)}
                   onReorderDrop={(event) => commitTrackReorder(track.id, event)}
@@ -924,7 +989,9 @@ export function Timeline({
                     height={height}
                     selected={selected.has(clip.id)}
                     locked={track.locked}
+                    inView={clipEnd(clip) >= from - 4 && clip.start <= to + 4}
                     onPointerDown={handleClipPointerDown}
+                    onRemoveTransition={onRemoveTransition}
                   />
                 ))}
                 {hint ? (
@@ -970,6 +1037,13 @@ export function Timeline({
           title="Arraste para mover a timeline"
           onPointerDown={startPan}
         />
+
+        {snapLineTime !== null ? (
+          <div
+            className="pointer-events-none absolute bottom-0 top-0 z-30 w-px bg-amber-400/90 shadow-[0_0_6px_rgba(251,191,36,0.75)]"
+            style={{ left: TIMELINE_HEADER_WIDTH + snapLineTime * zoom }}
+          />
+        ) : null}
 
         <Playhead store={store} zoom={zoom} onScrubStart={startScrub} />
 

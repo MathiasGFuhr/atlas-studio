@@ -76,27 +76,32 @@ function enrichProjectMeta(project: EditorProject): Pick<EditorProject, 'channel
 }
 
 function firstVisualAsset(project: EditorProject) {
-  const assets = editorRepository.listAssets(project.id).map(presentEditorAsset)
-  const byId = new Map(assets.map((asset) => [asset.id, asset]))
   const visualTrackIds = new Set(
     project.timeline.tracks.filter((track) => track.kind === 'video').map((track) => track.id),
   )
-  return (
-    [...project.timeline.clips]
-      .filter((clip) => visualTrackIds.has(clip.trackId))
-      .sort((a, b) => a.start - b.start)
-      .map((clip) => byId.get(clip.assetId))
-      .find((asset) => asset && asset.kind !== 'audio') ?? null
-  )
+  const orderedClips = [...project.timeline.clips]
+    .filter((clip) => visualTrackIds.has(clip.trackId))
+    .sort((a, b) => a.start - b.start)
+  if (orderedClips.length === 0) return null
+
+  const assetsById = new Map(editorRepository.listAssets(project.id).map((asset) => [asset.id, asset]))
+  for (const clip of orderedClips) {
+    const raw = assetsById.get(clip.assetId)
+    if (raw && raw.kind !== 'audio') return presentEditorAsset(raw)
+  }
+  return null
 }
 
-function presentProject(project: EditorProject, coverUrl: string | null = null): EditorProject {
-  const visual = firstVisualAsset(project)
+function presentProject(
+  project: EditorProject,
+  coverUrl: string | null | undefined = undefined,
+): EditorProject {
+  const resolvedCover = coverUrl !== undefined ? coverUrl : (firstVisualAsset(project)?.coverUrl ?? null)
   return {
     ...project,
     ...enrichProjectMeta(project),
     // Nunca usa thumbs (72px) — só capa HD ou nada.
-    coverUrl: coverUrl ?? visual?.coverUrl ?? null,
+    coverUrl: resolvedCover,
   }
 }
 
@@ -104,6 +109,26 @@ async function presentProjectWithSharpCover(project: EditorProject): Promise<Edi
   const visual = firstVisualAsset(project)
   const coverUrl = visual ? await ensureAssetCover(visual) : null
   return presentProject(project, coverUrl)
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let nextIndex = 0
+  const workerCount = Math.min(limit, items.length)
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex
+        nextIndex += 1
+        results[index] = await fn(items[index])
+      }
+    }),
+  )
+  return results
 }
 
 function requireProject(projectId: string): EditorProject {
@@ -148,7 +173,7 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
 
   ipcMain.handle(IPC.editor.list, async () => {
     const projects = editorRepository.listProjects()
-    return Promise.all(projects.map((project) => presentProjectWithSharpCover(project)))
+    return mapWithConcurrency(projects, 2, (project) => presentProjectWithSharpCover(project))
   })
 
   ipcMain.handle(IPC.editor.get, async (_e, id: string) => {
@@ -304,9 +329,11 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
   ipcMain.handle(IPC.editor.export, async (_e, request: EditorExportRequest) => {
     const project = requireProject(request?.projectId)
     const resolution = isEditorExportResolution(request?.resolution) ? request.resolution : 1080
+    const videoOnly = Boolean(request?.videoOnly)
+    const maxQuality = Boolean(request?.maxQuality)
     const win = getMainWindow()
     const defaultDir = project.lastExportPath ? path.dirname(project.lastExportPath) : undefined
-    const fileName = `${safeFileName(project.name)}.mp4`
+    const fileName = videoOnly ? `${safeFileName(project.name)} - video.mp4` : `${safeFileName(project.name)}.mp4`
     const result = await dialog.showSaveDialog(win ?? undefined!, {
       title: 'Exportar vídeo',
       defaultPath: defaultDir ? path.join(defaultDir, fileName) : fileName,
@@ -325,6 +352,8 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
         projectId: project.id,
         outputPath: result.filePath,
         resolution,
+        videoOnly,
+        maxQuality,
         onProgress: (percent) => send({ stage: 'rendering', percent, message: `Exportando... ${percent}%` }),
       })
       send({ stage: 'done', percent: 100, message: 'Vídeo exportado.', outputPath })

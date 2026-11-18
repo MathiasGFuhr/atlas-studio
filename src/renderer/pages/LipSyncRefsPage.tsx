@@ -31,6 +31,7 @@ import {
   lastLipSyncFolderSceneNumber,
   resolveInstrumentalChoice,
   reuseOpenProjectForFolder,
+  scenesNeedingInstrument,
 } from '@shared/lipSyncRefs'
 import { COMFY_DOWNLOAD_SUBDIR, planComfyScenes } from '@shared/comfy'
 import type { CustomPrompt } from '@shared/quickPrompts'
@@ -60,6 +61,11 @@ import { useToast } from '../components/Toast'
 import { environmentBreadcrumb } from '../lib/environments'
 import { notifyProjectsChanged } from '../lib/projectEvents'
 import { readFlowSource, writeFlowSource } from '../lib/flowPromptSource'
+import {
+  readSavedInstrumentalChoices,
+  writeSavedInstrumentalChoice,
+  writeSavedInstrumentalChoices,
+} from '../lib/instrumentalChoices'
 import { ApplyAllScenesPromptModal } from '../components/lipsync/ApplyAllScenesPromptModal'
 import { InstrumentalScenesModal } from '../components/lipsync/InstrumentalScenesModal'
 import { NumberedPromptsModal } from '../components/lipsync/NumberedPromptsModal'
@@ -161,8 +167,21 @@ type PendingInstrumentalImport = {
 
 /** Modal de instrumento para cenas já na fila sem trecho de letra. */
 type PendingSceneInstruments = {
+  projectId: string
+  folderPath: string | null
   numbers: number[]
+  itemIdsByNumber: Record<number, string>
+  initialSubjects: Record<number, LipSyncSubject>
   choices: Record<number, InstrumentalChoice>
+}
+
+type SceneInstrumentSaveEntry = {
+  projectId: string
+  folderPath: string | null
+  number: number
+  itemId: string
+  initialSubject: LipSyncSubject
+  choice: InstrumentalChoice
 }
 
 /** Cenas com áudio e sem letra — precisam escolher instrumento. */
@@ -351,6 +370,10 @@ export function LipSyncRefsPage() {
     null,
   )
   const promptedEmptyLyricsKeyRef = useRef('')
+  const sceneInstrumentSaveTimersRef = useRef<Record<string, number>>({})
+  const sceneInstrumentSaveQueueRef = useRef<Record<string, Promise<void>>>({})
+  const sceneInstrumentPendingRef = useRef<Record<string, SceneInstrumentSaveEntry>>({})
+  const flushSceneInstrumentSavesRef = useRef<() => Promise<void>>(async () => {})
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const itemsRef = useRef(items)
   const draftsRef = useRef(drafts)
@@ -446,6 +469,7 @@ export function LipSyncRefsPage() {
 
   useEffect(() => {
     return () => {
+      void flushSceneInstrumentSavesRef.current()
       const pending = itemsRef.current.filter((item) => {
         const draft = draftsRef.current[item.id]
         return Boolean(draft && isDirty(item, draft))
@@ -609,6 +633,17 @@ export function LipSyncRefsPage() {
         projectId: draft.projectId || null,
       })
       if (!updated) return false
+      if (!updated.lyrics.trim()) {
+        const sceneIdx = visibleItemsRef.current.findIndex((entry) => entry.id === updated.id)
+        if (sceneIdx >= 0) {
+          const project = projectsRef.current.find((entry) => entry.id === updated.projectId)
+          writeSavedInstrumentalChoice(
+            { projectId: updated.projectId, folderPath: project?.projectFolderPath ?? null },
+            sceneIdx + 1,
+            undefined,
+          )
+        }
+      }
       setItems((current) => current.map((item) => (item.id === id ? updated : item)))
       setDrafts((current) => ({
         ...current,
@@ -670,17 +705,91 @@ export function LipSyncRefsPage() {
     ).size
   }
 
-  function scenesNeedingInstrument(scan: LipSyncFolderScan, queue: LipSyncRef[], replaceExisting: boolean): number[] {
-    return scan.audios
-      .filter((audio) => audio.excerpt === null)
-      .filter((audio) => {
-        const item = queue[audio.number - 1]
-        if (!item) return true
-        const lyrics = (draftsRef.current[item.id]?.lyrics ?? item.lyrics).trim()
-        return replaceExisting || !lyrics
-      })
-      .map((audio) => audio.number)
+  function buildPendingSceneInstruments(
+    projectId: string,
+    queue: LipSyncRef[],
+    numbers: number[],
+  ): PendingSceneInstruments {
+    const project = projectsRef.current.find((entry) => entry.id === projectId)
+    const folderPath = project?.projectFolderPath?.trim() || null
+    const itemIdsByNumber: Record<number, string> = {}
+    const initialSubjects: Record<number, LipSyncSubject> = {}
+    for (const number of numbers) {
+      const item = queue[number - 1]
+      if (!item) continue
+      itemIdsByNumber[number] = item.id
+      initialSubjects[number] = item.subject
+    }
+    return {
+      projectId,
+      folderPath,
+      numbers,
+      itemIdsByNumber,
+      initialSubjects,
+      choices: {},
+    }
   }
+
+  function persistSceneInstrumentChoice(entry: SceneInstrumentSaveEntry): Promise<void> {
+    const prev = sceneInstrumentSaveQueueRef.current[entry.itemId] ?? Promise.resolve()
+    const task = prev
+      .catch(() => {})
+      .then(async () => {
+        const item = itemsRef.current.find((candidate) => candidate.id === entry.itemId)
+        if (!item) return
+        const draft = draftsRef.current[item.id]
+        const resolved = resolveInstrumentalChoice(entry.choice)
+        const nextLyrics = resolved ? resolved.lyrics : ''
+        const nextSubject: LipSyncSubject =
+          resolved?.subject === 'band' ? 'band' : entry.initialSubject
+        const currentDraftLyrics = draft?.lyrics ?? item.lyrics
+        if (
+          item.lyrics === nextLyrics &&
+          item.subject === nextSubject &&
+          currentDraftLyrics === nextLyrics &&
+          (!draft || !isDirty(item, draft))
+        ) {
+          return
+        }
+        const updated = await api.lipSyncRefs.update(item.id, {
+          label: draft?.label ?? item.label,
+          prompt: draft?.prompt ?? item.prompt,
+          lyrics: nextLyrics,
+          projectId: (draft?.projectId || item.projectId) ?? null,
+          subject: nextSubject,
+        })
+        if (!updated) return
+        itemsRef.current = itemsRef.current.map((candidate) =>
+          candidate.id === updated.id ? updated : candidate,
+        )
+        const nextDraft = toDraft(updated)
+        draftsRef.current = { ...draftsRef.current, [updated.id]: nextDraft }
+        setItems((current) =>
+          current.map((candidate) => (candidate.id === updated.id ? updated : candidate)),
+        )
+        setDrafts((current) => ({ ...current, [updated.id]: nextDraft }))
+      })
+      .catch((error) => {
+        pushErrorRef.current(error, 'Não foi possível salvar o instrumento da cena.')
+      })
+    sceneInstrumentSaveQueueRef.current[entry.itemId] = task
+    return task
+  }
+
+  async function flushSceneInstrumentSaves(): Promise<void> {
+    const timers = sceneInstrumentSaveTimersRef.current
+    for (const [itemId, timerId] of Object.entries(timers)) {
+      window.clearTimeout(timerId)
+      delete timers[itemId]
+    }
+    const pendingEntries = Object.values(sceneInstrumentPendingRef.current)
+    sceneInstrumentPendingRef.current = {}
+    for (const entry of pendingEntries) {
+      void persistSceneInstrumentChoice(entry)
+    }
+    await Promise.all(Object.values(sceneInstrumentSaveQueueRef.current))
+  }
+  flushSceneInstrumentSavesRef.current = flushSceneInstrumentSaves
 
   async function bindFolderToProject(folder: string, project: Project | undefined): Promise<Project> {
     const folderName = folderNameFromPath(folder) || 'Projeto'
@@ -746,8 +855,18 @@ export function LipSyncRefsPage() {
         return
       }
       const queue = reuseCurrent ? currentScenes : []
-      const withoutLyrics = scan.audios.filter((audio) => audio.excerpt === null).map((audio) => audio.number)
+      const withoutLyrics = scenesNeedingInstrument(
+        scan,
+        queue,
+        false,
+        (item) => draftsRef.current[item.id]?.lyrics ?? item.lyrics,
+      )
       if (withoutLyrics.length > 0) {
+        const savedChoices = readSavedInstrumentalChoices({
+          projectId: target.id,
+          folderPath: scan.folder,
+          numbers: withoutLyrics,
+        })
         setPendingInstrumental({
           scan,
           replaceExisting: true,
@@ -755,7 +874,7 @@ export function LipSyncRefsPage() {
           queue,
           hasConflicts: reuseCurrent && countFolderConflicts(scan) > 0,
           numbers: withoutLyrics,
-          choices: {},
+          choices: savedChoices,
         })
         return
       }
@@ -778,27 +897,64 @@ export function LipSyncRefsPage() {
     options?: { projectId?: string | null; queue?: LipSyncRef[]; quiet?: boolean },
   ) {
     const queue = options?.queue ?? visibleItemsRef.current
-    const numbers = scenesNeedingInstrument(scan, queue, replaceExisting)
+    const projectId = options?.projectId !== undefined ? options.projectId : currentProjectId() || null
+    const numbers = scenesNeedingInstrument(
+      scan,
+      queue,
+      false,
+      (item) => draftsRef.current[item.id]?.lyrics ?? item.lyrics,
+    )
     if (numbers.length === 0) {
       await applyFolderImport(scan, replaceExisting, options)
+      return
+    }
+    const savedChoices = readSavedInstrumentalChoices({
+      projectId,
+      folderPath: scan.folder,
+      numbers,
+    })
+    if (
+      options?.quiet &&
+      numbers.every((number) =>
+        Boolean(resolveInstrumentalChoice(savedChoices[number] ?? { presetIds: [], custom: '' })),
+      )
+    ) {
+      const resolved = applyInstrumentalChoices(scan, savedChoices)
+      await applyFolderImport(resolved.scan, replaceExisting, {
+        ...options,
+        projectId,
+        subjects: resolved.subjects,
+      })
+      return
+    }
+    if (
+      options?.quiet &&
+      (pendingInstrumentalRef.current ||
+        pendingSceneInstrumentsRef.current ||
+        folderImportRef.current)
+    ) {
       return
     }
     setFolderImport(null)
     setPendingInstrumental({
       scan,
       replaceExisting,
-      projectId: options?.projectId !== undefined ? options.projectId : currentProjectId() || null,
+      projectId,
       queue,
       quiet: options?.quiet,
       hasConflicts: false,
       numbers,
-      choices: {},
+      choices: savedChoices,
     })
   }
 
   async function confirmInstrumentalImport(replaceExisting: boolean) {
     const pending = pendingInstrumental
     if (!pending) return
+    writeSavedInstrumentalChoices(
+      { projectId: pending.projectId, folderPath: pending.scan.folder },
+      pending.choices,
+    )
     const resolved = applyInstrumentalChoices(pending.scan, pending.choices)
     setPendingInstrumental(null)
     await applyFolderImport(resolved.scan, pending.hasConflicts ? replaceExisting : pending.replaceExisting, {
@@ -811,14 +967,77 @@ export function LipSyncRefsPage() {
 
   function openInstrumentModalForEmptyScenes(onlyNumber?: number) {
     if (pendingInstrumental || pendingSceneInstruments || folderImport) return
+    const queue = visibleItemsRef.current
     const numbers =
       onlyNumber != null
-        ? emptyLyricSceneNumbers(visibleItemsRef.current, draftsRef.current).filter(
-            (number) => number === onlyNumber,
-          )
-        : emptyLyricSceneNumbers(visibleItemsRef.current, draftsRef.current)
+        ? emptyLyricSceneNumbers(queue, draftsRef.current).filter((number) => number === onlyNumber)
+        : emptyLyricSceneNumbers(queue, draftsRef.current)
     if (numbers.length === 0) return
-    setPendingSceneInstruments({ numbers, choices: {} })
+    setPendingSceneInstruments(buildPendingSceneInstruments(currentProjectId(), queue, numbers))
+  }
+
+  function handleSceneInstrumentChange(number: number, choice: InstrumentalChoice) {
+    const current = pendingSceneInstrumentsRef.current
+    if (!current) return
+    const prevChoice = current.choices[number]
+    const nextState: PendingSceneInstruments = {
+      ...current,
+      choices: { ...current.choices, [number]: choice },
+    }
+    pendingSceneInstrumentsRef.current = nextState
+    setPendingSceneInstruments(nextState)
+
+    writeSavedInstrumentalChoice(
+      { projectId: current.projectId, folderPath: current.folderPath },
+      number,
+      choice,
+    )
+
+    const itemId = current.itemIdsByNumber[number]
+    if (!itemId) return
+    const entry: SceneInstrumentSaveEntry = {
+      projectId: current.projectId,
+      folderPath: current.folderPath,
+      number,
+      itemId,
+      initialSubject: current.initialSubjects[number] ?? 'singer',
+      choice,
+    }
+    const existingTimer = sceneInstrumentSaveTimersRef.current[itemId]
+    if (existingTimer !== undefined) {
+      window.clearTimeout(existingTimer)
+      delete sceneInstrumentSaveTimersRef.current[itemId]
+    }
+    const customChanged = (prevChoice?.custom ?? '') !== choice.custom
+    if (customChanged) {
+      sceneInstrumentPendingRef.current[itemId] = entry
+      sceneInstrumentSaveTimersRef.current[itemId] = window.setTimeout(() => {
+        delete sceneInstrumentSaveTimersRef.current[itemId]
+        const latest = sceneInstrumentPendingRef.current[itemId]
+        delete sceneInstrumentPendingRef.current[itemId]
+        if (latest) void persistSceneInstrumentChoice(latest)
+      }, 250)
+    } else {
+      delete sceneInstrumentPendingRef.current[itemId]
+      void persistSceneInstrumentChoice(entry)
+    }
+  }
+
+  function closeSceneInstrumentsModal() {
+    if (busy) return
+    const current = pendingSceneInstrumentsRef.current
+    if (current) {
+      const remaining = emptyLyricSceneNumbers(visibleItemsRef.current, draftsRef.current).filter(
+        (number) => {
+          if (!(number in current.itemIdsByNumber)) return true
+          return !resolveInstrumentalChoice(current.choices[number] ?? { presetIds: [], custom: '' })
+        },
+      )
+      promptedEmptyLyricsKeyRef.current =
+        remaining.length > 0 ? `${current.projectId}:${remaining.join(',')}` : ''
+    }
+    void flushSceneInstrumentSaves()
+    setPendingSceneInstruments(null)
   }
 
   async function confirmSceneInstruments() {
@@ -826,30 +1045,29 @@ export function LipSyncRefsPage() {
     if (!pending) return
     setBusy(true)
     try {
-      const queue = visibleItemsRef.current
-      let applied = 0
       for (const number of pending.numbers) {
         const choice = pending.choices[number]
         const resolved = choice ? resolveInstrumentalChoice(choice) : null
         if (!resolved) continue
-        const item = queue[number - 1]
-        if (!item) continue
-        const draft = draftsRef.current[item.id]
-        const updated = await api.lipSyncRefs.update(item.id, {
-          label: draft?.label ?? item.label,
-          prompt: draft?.prompt ?? item.prompt,
-          lyrics: resolved.lyrics,
-          projectId: (draft?.projectId || item.projectId) ?? null,
-          ...(resolved.subject ? { subject: resolved.subject } : {}),
-        })
-        if (!updated) continue
-        applied += 1
-        setItems((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)))
-        setDrafts((current) => ({
-          ...current,
-          [updated.id]: toDraft(updated),
-        }))
+        const itemId = pending.itemIdsByNumber[number]
+        if (!itemId) continue
+        if (!sceneInstrumentPendingRef.current[itemId]) {
+          sceneInstrumentPendingRef.current[itemId] = {
+            projectId: pending.projectId,
+            folderPath: pending.folderPath,
+            number,
+            itemId,
+            initialSubject: pending.initialSubjects[number] ?? 'singer',
+            choice,
+          }
+        }
       }
+      await flushSceneInstrumentSaves()
+      const applied = pending.numbers.filter((number) => {
+        const itemId = pending.itemIdsByNumber[number]
+        const item = itemId ? itemsRef.current.find((candidate) => candidate.id === itemId) : null
+        return Boolean(item?.lyrics.trim())
+      }).length
       setPendingSceneInstruments(null)
       if (applied > 0) {
         push(
@@ -1087,11 +1305,11 @@ export function LipSyncRefsPage() {
     if (!folder) return
     if (comfyQueue.activeProjectIds.includes(projectId)) return
     const seq = ++pullSeq.current
-    const queue = itemsRef.current.filter((item) => item.projectId === projectId)
     try {
       const scan = await api.lipSyncRefs.scanFolder(folder)
       if (seq !== pullSeq.current) return
       if (isFolderScanEmpty(scan)) return
+      const queue = itemsRef.current.filter((item) => item.projectId === projectId)
       await startFolderImport(scan, false, { projectId, queue, quiet: true })
     } catch (error) {
       if (seq !== pullSeq.current) return
@@ -1100,6 +1318,7 @@ export function LipSyncRefsPage() {
   }
 
   useEffect(() => {
+    void flushSceneInstrumentSavesRef.current()
     if (loading || !attachProjectId) return
     if (skipAutoPullRef.current) {
       skipAutoPullRef.current = false
@@ -1137,12 +1356,14 @@ export function LipSyncRefsPage() {
       ) {
         return
       }
-      const latest = emptyLyricSceneNumbers(visibleItemsRef.current, draftsRef.current)
+      const queue = visibleItemsRef.current
+      const latest = emptyLyricSceneNumbers(queue, draftsRef.current)
       if (latest.length === 0) return
-      const latestKey = `${attachProjectIdRef.current}:${latest.join(',')}`
+      const projectId = attachProjectIdRef.current
+      const latestKey = `${projectId}:${latest.join(',')}`
       if (promptedEmptyLyricsKeyRef.current === latestKey) return
       promptedEmptyLyricsKeyRef.current = latestKey
-      setPendingSceneInstruments({ numbers: latest, choices: {} })
+      setPendingSceneInstruments(buildPendingSceneInstruments(projectId, queue, latest))
     }, 900)
 
     return () => window.clearTimeout(timer)
@@ -2302,11 +2523,15 @@ export function LipSyncRefsPage() {
             : {}
         }
         onChange={(number, choice) =>
-          setPendingInstrumental((current) =>
-            current
-              ? { ...current, choices: { ...current.choices, [number]: choice } }
-              : current,
-          )
+          setPendingInstrumental((current) => {
+            if (!current) return current
+            writeSavedInstrumentalChoice(
+              { projectId: current.projectId, folderPath: current.scan.folder },
+              number,
+              choice,
+            )
+            return { ...current, choices: { ...current.choices, [number]: choice } }
+          })
         }
         onClose={() => {
           if (busy) return
@@ -2331,17 +2556,9 @@ export function LipSyncRefsPage() {
               )
             : {}
         }
-        onChange={(number, choice) =>
-          setPendingSceneInstruments((current) =>
-            current
-              ? { ...current, choices: { ...current.choices, [number]: choice } }
-              : current,
-          )
-        }
-        onClose={() => {
-          if (busy) return
-          setPendingSceneInstruments(null)
-        }}
+        onChange={handleSceneInstrumentChange}
+        onFlush={() => void flushSceneInstrumentSaves()}
+        onClose={closeSceneInstrumentsModal}
         onConfirm={() => void confirmSceneInstruments()}
       />
 

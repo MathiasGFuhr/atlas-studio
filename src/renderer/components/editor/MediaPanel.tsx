@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -46,7 +47,7 @@ import { AnimationsLibraryPanel } from './AnimationsLibraryPanel'
 import { CaptionsLibraryPanel } from './CaptionsLibraryPanel'
 import { EffectsLibraryPanel } from './EffectsLibraryPanel'
 import { TextLibraryPanel } from './TextLibraryPanel'
-import { TransitionsLibraryPanel } from './TransitionsLibraryPanel'
+import { TransitionsLibraryPanel, type AppliedTransitionItem } from './TransitionsLibraryPanel'
 
 function isSyncableVideo(asset: EditorAsset): boolean {
   return asset.kind === 'video' && asset.available !== false
@@ -106,7 +107,7 @@ function AssetThumb({ asset }: { asset: EditorAsset }) {
   )
 }
 
-function AssetCard({
+const AssetCard = memo(function AssetCard({
   asset,
   used,
   selected,
@@ -254,7 +255,7 @@ function AssetCard({
       <p className="truncate px-2 py-1.5 text-[11px] text-muted">{asset.name}</p>
     </div>
   )
-}
+})
 
 function MediaSection({
   title,
@@ -321,6 +322,13 @@ export function MediaPanel({
   onSetOrigin,
   onPickEffect,
   onPickTransition,
+  onClearTransition,
+  onRemoveClipTransition,
+  onClearAllTransitions,
+  onFocusClip,
+  activeTransitionId,
+  appliedTransitions,
+  fps,
   activeEffectIds,
   animationTarget,
   onAnimationTargetChange,
@@ -347,6 +355,13 @@ export function MediaPanel({
   onSetOrigin?: (asset: EditorAsset, origin: EditorAssetOrigin) => void
   onPickEffect?: (id: EditorEffectId, options?: { applyToAll?: boolean }) => void
   onPickTransition?: (id: EditorTransitionId) => void
+  onClearTransition?: () => void
+  onRemoveClipTransition?: (clipId: string) => void
+  onClearAllTransitions?: () => void
+  onFocusClip?: (clipId: string, time: number) => void
+  activeTransitionId?: string | null
+  appliedTransitions?: AppliedTransitionItem[]
+  fps?: number
   activeEffectIds?: string[]
   animationTarget?: 'clip' | 'watermark'
   onAnimationTargetChange?: (target: 'clip' | 'watermark') => void
@@ -365,20 +380,27 @@ export function MediaPanel({
   const [loadingGroups, setLoadingGroups] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all')
+  const [mediaQuery, setMediaQuery] = useState('')
   const lastClickedIdRef = useRef<string | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
 
-  const lipsyncVideos = useMemo(() => assets.filter(isLipsyncVideo), [assets])
-  const stageVideos = useMemo(() => assets.filter(isStageVideo), [assets])
+  const filteredAssets = useMemo(() => {
+    const q = mediaQuery.trim().toLowerCase()
+    if (!q) return assets
+    return assets.filter((asset) => asset.name.toLowerCase().includes(q))
+  }, [assets, mediaQuery])
+
+  const lipsyncVideos = useMemo(() => filteredAssets.filter(isLipsyncVideo), [filteredAssets])
+  const stageVideos = useMemo(() => filteredAssets.filter(isStageVideo), [filteredAssets])
   const otherAssets = useMemo(
-    () => assets.filter((asset) => asset.kind !== 'video'),
-    [assets],
+    () => filteredAssets.filter((asset) => asset.kind !== 'video'),
+    [filteredAssets],
   )
   const videoAssets = useMemo(() => {
     if (mediaFilter === 'lipsync') return lipsyncVideos.filter(isSyncableVideo)
     if (mediaFilter === 'stage') return stageVideos.filter(isSyncableVideo)
-    return assets.filter(isSyncableVideo)
-  }, [assets, lipsyncVideos, mediaFilter, stageVideos])
+    return filteredAssets.filter(isSyncableVideo)
+  }, [filteredAssets, lipsyncVideos, mediaFilter, stageVideos])
   const videoIdSet = useMemo(() => new Set(videoAssets.map((asset) => asset.id)), [videoAssets])
   const selectedVideos = useMemo(
     () => videoAssets.filter((asset) => selectedIds.includes(asset.id)),
@@ -404,7 +426,11 @@ export function MediaPanel({
     if (tool === 'lipsync' && groups === null) void loadGroups()
   }, [groups, loadGroups, tool])
 
-  const importedPaths = new Set(assets.map((asset) => asset.sourcePath.toLowerCase()))
+  const assetsByPath = useMemo(() => {
+    const map = new Map<string, EditorAsset>()
+    for (const asset of assets) map.set(asset.sourcePath.toLowerCase(), asset)
+    return map
+  }, [assets])
 
   const selectAllVideos = useCallback(() => {
     setSelectedIds(videoAssets.map((asset) => asset.id))
@@ -493,7 +519,18 @@ export function MediaPanel({
   }
 
   if (tool === 'transitions') {
-    return <TransitionsLibraryPanel onPickTransition={onPickTransition} />
+    return (
+      <TransitionsLibraryPanel
+        activeTransitionId={activeTransitionId}
+        appliedTransitions={appliedTransitions}
+        fps={fps}
+        onPickTransition={onPickTransition}
+        onClearTransition={onClearTransition}
+        onRemoveClipTransition={onRemoveClipTransition}
+        onClearAllTransitions={onClearAllTransitions}
+        onFocusClip={onFocusClip}
+      />
+    )
   }
 
   if (tool === 'captions') {
@@ -557,6 +594,15 @@ export function MediaPanel({
                 </button>
               ))}
             </div>
+            {assets.length > 4 ? (
+              <input
+                type="search"
+                value={mediaQuery}
+                onChange={(event) => setMediaQuery(event.target.value)}
+                placeholder="Filtrar mídia…"
+                className="w-full rounded-lg border border-border-soft bg-elevated px-2.5 py-1 text-[11px] text-text outline-none placeholder:text-muted-2 focus:border-accent"
+              />
+            ) : null}
             {videoAssets.length > 0 ? (
               <div className="flex items-center gap-1.5">
                 <button
@@ -728,8 +774,8 @@ export function MediaPanel({
                   <ul className="divide-y divide-border-soft">
                     {group.videos.map((video) => {
                       const pathKey = video.path.toLowerCase()
-                      const imported = importedPaths.has(pathKey)
-                      const matched = assets.find((asset) => asset.sourcePath.toLowerCase() === pathKey)
+                      const matched = assetsByPath.get(pathKey)
+                      const imported = Boolean(matched)
                       const used = Boolean(matched && usedAssetIds.has(matched.id))
                       return (
                         <li key={video.path} className="flex items-center gap-2 px-2.5 py-1.5">

@@ -173,6 +173,43 @@ export type InstrumentalChoice = {
   custom: string
 }
 
+const VALID_INSTRUMENTAL_PRESET_IDS = new Set(INSTRUMENTAL_PRESETS.map((entry) => entry.id))
+
+/** Normaliza uma marcação salva e descarta entradas vazias ou inválidas. */
+export function normalizeInstrumentalChoice(value: unknown): InstrumentalChoice | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as { presetIds?: unknown; custom?: unknown }
+  const presetIds: string[] = []
+  if (Array.isArray(raw.presetIds)) {
+    for (const entry of raw.presetIds) {
+      if (typeof entry === 'string' && VALID_INSTRUMENTAL_PRESET_IDS.has(entry) && !presetIds.includes(entry)) {
+        presetIds.push(entry)
+      }
+    }
+  }
+  const custom = typeof raw.custom === 'string' ? raw.custom : ''
+  if (!resolveInstrumentalChoice({ presetIds, custom })) return null
+  return { presetIds, custom }
+}
+
+/** Cenas da pasta sem `.txt` que ainda precisam de marcação de instrumento. */
+export function scenesNeedingInstrument(
+  scan: Pick<LipSyncFolderScan, 'audios'>,
+  queue: Array<Pick<LipSyncRef, 'id' | 'lyrics'>>,
+  replaceExisting: boolean,
+  getLyrics?: (item: Pick<LipSyncRef, 'id' | 'lyrics'>) => string,
+): number[] {
+  return scan.audios
+    .filter((audio) => audio.excerpt === null)
+    .filter((audio) => {
+      const item = queue[audio.number - 1]
+      if (!item) return true
+      const lyrics = (getLyrics ? getLyrics(item) : item.lyrics).trim()
+      return replaceExisting || !lyrics
+    })
+    .map((audio) => audio.number)
+}
+
 /** Texto que vai para o trecho da cena, e o assunto quando alguma opção é de banda. */
 export function resolveInstrumentalChoice(
   choice: InstrumentalChoice | string,

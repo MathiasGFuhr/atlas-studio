@@ -1,4 +1,4 @@
-import { useCallback, useReducer } from 'react'
+import { useCallback, useMemo, useReducer } from 'react'
 import type { EditorTimeline } from '@shared/editor/types'
 
 const HISTORY_LIMIT = 200
@@ -70,13 +70,18 @@ export function useEditorHistory(initial: EditorTimeline) {
   const undo = useCallback(() => dispatch({ type: 'undo' }), [])
   const redo = useCallback(() => dispatch({ type: 'redo' }), [])
   const reset = useCallback((value: EditorTimeline) => dispatch({ type: 'reset', value }), [])
-  return {
-    timeline: state.present,
-    canUndo: state.past.length > 0,
-    canRedo: state.future.length > 0,
-    commit,
-    undo,
-    redo,
-    reset,
-  }
+  const canUndo = state.past.length > 0
+  const canRedo = state.future.length > 0
+  return useMemo(
+    () => ({
+      timeline: state.present,
+      canUndo,
+      canRedo,
+      commit,
+      undo,
+      redo,
+      reset,
+    }),
+    [canRedo, canUndo, commit, redo, reset, state.present, undo],
+  )
 }

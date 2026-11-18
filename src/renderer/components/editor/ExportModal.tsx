@@ -35,6 +35,8 @@ export function ExportModal({
   const api = getAtlasApi()
   const { pushError } = useToast()
   const [resolution, setResolution] = useState<EditorExportResolution>(1080)
+  const [videoOnly, setVideoOnly] = useState(false)
+  const [maxQuality, setMaxQuality] = useState(false)
   const [progress, setProgress] = useState<EditorExportProgress | null>(null)
   const [running, setRunning] = useState(false)
 
@@ -55,7 +57,12 @@ export function ExportModal({
     setProgress(null)
     try {
       await onBeforeExport()
-      const output = await api.editor.export({ projectId, resolution })
+      const output = await api.editor.export({
+        projectId,
+        resolution,
+        videoOnly,
+        maxQuality: maxQuality || videoOnly,
+      })
       if (!output) setProgress(null)
     } catch (error) {
       pushError(error, 'Falha ao exportar o vídeo')
@@ -143,6 +150,42 @@ export function ExportModal({
               alta resolução.
             </p>
           )}
+        </div>
+
+        <div className="space-y-2 rounded-xl border border-border-soft bg-elevated p-3">
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              disabled={running}
+              checked={videoOnly}
+              onChange={(event) => {
+                const next = event.target.checked
+                setVideoOnly(next)
+                if (next) setMaxQuality(true)
+              }}
+              className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-text">
+                Somente vídeo sincronizado (sem música)
+              </span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-2">
+                Exporta sem áudio em qualidade máxima (CRF 14) para continuar editando no CapCut.
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2.5 pt-1">
+            <input
+              type="checkbox"
+              disabled={running || videoOnly}
+              checked={maxQuality || videoOnly}
+              onChange={(event) => setMaxQuality(event.target.checked)}
+              className="h-4 w-4 accent-[var(--color-accent)]"
+            />
+            <span className="text-xs text-muted">
+              Qualidade máxima (CRF 14 · preset slow)
+            </span>
+          </label>
         </div>
 
         <p className="text-xs text-muted">

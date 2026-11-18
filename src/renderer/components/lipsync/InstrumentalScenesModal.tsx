@@ -29,6 +29,7 @@ export function InstrumentalScenesModal({
   reason = 'folder',
   audioUrls = {},
   onChange,
+  onFlush,
   onClose,
   onConfirm,
 }: {
@@ -41,6 +42,7 @@ export function InstrumentalScenesModal({
   /** URL atlas-media do áudio por número da cena. */
   audioUrls?: Record<number, string | null | undefined>
   onChange: (number: number, choice: InstrumentalChoice) => void
+  onFlush?: () => void
   onClose: () => void
   onConfirm: (replaceExisting: boolean) => void
 }) {
@@ -53,7 +55,10 @@ export function InstrumentalScenesModal({
   const track = numbers.join(',')
   if (track !== tracked) {
     setTracked(track)
-    setStep(0)
+    const firstUnmarked = numbers.findIndex(
+      (n) => !resolveInstrumentalChoice(choices[n] ?? emptyChoice()),
+    )
+    setStep(firstUnmarked >= 0 ? firstUnmarked : 0)
   }
 
   const index = Math.min(step, Math.max(numbers.length - 1, 0))
@@ -120,6 +125,21 @@ export function InstrumentalScenesModal({
     }
   }
 
+  function handleClose() {
+    onFlush?.()
+    onClose()
+  }
+
+  function handleStep(nextStep: number) {
+    onFlush?.()
+    setStep(nextStep)
+  }
+
+  function handleConfirm(replaceExisting: boolean) {
+    onFlush?.()
+    onConfirm(replaceExisting)
+  }
+
   const title =
     number === undefined
       ? 'Trechos sem letra'
@@ -129,32 +149,32 @@ export function InstrumentalScenesModal({
     <Modal
       open={numbers.length > 0}
       title={title}
-      onClose={onClose}
+      onClose={handleClose}
       footer={
         <>
-          <Button variant="secondary" disabled={applying} onClick={onClose}>
-            Cancelar
+          <Button variant="secondary" disabled={applying} onClick={handleClose}>
+            {reason === 'empty-lyrics' ? 'Fechar' : 'Cancelar'}
           </Button>
           {index > 0 ? (
-            <Button variant="secondary" disabled={applying} onClick={() => setStep(index - 1)}>
+            <Button variant="secondary" disabled={applying} onClick={() => handleStep(index - 1)}>
               Anterior
             </Button>
           ) : null}
           {last && hasConflicts ? (
             <>
-              <Button variant="secondary" disabled={!ready || applying} onClick={() => onConfirm(false)}>
+              <Button variant="secondary" disabled={!ready || applying} onClick={() => handleConfirm(false)}>
                 Só cards vazios
               </Button>
-              <Button disabled={!ready || applying} onClick={() => onConfirm(true)}>
+              <Button disabled={!ready || applying} onClick={() => handleConfirm(true)}>
                 Substituir e aplicar
               </Button>
             </>
           ) : last ? (
-            <Button disabled={!ready || applying} onClick={() => onConfirm(true)}>
+            <Button disabled={!ready || applying} onClick={() => handleConfirm(true)}>
               Aplicar nas cenas
             </Button>
           ) : (
-            <Button variant="secondary" disabled={!ready || applying} onClick={() => setStep(index + 1)}>
+            <Button variant="secondary" disabled={!ready || applying} onClick={() => handleStep(index + 1)}>
               Próxima cena
             </Button>
           )}
@@ -253,6 +273,7 @@ export function InstrumentalScenesModal({
           </div>
           <p className="text-[11px] text-muted-2">
             Pode marcar vários. O trecho fica tipo “Violão, Guitarra”. Banda marca a cena como banda.
+            {reason === 'empty-lyrics' ? ' Cada cena marcada já fica salva automaticamente.' : ''}
           </p>
         </div>
       )}

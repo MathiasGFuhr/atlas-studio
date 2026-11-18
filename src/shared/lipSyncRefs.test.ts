@@ -7,10 +7,12 @@ import {
   matchNumberedFiles,
   matchNumberedImages,
   mergeRootAndFolderClips,
+  normalizeInstrumentalChoice,
   resolveInstrumentalChoice,
   reuseOpenProjectForFolder,
   sameLipSyncFolder,
   sceneNumberFromFileName,
+  scenesNeedingInstrument,
   takeSceneFolderClip,
 } from './lipSyncRefs'
 
@@ -266,5 +268,41 @@ describe('reuseOpenProjectForFolder', () => {
         currentSceneCount: 18,
       }),
     ).toBe(false)
+  })
+})
+
+describe('normalizeInstrumentalChoice', () => {
+  it('filtra presets inválidos, remove duplicados e descarta escolhas vazias', () => {
+    expect(
+      normalizeInstrumentalChoice({
+        presetIds: ['violao', 'invalido', 'violao', 'banda'],
+        custom: 'sanfona',
+      }),
+    ).toEqual({
+      presetIds: ['violao', 'banda'],
+      custom: 'sanfona',
+    })
+    expect(normalizeInstrumentalChoice({ presetIds: [], custom: '   ' })).toBeNull()
+    expect(normalizeInstrumentalChoice(null)).toBeNull()
+  })
+})
+
+describe('scenesNeedingInstrument', () => {
+  it('pula cenas que já têm trecho marcado quando replaceExisting é false', () => {
+    const scan = {
+      audios: [
+        { number: 1, fileName: '1.mp3', path: 'C:/1.mp3', duration: 10, excerpt: null },
+        { number: 2, fileName: '2.mp3', path: 'C:/2.mp3', duration: 10, excerpt: null },
+        { number: 3, fileName: '3.mp3', path: 'C:/3.mp3', duration: 10, excerpt: 'Letra já no txt' },
+        { number: 4, fileName: '4.mp3', path: 'C:/4.mp3', duration: 10, excerpt: null },
+      ],
+    }
+    const queue = [
+      { id: 's1', lyrics: 'Violão' },
+      { id: 's2', lyrics: '   ' },
+      { id: 's3', lyrics: '' },
+    ]
+    expect(scenesNeedingInstrument(scan, queue, false)).toEqual([2, 4])
+    expect(scenesNeedingInstrument(scan, queue, true)).toEqual([1, 2, 4])
   })
 })

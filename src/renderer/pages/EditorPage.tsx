@@ -50,8 +50,11 @@ import {
 } from '@shared/editor/types'
 import {
   addTrack,
+  adjacentEditPoint,
+  clearAllTransitions,
   clipEnd,
   deleteClips,
+  duplicateClips,
   ensureTextTrack,
   findClip,
   fitClipToMusicDuration,
@@ -64,6 +67,7 @@ import {
   removeAssetClips,
   removeClipEffect,
   setClipAnimationSlot,
+  setClipTransition,
   setEffectIntensity,
   makeWatermark,
   removeWatermark,
@@ -89,6 +93,7 @@ import { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 import { EditorLibraryBar } from '../components/editor/EditorLibraryBar'
 import type { EditorLibraryTool } from '../components/editor/editorLibraryTools'
+import type { AppliedTransitionItem } from '../components/editor/TransitionsLibraryPanel'
 import { MediaPanel } from '../components/editor/MediaPanel'
 import { WatermarkConfigModal } from '../components/editor/WatermarkConfigModal'
 import { PreviewPlayer } from '../components/editor/PreviewPlayer'
@@ -190,9 +195,16 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   const navigate = useNavigate()
   const { push, pushError } = useToast()
   const history = useEditorHistory(project.timeline)
-  const { timeline, commit, undo, redo } = history
+  const { timeline, commit, undo, redo, reset, canUndo, canRedo } = history
   const timelineRef = useRef(timeline)
   timelineRef.current = timeline
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const store = useMemo(() => createPlaybackStore(), [])
   const [assets, setAssets] = useState<EditorAsset[]>(initialAssets)
@@ -222,6 +234,14 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   }, [])
 
   const assetMap = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets])
+  const clipIdSet = useMemo(() => new Set(timeline.clips.map((clip) => clip.id)), [timeline.clips])
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const filtered = prev.filter((id) => clipIdSet.has(id))
+      return filtered.length === prev.length ? prev : filtered
+    })
+  }, [clipIdSet])
+
   const usedAssetIds = useMemo(
     () =>
       new Set(
@@ -270,7 +290,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
             pendingRef.current = null
             const fresh = await api.editor.get(project.id)
             if (!fresh) return
-            history.reset(fresh.project.timeline)
+            reset(fresh.project.timeline)
             savedRef.current = fresh.project.timeline
             setAssets(fresh.assets)
             setSaveState('saved')
@@ -280,7 +300,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
           }
         })()
       }),
-    [api, history, project.id, push],
+    [api, project.id, push, reset],
   )
 
   const flush = useCallback(async () => {
@@ -289,14 +309,14 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
     const next = pendingRef.current
     if (!next) return
     pendingRef.current = null
-    setSaveState('saving')
+    if (mountedRef.current) setSaveState('saving')
     try {
       await api.editor.update(project.id, { timeline: next })
       savedRef.current = next
-      setSaveState(pendingRef.current ? 'dirty' : 'saved')
+      if (mountedRef.current) setSaveState(pendingRef.current ? 'dirty' : 'saved')
     } catch (error) {
       pendingRef.current = pendingRef.current ?? next
-      setSaveState('error')
+      if (mountedRef.current) setSaveState('error')
       console.error('[atlas] falha ao salvar a timeline', error)
     }
   }, [api, project.id])
@@ -515,17 +535,42 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   const split = useCallback(() => {
     const current = timelineRef.current
     const time = store.getTime()
-    commit(splitAt(current, time))
-  }, [commit, store])
+    const selectedUnderPlayhead = selectedIds.filter((id) => {
+      const clip = findClip(current, id)
+      return clip ? clip.start < time && time < clipEnd(clip) : false
+    })
+    const next = splitAt(
+      current,
+      time,
+      selectedUnderPlayhead.length > 0 ? selectedUnderPlayhead : undefined,
+    )
+    if (next !== current) commit(next)
+  }, [commit, selectedIds, store])
 
   const removeSelected = useCallback(
     (ripple: boolean) => {
       if (selectedIds.length === 0) return
-      commit(deleteClips(timelineRef.current, selectedIds, ripple))
-      setSelectedIds([])
+      const current = timelineRef.current
+      const next = deleteClips(current, selectedIds, ripple)
+      if (next === current) {
+        push('A faixa selecionada está travada.', 'error')
+        return
+      }
+      commit(next)
+      const remaining = new Set(next.clips.map((c) => c.id))
+      setSelectedIds((ids) => ids.filter((id) => remaining.has(id)))
     },
-    [commit, selectedIds],
+    [commit, push, selectedIds],
   )
+
+  const duplicateSelected = useCallback(() => {
+    if (selectedIds.length === 0) return
+    const current = timelineRef.current
+    const result = duplicateClips(current, selectedIds)
+    if (result.clipIds.length === 0 || result.timeline === current) return
+    commit(result.timeline)
+    setSelectedIds(result.clipIds)
+  }, [commit, selectedIds])
 
   useEffect(() => {
     if (!shortBusy) return
@@ -716,24 +761,31 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   const selectedClip: EditorClip | null =
     selectedIds.length > 0 ? (findClip(timeline, selectedIds[0]) ?? null) : null
 
-  const selectionHasVisual = useMemo(() => {
+  const { selectionHasVisual, selectionHasAudio, selectedVisualClip, selectedAudioClip } = useMemo(() => {
+    let hasVisual = false
+    let hasAudio = false
+    let firstVisual: EditorClip | null = null
+    let firstAudio: EditorClip | null = null
     for (const id of selectedIds) {
       const clip = findClip(timeline, id)
       if (!clip || isEffectClip(clip) || isTextClip(clip)) continue
       const asset = assetMap.get(clip.assetId)
-      if (asset && asset.kind !== 'audio') return true
+      if (!asset) continue
+      if (asset.kind !== 'audio') {
+        hasVisual = true
+        if (!firstVisual) firstVisual = clip
+      }
+      if (asset.kind === 'audio' || asset.hasAudio) {
+        hasAudio = true
+        if (!firstAudio) firstAudio = clip
+      }
     }
-    return false
-  }, [assetMap, selectedIds, timeline])
-
-  const selectionHasAudio = useMemo(() => {
-    for (const id of selectedIds) {
-      const clip = findClip(timeline, id)
-      if (!clip || isEffectClip(clip) || isTextClip(clip)) continue
-      const asset = assetMap.get(clip.assetId)
-      if (asset && (asset.kind === 'audio' || asset.hasAudio)) return true
+    return {
+      selectionHasVisual: hasVisual,
+      selectionHasAudio: hasAudio,
+      selectedVisualClip: firstVisual,
+      selectedAudioClip: firstAudio,
     }
-    return false
   }, [assetMap, selectedIds, timeline])
 
   const activeEffectIds = useMemo(
@@ -742,6 +794,85 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
         .filter((clip) => isEffectClip(clip) && clip.effectId)
         .map((clip) => clip.effectId as string),
     [timeline.clips],
+  )
+
+  const appliedTransitions = useMemo<AppliedTransitionItem[]>(() => {
+    const trackMap = new Map(timeline.tracks.map((track) => [track.id, track]))
+    return timeline.clips
+      .filter((clip) => Boolean(clip.transitionOut))
+      .slice()
+      .sort((a, b) => a.start - b.start)
+      .map((clip) => {
+        const trans = clip.transitionOut!
+        const asset = assetMap.get(clip.assetId)
+        const track = trackMap.get(clip.trackId)
+        return {
+          clipId: clip.id,
+          clipLabel: asset?.name ?? 'Clipe',
+          transitionId: trans.id,
+          transitionLabel: editorTransitionById(trans.id)?.label ?? trans.id,
+          start: clip.start,
+          end: clipEnd(clip),
+          duration: trans.duration,
+          locked: Boolean(track?.locked),
+        }
+      })
+  }, [assetMap, timeline.clips, timeline.tracks])
+
+  const resolveTransitionTargets = useCallback(
+    (current: EditorTimeline): EditorClip[] => {
+      const videoTrackIds = new Set(current.tracks.filter((t) => t.kind === 'video').map((t) => t.id))
+      const selectedVideo = selectedIds
+        .map((id) => findClip(current, id))
+        .filter(
+          (c): c is EditorClip =>
+            Boolean(c) && videoTrackIds.has(c!.trackId) && !isEffectClip(c!) && !isTextClip(c!),
+        )
+      if (selectedVideo.length > 0) return selectedVideo
+      const playhead = store.getTime()
+      const underPlayhead = current.clips.find(
+        (c) =>
+          videoTrackIds.has(c.trackId) &&
+          !isEffectClip(c) &&
+          !isTextClip(c) &&
+          c.start <= playhead + 0.001 &&
+          playhead < clipEnd(c),
+      )
+      return underPlayhead ? [underPlayhead] : []
+    },
+    [selectedIds, store],
+  )
+
+  const resolveRemovableTransitionTargets = useCallback(
+    (current: EditorTimeline): EditorClip[] => {
+      const direct = resolveTransitionTargets(current).filter((c) => Boolean(c.transitionOut))
+      if (direct.length > 0) return direct
+
+      // Se selecionou a cena seguinte ou posicionou o playhead na emenda, remove a transição da cena anterior.
+      const playhead = store.getTime()
+      const selected = selectedIds
+        .map((id) => findClip(current, id))
+        .filter((c): c is EditorClip => Boolean(c))
+      const seamTimes = selected.length > 0 ? selected.map((c) => c.start) : [playhead]
+      const trackIds = selected.length > 0 ? new Set(selected.map((c) => c.trackId)) : null
+
+      return current.clips.filter((c) => {
+        if (!c.transitionOut) return false
+        if (trackIds && !trackIds.has(c.trackId)) return false
+        const end = clipEnd(c)
+        return seamTimes.some((t) => Math.abs(end - t) <= 0.35 || (c.start <= t + 0.01 && t <= end + 0.01))
+      })
+    },
+    [resolveTransitionTargets, selectedIds, store],
+  )
+
+  const noopSubscribe = useCallback(() => () => undefined, [])
+  const activeTransitionId = useSyncExternalStore(
+    libraryTool === 'transitions' ? store.subscribe : noopSubscribe,
+    () => {
+      const targets = resolveRemovableTransitionTargets(timelineRef.current)
+      return targets[0]?.transitionOut?.id ?? null
+    },
   )
 
   const patchSelected = useCallback(
@@ -1066,6 +1197,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
       setName(project.name)
       return
     }
+    if (trimmed === project.name.trim()) return
     try {
       await api.editor.update(project.id, { name: trimmed })
     } catch (error) {
@@ -1073,9 +1205,15 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
     }
   }, [api, name, project.id, project.name, pushError])
 
+  const goBackToProjects = useCallback(async () => {
+    store.pause()
+    await Promise.all([flush(), saveName()])
+    navigate('/editor')
+  }, [flush, navigate, saveName, store])
+
   // --- atalhos ---
-  const shortcutsRef = useRef({ split, removeSelected, undo, redo, fitZoom })
-  shortcutsRef.current = { split, removeSelected, undo, redo, fitZoom }
+  const shortcutsRef = useRef({ split, removeSelected, duplicateSelected, undo, redo, fitZoom })
+  shortcutsRef.current = { split, removeSelected, duplicateSelected, undo, redo, fitZoom }
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1089,26 +1227,45 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
 
       if (event.code === 'Space') {
         event.preventDefault()
+        if (event.repeat) return
         if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur()
         store.toggle()
       } else if (mod && key === 'z') {
         event.preventDefault()
+        if (event.repeat) return
         if (event.shiftKey) actions.redo()
         else actions.undo()
       } else if (mod && key === 'y') {
         event.preventDefault()
+        if (event.repeat) return
         actions.redo()
+      } else if (mod && key === 'd') {
+        event.preventDefault()
+        if (event.repeat) return
+        actions.duplicateSelected()
+      } else if (mod && key === 'a') {
+        event.preventDefault()
+        setSelectedIds(timelineRef.current.clips.map((clip) => clip.id))
+      } else if (mod && key === '0') {
+        event.preventDefault()
+        actions.fitZoom()
       } else if (!mod && key === 's') {
         event.preventDefault()
+        if (event.repeat) return
         actions.split()
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault()
+        if (event.repeat) return
         actions.removeSelected(event.shiftKey)
       } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault()
         store.pause()
         const delta = (event.shiftKey ? 1 : 1 / fps) * (event.key === 'ArrowRight' ? 1 : -1)
         store.seek(store.getTime() + delta)
+      } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault()
+        store.pause()
+        store.seek(adjacentEditPoint(timelineRef.current, store.getTime(), event.key === 'ArrowUp' ? 'prev' : 'next'))
       } else if (event.key === 'Home') {
         event.preventDefault()
         store.seek(0)
@@ -1116,8 +1273,10 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
         event.preventDefault()
         store.seek(store.getDuration())
       } else if (!mod && (event.key === '+' || event.key === '=')) {
+        event.preventDefault()
         setZoom((value) => clampZoom(value * 1.25))
       } else if (!mod && event.key === '-') {
+        event.preventDefault()
         setZoom((value) => clampZoom(value / 1.25))
       } else if (event.key === 'Escape') {
         setSelectedIds([])
@@ -1133,18 +1292,29 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
     const startY = event.clientY
     const startHeight = timelineHeight
     let latest = startHeight
+    let raf = 0
     const move = (e: PointerEvent) => {
       const max = Math.round(window.innerHeight * 0.7)
       latest = Math.max(180, Math.min(max, startHeight - (e.clientY - startY)))
-      setTimelineHeight(latest)
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        setTimelineHeight(latest)
+      })
     }
     const up = () => {
+      if (raf) cancelAnimationFrame(raf)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      window.removeEventListener('blur', up)
+      setTimelineHeight(latest)
       setFabBottomClearance(latest + 12)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    window.addEventListener('blur', up)
   }
 
   const toolButton =
@@ -1156,7 +1326,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
         <button
           type="button"
           title="Voltar para os projetos"
-          onClick={() => navigate('/editor')}
+          onClick={() => void goBackToProjects()}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-text"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1172,10 +1342,10 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
         />
         <SaveIndicator state={saveState} />
         <div className="ml-auto flex items-center gap-1">
-          <button type="button" title="Desfazer (Ctrl+Z)" className={toolButton} disabled={!history.canUndo} onClick={undo}>
+          <button type="button" title="Desfazer (Ctrl+Z)" className={toolButton} disabled={!canUndo} onClick={undo}>
             <Undo2 className="h-4 w-4" />
           </button>
-          <button type="button" title="Refazer (Ctrl+Y)" className={toolButton} disabled={!history.canRedo} onClick={redo}>
+          <button type="button" title="Refazer (Ctrl+Y)" className={toolButton} disabled={!canRedo} onClick={redo}>
             <Redo2 className="h-4 w-4" />
           </button>
           <Button
@@ -1257,10 +1427,85 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
             captionSourceName={captionAsset?.name ?? null}
             captionBusy={captionBusy}
             onGenerateCaptions={(language) => void generateCaptions(language)}
+            activeTransitionId={activeTransitionId}
+            appliedTransitions={appliedTransitions}
+            fps={timeline.fps}
+            onClearTransition={() => {
+              const current = timelineRef.current
+              const targets = resolveRemovableTransitionTargets(current)
+              if (targets.length === 0) {
+                push('Nenhuma transição na cena selecionada ou no playhead.', 'default')
+                return
+              }
+              let next = current
+              for (const target of targets) next = setClipTransition(next, target.id, null)
+              if (next === current) {
+                push('A faixa dessa transição está travada.', 'error')
+                return
+              }
+              commit(next)
+              push(
+                targets.length === 1
+                  ? 'Transição removida.'
+                  : `${targets.length} transições removidas.`,
+                'default',
+              )
+            }}
+            onRemoveClipTransition={(clipId) => {
+              const current = timelineRef.current
+              const next = setClipTransition(current, clipId, null)
+              if (next === current) {
+                push('A faixa dessa transição está travada.', 'error')
+                return
+              }
+              commit(next)
+              push('Transição removida.', 'default')
+            }}
+            onClearAllTransitions={() => {
+              const current = timelineRef.current
+              const next = clearAllTransitions(current)
+              if (next === current) {
+                if (appliedTransitions.length > 0) {
+                  push('As transições restantes estão em faixas travadas.', 'error')
+                }
+                return
+              }
+              commit(next)
+              push('Todas as transições foram removidas.', 'default')
+            }}
+            onFocusClip={(clipId, time) => {
+              store.pause()
+              store.seek(time)
+              setSelectedIds([clipId])
+            }}
             onPickTransition={(id: EditorTransitionId) => {
               const transition = editorTransitionById(id)
               if (!transition) return
-              push(`Transição "${transition.label}" selecionada (${transition.defaultDuration}s).`, 'success')
+              const current = timelineRef.current
+              const targets = resolveTransitionTargets(current)
+              if (targets.length === 0) {
+                push('Selecione um clipe de vídeo para aplicar a transição.', 'error')
+                return
+              }
+              if (targets.every((target) => target.transitionOut?.id === id)) {
+                let next = current
+                for (const target of targets) next = setClipTransition(next, target.id, null)
+                commit(next)
+                push(`Transição "${transition.label}" removida.`, 'default')
+                return
+              }
+              let next = current
+              for (const target of targets) {
+                next = setClipTransition(next, target.id, { id, duration: transition.defaultDuration })
+              }
+              commit(next)
+              setSelectedIds(targets.map((target) => target.id))
+              push(
+                targets.length === 1
+                  ? `Transição "${transition.label}" aplicada (${transition.defaultDuration}s).`
+                  : `Transição "${transition.label}" aplicada em ${targets.length} clipes.`,
+                'success',
+              )
             }}
           />
         </aside>
@@ -1276,10 +1521,12 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
           </div>
         </section>
 
-        <aside className="flex w-[280px] shrink-0 flex-col overflow-hidden border-l border-border-soft bg-sidebar">
+        <aside className="flex w-[310px] shrink-0 flex-col overflow-hidden border-l border-border-soft bg-sidebar">
           <PropertiesPanel
             timeline={timeline}
             clip={selectedClip}
+            visualClip={selectedVisualClip}
+            audioClip={selectedAudioClip}
             asset={selectedClip ? (assetMap.get(selectedClip.assetId) ?? null) : null}
             selectionCount={selectedIds.length}
             selectionHasVisual={selectionHasVisual}
@@ -1435,6 +1682,10 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
               placeEffectOnTimeline(effectId as EditorEffectId, trackId, time, {
                 newTrack: trackId === null,
               })
+            }}
+            onRemoveTransition={(clipId) => {
+              commit(setClipTransition(timelineRef.current, clipId, null))
+              push('Transição removida.', 'default')
             }}
           />
         </div>

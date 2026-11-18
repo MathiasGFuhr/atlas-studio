@@ -210,6 +210,7 @@ export const editorRepository = {
       patch.musicTrackId !== undefined ? patch.musicTrackId?.trim() || null : current.musicTrackId
     const channelId =
       patch.channelId !== undefined ? patch.channelId?.trim() || null : current.channelId
+    const now = new Date().toISOString()
     getDb()
       .prepare(
         `UPDATE editor_projects
@@ -222,10 +223,19 @@ export const editorRepository = {
         musicProjectId,
         musicTrackId,
         channelId,
-        new Date().toISOString(),
+        now,
         id,
       )
-    return this.getProject(id)
+    return {
+      ...current,
+      name,
+      timeline,
+      musicProjectId,
+      musicTrackId,
+      channelId,
+      duration: timelineDuration(timeline),
+      updatedAt: now,
+    }
   },
 
   setLastExport(id: string, outputPath: string) {

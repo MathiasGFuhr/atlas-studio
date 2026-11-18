@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Maximize, Minimize, Scissors, Trash2, Volume2, VolumeX } from 'lucide-react'
-import { editorAnimationById } from '@shared/editor/animationsCatalog'
 import { editorEffectById } from '@shared/editor/effectsCatalog'
+import { editorTransitionById } from '@shared/editor/transitionsCatalog'
+import { CapCutAnimationPicker } from './CapCutAnimationPicker'
 import {
   EDITOR_TEXT_MOTIONS,
   EDITOR_TEXT_MOTION_SOURCE_LABEL,
@@ -34,18 +35,20 @@ import { cn } from '../../lib/utils'
 const SHORTCUTS: Array<[string, string]> = [
   ['Espaço', 'Play / pausa'],
   ['S', 'Dividir no playhead'],
+  ['Ctrl + D', 'Duplicar selecionado'],
   ['Delete', 'Excluir clipe'],
   ['Shift + Delete', 'Excluir e fechar o buraco'],
   ['Ctrl + Z / Ctrl + Y', 'Desfazer / refazer'],
   ['← →', 'Quadro anterior / próximo'],
   ['Shift + ← →', '1 segundo'],
+  ['↑ ↓', 'Corte anterior / próximo'],
   ['Ctrl + roda', 'Zoom na timeline'],
 ]
 
 type ClipPatch = Partial<
   Pick<
     EditorClip,
-    'volume' | 'muted' | 'fit' | 'scale' | 'opacity' | 'fadeIn' | 'fadeOut' | 'effects' | 'animation'
+    'volume' | 'muted' | 'fit' | 'scale' | 'opacity' | 'fadeIn' | 'fadeOut' | 'effects' | 'animation' | 'transitionOut'
   >
 >
 
@@ -110,9 +113,10 @@ function UnitField({
   onChange: (value: number) => void
 }) {
   const [draft, setDraft] = useState(display)
+  const [focused, setFocused] = useState(false)
   useEffect(() => {
-    setDraft(display)
-  }, [display])
+    if (!focused) setDraft(display)
+  }, [display, focused])
 
   const commit = () => {
     const parsed = Number(
@@ -151,12 +155,19 @@ function UnitField({
             inputMode="decimal"
             value={draft}
             disabled={disabled}
+            onFocus={() => setFocused(true)}
             onChange={(event) => setDraft(event.target.value)}
-            onBlur={commit}
+            onBlur={() => {
+              setFocused(false)
+              commit()
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault()
                 commit()
+                event.currentTarget.blur()
+              } else if (event.key === 'Escape') {
+                setDraft(display)
                 event.currentTarget.blur()
               }
             }}
@@ -179,6 +190,7 @@ function VisualTransformSection({
 }) {
   const scalePercent = Math.round(clip.scale * 100)
   const opacityPercent = Math.round(clip.opacity * 100)
+  const modified = Math.abs(clip.scale - 1) > 0.005 || Math.abs(clip.opacity - 1) > 0.005
   return (
     <Section title="Transformar">
       <UnitField
@@ -201,6 +213,15 @@ function VisualTransformSection({
         display={String(opacityPercent)}
         onChange={(value) => onClipPatch({ opacity: value / 100 })}
       />
+      {modified ? (
+        <button
+          type="button"
+          onClick={() => onClipPatch({ scale: 1, opacity: 1 })}
+          className="w-full rounded-lg border border-border-soft px-2 py-1 text-[10px] font-semibold text-muted-2 hover:bg-hover hover:text-text"
+        >
+          Restaurar transformação
+        </button>
+      ) : null}
     </Section>
   )
 }
@@ -253,40 +274,32 @@ function ClipAnimationSection({
   onClipPatch: (patch: ClipPatch) => void
 }) {
   const anim = clip.animation ?? { inId: null, outId: null, comboId: null, inDuration: 0.6, outDuration: 0.6 }
-  const inLabel = anim.inId ? editorAnimationById(anim.inId)?.label ?? anim.inId : 'Nenhuma'
-  const outLabel = anim.outId ? editorAnimationById(anim.outId)?.label ?? anim.outId : 'Nenhuma'
-  const comboLabel = anim.comboId ? editorAnimationById(anim.comboId)?.label ?? anim.comboId : 'Nenhuma'
   const patchAnim = (patch: Partial<EditorClipAnimation>) =>
     onClipPatch({ animation: { ...anim, ...patch } })
 
   return (
     <Section title="Animação">
-      <Row label="Entrada" value={inLabel} />
-      <Row label="Saída" value={outLabel} />
-      <Row label="Combinação" value={comboLabel} />
-      <UnitField
-        label="Duração entrada"
-        value={Number(anim.inDuration.toFixed(1))}
-        min={0.1}
-        max={3}
-        step={0.1}
-        unit="s"
-        display={`${anim.inDuration.toFixed(1)}s`}
-        onChange={(value) => patchAnim({ inDuration: value })}
+      <CapCutAnimationPicker
+        activeInId={anim.inId}
+        activeOutId={anim.outId}
+        activeComboId={anim.comboId}
+        inDuration={anim.inDuration}
+        outDuration={anim.outDuration}
+        onPick={(kind, id) => {
+          if (kind === 'in') patchAnim({ inId: id })
+          else if (kind === 'out') patchAnim({ outId: id })
+          else patchAnim({ comboId: id })
+        }}
+        onClearKind={(kind) => {
+          if (kind === 'in') patchAnim({ inId: null })
+          else if (kind === 'out') patchAnim({ outId: null })
+          else patchAnim({ comboId: null })
+        }}
+        onChangeDuration={(kind, seconds) => {
+          if (kind === 'in') patchAnim({ inDuration: seconds })
+          else patchAnim({ outDuration: seconds })
+        }}
       />
-      <UnitField
-        label="Duração saída"
-        value={Number(anim.outDuration.toFixed(1))}
-        min={0.1}
-        max={3}
-        step={0.1}
-        unit="s"
-        display={`${anim.outDuration.toFixed(1)}s`}
-        onChange={(value) => patchAnim({ outDuration: value })}
-      />
-      <p className="text-[10px] leading-relaxed text-muted-2">
-        Escolha presets na biblioteca Animação.
-      </p>
     </Section>
   )
 }
@@ -416,6 +429,8 @@ function AudioBasicSection({
 export function PropertiesPanel({
   timeline,
   clip,
+  visualClip,
+  audioClip,
   asset,
   selectionCount,
   selectionHasVisual,
@@ -430,6 +445,8 @@ export function PropertiesPanel({
 }: {
   timeline: EditorTimeline
   clip: EditorClip | null
+  visualClip?: EditorClip | null
+  audioClip?: EditorClip | null
   asset: EditorAsset | null
   selectionCount: number
   selectionHasVisual: boolean
@@ -445,6 +462,8 @@ export function PropertiesPanel({
   const fps = timeline.fps
 
   if (selectionCount > 1) {
+    const activeVisual = visualClip ?? clip
+    const activeAudio = audioClip ?? clip
     return (
       <div className="h-full overflow-y-auto">
         <Section title="Seleção">
@@ -458,13 +477,13 @@ export function PropertiesPanel({
             Excluir selecionados
           </button>
         </Section>
-        {selectionHasVisual && clip ? (
-          <VisualTransformSection clip={clip} onClipPatch={onClipPatch} />
+        {selectionHasVisual && activeVisual ? (
+          <VisualTransformSection clip={activeVisual} onClipPatch={onClipPatch} />
         ) : null}
-        {selectionHasVisual && clip ? (
-          <ClipEffectsSection clip={clip} onRemoveEffect={onRemoveEffect} />
+        {selectionHasVisual && activeVisual ? (
+          <ClipEffectsSection clip={activeVisual} onRemoveEffect={onRemoveEffect} />
         ) : null}
-        {selectionHasAudio && clip ? <AudioBasicSection clip={clip} onClipPatch={onClipPatch} /> : null}
+        {selectionHasAudio && activeAudio ? <AudioBasicSection clip={activeAudio} onClipPatch={onClipPatch} /> : null}
       </div>
     )
   }
@@ -923,6 +942,41 @@ export function PropertiesPanel({
       {visual ? <ClipAnimationSection clip={clip} onClipPatch={onClipPatch} /> : null}
 
       {visual ? <ClipEffectsSection clip={clip} onRemoveEffect={onRemoveEffect} /> : null}
+
+      {visual && clip.transitionOut ? (
+        <Section title="Transição">
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-border-soft bg-elevated px-2.5 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-text">
+                {editorTransitionById(clip.transitionOut.id)?.label ?? clip.transitionOut.id}
+              </p>
+              <p className="text-[10px] tabular-nums text-muted-2">
+                Duração: {clip.transitionOut.duration.toFixed(1)}s
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onClipPatch({ transitionOut: null })}
+              className="shrink-0 rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-[10px] font-semibold text-danger hover:bg-danger/20"
+            >
+              Remover
+            </button>
+          </div>
+          <UnitField
+            label="Duração da transição"
+            value={Number(clip.transitionOut.duration.toFixed(1))}
+            min={0.1}
+            max={Math.max(0.1, Math.min(3, Number(clipDuration(clip).toFixed(1))))}
+            step={0.1}
+            unit="s"
+            display={clip.transitionOut.duration.toFixed(1)}
+            onChange={(value) =>
+              clip.transitionOut &&
+              onClipPatch({ transitionOut: { ...clip.transitionOut, duration: value } })
+            }
+          />
+        </Section>
+      ) : null}
 
       {hasAudio ? <AudioBasicSection clip={clip} onClipPatch={onClipPatch} /> : null}
 

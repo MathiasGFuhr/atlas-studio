@@ -52,10 +52,12 @@ export function createPlaybackStore(): PlaybackStore {
       }
     },
     seek(next) {
-      time = Math.max(0, Math.min(duration, Number.isFinite(next) ? next : 0))
+      const clamped = Math.max(0, Math.min(duration, Number.isFinite(next) ? next : 0))
+      const changed = Math.abs(clamped - time) > 1e-6
+      time = clamped
       anchorTime = time
       anchorPerf = performance.now()
-      notify()
+      if (changed) notify()
     },
     play() {
       if (playing || duration <= 0) return
@@ -79,7 +81,24 @@ export function createPlaybackStore(): PlaybackStore {
     },
     setDuration(next) {
       duration = Math.max(0, next)
-      if (time > duration) store.seek(duration)
+      if (duration <= 0 && playing) {
+        playing = false
+        cancelAnimationFrame(frame)
+        time = 0
+        anchorTime = 0
+        notify()
+        return
+      }
+      if (time > duration) {
+        if (playing) {
+          playing = false
+          cancelAnimationFrame(frame)
+        }
+        time = duration
+        anchorTime = time
+        anchorPerf = performance.now()
+        notify()
+      }
     },
   }
   return store

@@ -114,7 +114,12 @@ function visualFilter(
   const effects = effectChain.length > 0 ? `,${effectChain.join(',')}` : ''
   const length = clipDuration(clip)
   const anim = animationFadeFilters(clip.animation, length)
-  return `[${inputIndex}:v]fps=${fps},${fit}${effects},${transform}${anim},setpts=PTS-STARTPTS+${t(clip.start)}/TB[${label}]`
+  const transDur =
+    !clip.animation?.outId && clip.transitionOut && clip.transitionOut.duration > 0
+      ? Math.min(clip.transitionOut.duration, length * 0.5)
+      : 0
+  const transFade = transDur > 0 ? `,fade=t=out:st=${t(Math.max(0, length - transDur))}:d=${t(transDur)}:alpha=1` : ''
+  return `[${inputIndex}:v]fps=${fps},${fit}${effects},${transform}${anim}${transFade},setpts=PTS-STARTPTS+${t(clip.start)}/TB[${label}]`
 }
 
 /**
@@ -127,8 +132,10 @@ export function buildEditorExportPlan(input: {
   width: number
   height: number
   outputPath: string
+  videoOnly?: boolean
+  maxQuality?: boolean
 }): EditorExportPlan {
-  const { timeline, assets, width, height } = input
+  const { timeline, assets, width, height, videoOnly = false, maxQuality = false } = input
   const duration = timelineDuration(timeline)
   if (duration < MIN_CLIP_DURATION) throw new Error('A timeline está vazia.')
   const fps = timeline.fps
@@ -274,58 +281,54 @@ export function buildEditorExportPlan(input: {
   filters.push(`[${base}]format=yuv420p[vout]`)
 
   const audioLabels: string[] = []
-  for (const clip of ordered) {
-    const track = trackById.get(clip.trackId)
-    const asset = assets[clip.assetId]
-    const index = inputByClip.get(clip.id)
-    if (!track || !asset || index == null) continue
-    if (track.muted || clip.muted || clip.volume <= 0) continue
-    if (asset.kind === 'image' || !asset.hasAudio) continue
-    const label = `a${audioLabels.length}`
-    const delayMs = Math.round(clip.start * 1000)
-    const length = clipDuration(clip)
-    const fadeIn = Math.max(0, Math.min(clip.fadeIn || 0, length))
-    const fadeOut = Math.max(0, Math.min(clip.fadeOut || 0, length))
-    const fades: string[] = []
-    if (fadeIn > 0) fades.push(`afade=t=in:st=0:d=${t(fadeIn)}`)
-    if (fadeOut > 0) fades.push(`afade=t=out:st=${t(Math.max(0, length - fadeOut))}:d=${t(fadeOut)}`)
-    const fadeChain = fades.length > 0 ? `,${fades.join(',')}` : ''
-    filters.push(
-      `[${index}:a]aresample=${AUDIO_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS,volume=${clip.volume.toFixed(3)}${fadeChain},adelay=${delayMs}:all=1[${label}]`,
-    )
-    audioLabels.push(label)
-  }
-  filters.push(`[1:a]atrim=0:${t(duration)},asetpts=PTS-STARTPTS[asil]`)
-  if (audioLabels.length > 0) {
-    const mixInputs = ['asil', ...audioLabels].map((label) => `[${label}]`).join('')
-    filters.push(
-      `${mixInputs}amix=inputs=${audioLabels.length + 1}:duration=first:dropout_transition=0:normalize=0,atrim=0:${t(duration)}[aout]`,
-    )
-  } else {
-    filters.push('[asil]anull[aout]')
+  if (!videoOnly) {
+    for (const clip of ordered) {
+      const track = trackById.get(clip.trackId)
+      const asset = assets[clip.assetId]
+      const index = inputByClip.get(clip.id)
+      if (!track || !asset || index == null) continue
+      if (track.muted || clip.muted || clip.volume <= 0) continue
+      if (asset.kind === 'image' || !asset.hasAudio) continue
+      const label = `a${audioLabels.length}`
+      const delayMs = Math.round(clip.start * 1000)
+      const length = clipDuration(clip)
+      const fadeIn = Math.max(0, Math.min(clip.fadeIn || 0, length))
+      const fadeOut = Math.max(0, Math.min(clip.fadeOut || 0, length))
+      const fades: string[] = []
+      if (fadeIn > 0) fades.push(`afade=t=in:st=0:d=${t(fadeIn)}`)
+      if (fadeOut > 0) fades.push(`afade=t=out:st=${t(Math.max(0, length - fadeOut))}:d=${t(fadeOut)}`)
+      const fadeChain = fades.length > 0 ? `,${fades.join(',')}` : ''
+      filters.push(
+        `[${index}:a]aresample=${AUDIO_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS,volume=${clip.volume.toFixed(3)}${fadeChain},adelay=${delayMs}:all=1[${label}]`,
+      )
+      audioLabels.push(label)
+    }
+    filters.push(`[1:a]atrim=0:${t(duration)},asetpts=PTS-STARTPTS[asil]`)
+    if (audioLabels.length > 0) {
+      const mixInputs = ['asil', ...audioLabels].map((label) => `[${label}]`).join('')
+      filters.push(
+        `${mixInputs}amix=inputs=${audioLabels.length + 1}:duration=first:dropout_transition=0:normalize=0,atrim=0:${t(duration)}[aout]`,
+      )
+    } else {
+      filters.push('[asil]anull[aout]')
+    }
   }
 
   const outputArgs = [
     '-map',
     '[vout]',
-    '-map',
-    '[aout]',
+    ...(videoOnly ? ['-an'] : ['-map', '[aout]']),
     '-c:v',
     'libx264',
     '-preset',
-    'veryfast',
+    maxQuality ? 'slow' : 'veryfast',
     '-crf',
-    '20',
+    maxQuality ? '14' : '20',
     '-pix_fmt',
     'yuv420p',
     '-r',
     String(fps),
-    '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
-    '-ar',
-    String(AUDIO_RATE),
+    ...(videoOnly ? [] : ['-c:a', 'aac', '-b:a', '192k', '-ar', String(AUDIO_RATE)]),
     '-movflags',
     '+faststart',
     '-t',

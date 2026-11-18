@@ -34,6 +34,8 @@ export async function exportEditorProject(input: {
   onProgress: (percent: number) => void
   timelineOverride?: EditorTimeline
   skipSetLastExport?: boolean
+  videoOnly?: boolean
+  maxQuality?: boolean
 }): Promise<string> {
   const project = editorRepository.getProject(input.projectId)
   if (!project) throw new Error('Projeto de edição não encontrado.')
@@ -70,7 +72,14 @@ export async function exportEditorProject(input: {
   const size = editorOutputSize(timeline.aspect, input.resolution)
   const outputPath = path.resolve(input.outputPath)
   const workDir = path.join(path.dirname(outputPath), `.atlas-editor-${project.id.slice(0, 8)}`)
-  const plan = buildEditorExportPlan({ timeline, assets, ...size, outputPath })
+  const plan = buildEditorExportPlan({
+    timeline,
+    assets,
+    ...size,
+    outputPath,
+    videoOnly: input.videoOnly,
+    maxQuality: input.maxQuality,
+  })
 
   const args = ['-y', '-hide_banner', ...plan.inputArgs]
   if (plan.filterGraph.length > INLINE_FILTER_LIMIT) {

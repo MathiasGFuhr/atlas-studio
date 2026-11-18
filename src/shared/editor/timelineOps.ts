@@ -15,6 +15,7 @@ import {
   type EditorClipEffect,
   type EditorClipFit,
   type EditorClipRole,
+  type EditorClipTransition,
   type EditorTextContent,
   type EditorTimeline,
   type EditorTrack,
@@ -593,6 +594,32 @@ export function mediaTimelineDuration(timeline: EditorTimeline): number {
  * Aplica o efeito do início ao fim do projeto (um bloco cobrindo toda a mídia).
  * Remove blocos anteriores do mesmo efeito.
  */
+export function setClipTransition(
+  timeline: EditorTimeline,
+  clipId: string,
+  transition: EditorClipTransition | null,
+): EditorTimeline {
+  const clip = findClip(timeline, clipId)
+  if (!clip || !isTrackEditable(timeline, clip.trackId)) return timeline
+  const normalized =
+    transition && transition.id && Number.isFinite(transition.duration) && transition.duration > 0
+      ? { id: transition.id, duration: roundTime(clamp(transition.duration, 0.1, Math.max(0.1, clipDuration(clip)))) }
+      : null
+  return updateClip(timeline, clipId, { transitionOut: normalized })
+}
+
+export function clearAllTransitions(timeline: EditorTimeline): EditorTimeline {
+  let changed = false
+  const clips = timeline.clips.map((clip) => {
+    if (!clip.transitionOut || !isTrackEditable(timeline, clip.trackId)) return clip
+    changed = true
+    const next = { ...clip }
+    delete next.transitionOut
+    return next
+  })
+  return changed ? { ...timeline, clips } : timeline
+}
+
 export function applyEffectToFullTimeline(
   timeline: EditorTimeline,
   effectId: EditorEffectId,
@@ -820,8 +847,31 @@ export function splitClip(
   }
   const local = roundTime(time - clip.start)
   const cut = roundTime(clip.inPoint + local)
-  const left: EditorClip = { ...clip, outPoint: cut }
-  const right: EditorClip = { ...clip, id: createEditorId(), start: roundTime(time), inPoint: cut }
+  const leftDur = Math.max(MIN_CLIP_DURATION, cut - clip.inPoint)
+  const rightDur = Math.max(MIN_CLIP_DURATION, clip.outPoint - cut)
+  const { transitionOut, ...leftBase } = clip
+  const left: EditorClip = {
+    ...leftBase,
+    outPoint: cut,
+    fadeIn: clamp(clip.fadeIn || 0, 0, leftDur),
+    fadeOut: 0,
+  }
+  const clampedTransition =
+    transitionOut && transitionOut.duration > 0
+      ? {
+          id: transitionOut.id,
+          duration: roundTime(clamp(transitionOut.duration, 0.1, Math.max(0.1, rightDur))),
+        }
+      : undefined
+  const right: EditorClip = {
+    ...clip,
+    id: createEditorId(),
+    start: roundTime(time),
+    inPoint: cut,
+    fadeIn: 0,
+    fadeOut: clamp(clip.fadeOut || 0, 0, rightDur),
+    ...(clampedTransition ? { transitionOut: clampedTransition } : {}),
+  }
   const clips: EditorClip[] = []
   for (const item of timeline.clips) {
     if (item.id === clip.id) clips.push(left, right)
@@ -845,6 +895,68 @@ export function splitAt(
   let next = timeline
   for (const id of targets) next = splitClip(next, id, time).timeline
   return next
+}
+
+/** Duplica os clipes selecionados na própria faixa (no espaço livre mais próximo após cada clipe). */
+export function duplicateClips(
+  timeline: EditorTimeline,
+  clipIds: readonly string[],
+): { timeline: EditorTimeline; clipIds: string[] } {
+  const idSet = new Set(clipIds)
+  const targets = timeline.clips
+    .filter((clip) => idSet.has(clip.id) && isTrackEditable(timeline, clip.trackId))
+    .sort((a, b) => a.start - b.start)
+  if (targets.length === 0) return { timeline, clipIds: [] }
+
+  let next = timeline
+  const createdIds: string[] = []
+  for (const clip of targets) {
+    const duration = clipDuration(clip)
+    const others = clipsInTrack(next, clip.trackId)
+    const start = findFreeStart(others, clipEnd(clip), duration)
+    const copy: EditorClip = {
+      ...clip,
+      id: createEditorId(),
+      start,
+      effects: clip.effects.map((fx) => ({ ...fx })),
+      animation: { ...clip.animation },
+      text: clip.text
+        ? {
+            ...clip.text,
+            titleStyle: clip.text.titleStyle ? { ...clip.text.titleStyle } : null,
+            subtitleStyle: clip.text.subtitleStyle ? { ...clip.text.subtitleStyle } : null,
+          }
+        : null,
+      ...(clip.transitionOut ? { transitionOut: { ...clip.transitionOut } } : {}),
+    }
+    next = { ...next, clips: [...next.clips, copy] }
+    createdIds.push(copy.id)
+  }
+  return { timeline: next, clipIds: createdIds }
+}
+
+/** Próximo ponto de corte (início/fim de clipe) antes ou depois de `time`. */
+export function adjacentEditPoint(
+  timeline: EditorTimeline,
+  time: number,
+  direction: 'prev' | 'next',
+): number {
+  const points = new Set<number>([0])
+  for (const clip of timeline.clips) {
+    points.add(roundTime(clip.start))
+    points.add(roundTime(clipEnd(clip)))
+  }
+  const sorted = [...points].sort((a, b) => a - b)
+  if (direction === 'prev') {
+    for (let i = sorted.length - 1; i >= 0; i -= 1) {
+      if (sorted[i] < time - 0.01) return sorted[i]
+    }
+    return 0
+  }
+  for (let i = 0; i < sorted.length; i += 1) {
+    if (sorted[i] > time + 0.01) return sorted[i]
+  }
+  return sorted[sorted.length - 1] ?? 0
 }
 
 /**
@@ -874,11 +986,24 @@ export function extractShortTimeline(
     const trimLeft = roundTime(sliceStart - clip.start)
     const inPoint = roundTime(clip.inPoint + trimLeft)
     const outPoint = roundTime(inPoint + sliceDuration)
+    const keepTransition = sliceEnd >= end - EPS && clip.transitionOut
+    const base: EditorClip = { ...clip }
+    delete base.transitionOut
     clips.push({
-      ...clip,
+      ...base,
       start: roundTime(sliceStart - rangeStart),
       inPoint,
       outPoint,
+      fadeIn: sliceStart > clip.start + EPS ? 0 : clamp(clip.fadeIn || 0, 0, sliceDuration),
+      fadeOut: sliceEnd < end - EPS ? 0 : clamp(clip.fadeOut || 0, 0, sliceDuration),
+      ...(keepTransition
+        ? {
+            transitionOut: {
+              id: keepTransition.id,
+              duration: roundTime(clamp(keepTransition.duration, 0.1, Math.max(0.1, sliceDuration))),
+            },
+          }
+        : {}),
       fit: isEffectClip(clip) || isTextClip(clip) ? clip.fit : 'cover',
     })
   }
@@ -976,7 +1101,7 @@ export function updateClip(
   patch: Partial<
     Pick<
       EditorClip,
-      'volume' | 'muted' | 'fit' | 'scale' | 'opacity' | 'fadeIn' | 'fadeOut' | 'effects' | 'animation'
+      'volume' | 'muted' | 'fit' | 'scale' | 'opacity' | 'fadeIn' | 'fadeOut' | 'effects' | 'animation' | 'transitionOut'
     >
   >,
 ): EditorTimeline {
@@ -1203,6 +1328,15 @@ function asFit(value: unknown): EditorClipFit {
   return value === 'cover' ? 'cover' : 'contain'
 }
 
+function normalizeClipTransition(raw: unknown): EditorClipTransition | null {
+  if (!raw || typeof raw !== 'object') return null
+  const item = raw as { id?: unknown; duration?: unknown }
+  const id = typeof item.id === 'string' ? item.id.trim() : ''
+  const duration = Number(item.duration)
+  if (!id || !Number.isFinite(duration) || duration <= 0) return null
+  return { id, duration: roundTime(clamp(duration, 0.1, 10)) }
+}
+
 /** Lê o JSON persistido sem confiar no formato: descarta o que estiver quebrado. */
 export function normalizeTimeline(raw: unknown, fallbackAspect: EditorAspect = '16:9'): EditorTimeline {
   if (!raw || typeof raw !== 'object') return createEmptyTimeline(fallbackAspect)
@@ -1297,6 +1431,7 @@ export function normalizeTimeline(raw: unknown, fallbackAspect: EditorAspect = '
       role === 'effect' && effectId
         ? normalizeClipEffects([{ id: effectId, intensity: firstIntensity }])
         : normalizeClipEffects(item.effects)
+    const transitionOut = normalizeClipTransition(item.transitionOut)
     clips.push({
       id: item.id,
       assetId:
@@ -1319,6 +1454,7 @@ export function normalizeTimeline(raw: unknown, fallbackAspect: EditorAspect = '
       fadeOut: clamp(asNumber(item.fadeOut, 0), 0, Math.max(0, outPoint - inPoint)),
       effects,
       animation: normalizeClipAnimation(item.animation),
+      ...(transitionOut ? { transitionOut } : {}),
       role,
       effectId,
       text,

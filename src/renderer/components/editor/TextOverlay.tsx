@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { memo, useSyncExternalStore, type CSSProperties } from 'react'
 import { resolveAnimationStyle } from '@shared/editor/animationsCatalog'
 import { normalizeTextMotionId } from '@shared/editor/textMotionsCatalog'
 import {
@@ -8,6 +8,7 @@ import {
 } from '@shared/editor/textStyleResolve'
 import type { EditorClip } from '@shared/editor/types'
 import { clipDuration } from '@shared/editor/timelineOps'
+import type { PlaybackStore } from '../../lib/editor/playbackStore'
 import { KineticText } from './KineticText'
 
 function styleMap(style: ResolvedTextLayerStyle, frameHeight: number): CSSProperties {
@@ -25,17 +26,18 @@ function styleMap(style: ResolvedTextLayerStyle, frameHeight: number): CSSProper
   }
 }
 
-export function TextOverlay({
+export const TextOverlay = memo(function TextOverlay({
   clip,
-  time,
+  store,
   frameWidth,
   frameHeight,
 }: {
   clip: EditorClip
-  time: number
+  store: PlaybackStore
   frameWidth: number
   frameHeight: number
 }) {
+  const time = useSyncExternalStore(store.subscribe, store.getTime)
   const text = clip.text
   if (!text || frameWidth < 8 || frameHeight < 8) return null
   const presentation = resolveTextPresentation(text)
@@ -112,4 +114,4 @@ export function TextOverlay({
       </div>
     </div>
   )
-}
+})
