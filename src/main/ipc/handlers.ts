@@ -241,7 +241,7 @@ export function registerIpcHandlers(deps: {
   ipcMain.handle(IPC.projects.get, (_e, id: string) => projectRepository.get(id))
   ipcMain.handle(
     IPC.projects.create,
-    (
+    async (
       _e,
       input: {
         name: string
@@ -255,18 +255,30 @@ export function registerIpcHandlers(deps: {
       const created = projectRepository.create(input)
       // Projeto de música/Lipsync com cantor → já nasce o projeto no Editor.
       if (created.workspace !== 'flow' && created.channelId) {
-        void import('../services/editor/editorComfyIngest')
-          .then(({ seedEditorForMusicProject }) => seedEditorForMusicProject(created.id))
-          .catch(() => {
-            /* Editor opcional no create */
-          })
+        try {
+          const { seedEditorForMusicProject } = await import('../services/editor/editorComfyIngest')
+          await seedEditorForMusicProject(created.id)
+        } catch {
+          /* Editor opcional no create */
+        }
       }
       return created
     },
   )
-  ipcMain.handle(IPC.projects.update, (_e, id: string, patch: ProjectPatch) =>
-    projectRepository.update(id, patch),
-  )
+  ipcMain.handle(IPC.projects.update, async (_e, id: string, patch: ProjectPatch) => {
+    const updated = projectRepository.update(id, patch)
+    if (updated && updated.workspace !== 'flow' && (patch.channelId !== undefined || updated.channelId)) {
+      try {
+        const { syncEditorProjectWithMusicProject } = await import(
+          '../services/editor/editorComfyIngest'
+        )
+        await syncEditorProjectWithMusicProject(updated.id)
+      } catch {
+        /* Editor opcional no update */
+      }
+    }
+    return updated
+  })
   ipcMain.handle(IPC.projects.remove, (_e, id: string, options?: RemoveProjectOptions) =>
     removeProject(id, options),
   )

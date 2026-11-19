@@ -143,6 +143,33 @@ function folderPromptByScene(scan: LipSyncFolderScan): Map<number, string> {
   return prompts
 }
 
+function normalizeFolderPath(value: string): string {
+  return value.trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+/** Detecta o canal/cantor pela pasta vinculada ao canal ou pelo nome da pasta pai. */
+function inferChannelIdFromFolder(folder: string, list: Channel[]): string | null {
+  const target = normalizeFolderPath(folder)
+  if (!target) return null
+  let bestByPath: { id: string; len: number } | null = null
+  for (const channel of list) {
+    const channelFolder = channel.folderPath ? normalizeFolderPath(channel.folderPath) : ''
+    if (!channelFolder) continue
+    if (target === channelFolder || target.startsWith(`${channelFolder}/`)) {
+      if (!bestByPath || channelFolder.length > bestByPath.len) {
+        bestByPath = { id: channel.id, len: channelFolder.length }
+      }
+    }
+  }
+  if (bestByPath) return bestByPath.id
+
+  const parts = target.split('/').filter(Boolean)
+  const parentName = parts.length >= 2 ? parts[parts.length - 2] : ''
+  if (!parentName) return null
+  const byParentName = list.find((channel) => channel.name.trim().toLowerCase() === parentName)
+  return byParentName?.id ?? null
+}
+
 function isFolderScanEmpty(scan: LipSyncFolderScan): boolean {
   return (
     scan.matches.length === 0 &&
@@ -378,10 +405,12 @@ export function LipSyncRefsPage() {
   const itemsRef = useRef(items)
   const draftsRef = useRef(drafts)
   const projectsRef = useRef(projects)
+  const channelsRef = useRef(channels)
   const attachProjectIdRef = useRef(attachProjectId)
   itemsRef.current = items
   draftsRef.current = drafts
   projectsRef.current = projects
+  channelsRef.current = channels
   attachProjectIdRef.current = attachProjectId
   const comfyQueue = useComfyQueue()
   const [editorOpen, setEditorOpen] = useState(false)
@@ -530,11 +559,40 @@ export function LipSyncRefsPage() {
       title: 'Pasta do projeto (imagens e áudios da música)',
     })
     if (!folder) return
+    const inferredChannelId = inferChannelIdFromFolder(folder, channelsRef.current)
     setProjectForm((current) => ({
       ...current,
       projectFolderPath: folder,
       name: current.name.trim() && current.projectFolderPath ? current.name : folderNameFromPath(folder),
+      channelId: inferredChannelId ?? current.channelId,
     }))
+  }
+
+  async function updateActiveProjectChannel(nextChannelId: string) {
+    const project = projectsRef.current.find((entry) => entry.id === currentProjectId())
+    if (!project || projectLocked) return
+    const channelId = nextChannelId.trim() || null
+    if ((project.channelId ?? null) === channelId) return
+    setBusy(true)
+    try {
+      const updated = await api.projects.update(project.id, { channelId })
+      const channelName = channelId
+        ? (channelsRef.current.find((entry) => entry.id === channelId)?.name ?? null)
+        : null
+      const next: Project = updated ?? { ...project, channelId, channelName }
+      setProjects((current) => current.map((entry) => (entry.id === next.id ? next : entry)))
+      notifyProjectsChanged()
+      push(
+        channelId
+          ? `"${next.name}" vinculado a ${channelName ?? 'cantor'} e sincronizado com o Editor.`
+          : `Vínculo de canal/cantor removido de "${next.name}".`,
+        'success',
+      )
+    } catch (error) {
+      pushError(error, 'Não foi possível vincular o canal/cantor.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function saveNewProject() {
@@ -806,13 +864,14 @@ export function LipSyncRefsPage() {
 
   async function bindFolderToProject(folder: string, project: Project | undefined): Promise<Project> {
     const folderName = folderNameFromPath(folder) || 'Projeto'
+    const inferredChannelId = inferChannelIdFromFolder(folder, channelsRef.current)
     if (!project) {
       const current = projectsRef.current.find((entry) => entry.id === currentProjectId())
       const created = await api.projects.create({
         name: folderName,
         description: '',
         projectType: 'music',
-        channelId: current?.channelId ?? null,
+        channelId: inferredChannelId ?? current?.channelId ?? null,
         projectFolderPath: folder,
       })
       notifyProjectsChanged()
@@ -823,11 +882,15 @@ export function LipSyncRefsPage() {
       setAttachProjectId(created.id)
       return created
     }
-    const updated = await api.projects.update(project.id, {
+    const patch: { projectFolderPath: string; name: string; channelId?: string | null } = {
       projectFolderPath: folder,
       name: folderName,
-    })
-    const next = updated ?? { ...project, projectFolderPath: folder, name: folderName }
+    }
+    if (!project.channelId && inferredChannelId) {
+      patch.channelId = inferredChannelId
+    }
+    const updated = await api.projects.update(project.id, patch)
+    const next = updated ?? { ...project, ...patch }
     setProjects((current) => current.map((entry) => (entry.id === next.id ? next : entry)))
     notifyProjectsChanged()
     return next
@@ -1753,6 +1816,7 @@ export function LipSyncRefsPage() {
   const selectedDirty = Boolean(selectedItem && selectedDraft && isDirty(selectedItem, selectedDraft))
   const selectedNumber =
     selectedItem === null ? '' : sceneNumber(indexById.get(selectedItem.id) ?? 0)
+  const attachProject = projects.find((entry) => entry.id === attachProjectId) ?? null
   const selectedProjectId = selectedDraft?.projectId || attachProjectId
   const selectedProject = projects.find((entry) => entry.id === selectedProjectId) ?? null
   const selectedProjectFolder = selectedProject?.projectFolderPath?.trim() ?? ''
@@ -2028,8 +2092,8 @@ export function LipSyncRefsPage() {
             </p>
           ) : null}
           <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-[16rem] flex-1 items-center gap-2">
-              <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted">
+            <div className="flex min-w-[16rem] flex-1 flex-wrap items-center gap-2">
+              <label className="flex min-w-[13rem] flex-1 items-center gap-2 text-xs text-muted">
                 Projeto
                 <select
                   value={attachProjectId}
@@ -2044,6 +2108,23 @@ export function LipSyncRefsPage() {
                     <option key={project.id} value={project.id}>
                       {project.name}
                       {comfyQueue.activeProjectIds.includes(project.id) ? ' (gerando)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex min-w-[12rem] items-center gap-2 text-xs text-muted">
+                Canal/Cantor
+                <select
+                  value={attachProject?.channelId ?? ''}
+                  disabled={!attachProject || busy || projectLocked}
+                  onChange={(event) => void updateActiveProjectChannel(event.target.value)}
+                  title="Vincula este projeto a um canal/cantor e já cria ou atualiza automaticamente no Editor."
+                  className="h-9 min-w-[10rem] rounded-xl border border-border bg-bg/50 px-2 text-sm text-text focus:border-accent/60 focus:outline-none disabled:opacity-50"
+                >
+                  <option value="">Sem cantor</option>
+                  {channels.map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.name}
                     </option>
                   ))}
                 </select>

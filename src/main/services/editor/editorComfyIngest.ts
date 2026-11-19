@@ -8,7 +8,7 @@ import {
   placeClipAt,
   timelineDuration,
 } from '../../../shared/editor/timelineOps'
-import type { EditorAsset, EditorProject } from '../../../shared/editor/types'
+import { EDITOR_DEFAULT_ASPECT, type EditorAsset, type EditorProject } from '../../../shared/editor/types'
 import type { MusicTrack } from '../../../shared/musicAnalysis'
 import { editorRepository } from '../../repositories/editorRepository'
 import { musicRepository } from '../../repositories/musicRepository'
@@ -84,7 +84,9 @@ export function ensureEditorProjectForMusicProject(
       name?: string
     } = {}
     if (track && existing.musicTrackId !== track.id) patch.musicTrackId = track.id
-    if (!existing.channelId && musicProject.channelId) patch.channelId = musicProject.channelId
+    if ((existing.channelId ?? null) !== (musicProject.channelId ?? null)) {
+      patch.channelId = musicProject.channelId ?? null
+    }
     if (
       musicProject.name.trim() &&
       existing.name.trim() === 'Nova edição' &&
@@ -101,7 +103,7 @@ export function ensureEditorProjectForMusicProject(
   const name = track?.name.trim() || musicProject.name.trim() || 'Nova edição'
   return editorRepository.createProject({
     name,
-    aspect: '9:16',
+    aspect: EDITOR_DEFAULT_ASPECT,
     musicProjectId: id,
     musicTrackId: track?.id ?? null,
     channelId: musicProject.channelId ?? null,
@@ -167,6 +169,29 @@ export async function seedEditorForMusicProject(
     channelId: seeded.channelId,
   })
   return seeded
+}
+
+/**
+ * Sincroniza vínculo de cantor/canal entre um projeto de música/Lipsync e o Editor.
+ * - Com cantor vinculado: garante que o projeto exista no Editor (e atualiza o cantor/música).
+ * - Sem cantor vinculado: apenas atualiza o projeto do Editor caso ele já exista.
+ */
+export async function syncEditorProjectWithMusicProject(
+  musicProjectId: string,
+): Promise<EditorProject | null> {
+  const id = String(musicProjectId ?? '').trim()
+  if (!id) return null
+  const musicProject = projectRepository.get(id)
+  if (!musicProject || musicProject.workspace === 'flow') return null
+  if (musicProject.channelId) {
+    return seedEditorForMusicProject(id)
+  }
+  const existing = editorRepository.findByMusicProjectId(id)
+  if (!existing) return null
+  if (existing.channelId !== null) {
+    return editorRepository.updateProject(existing.id, { channelId: null }) ?? existing
+  }
+  return existing
 }
 
 async function resolvePlacement(input: {
