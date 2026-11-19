@@ -23,7 +23,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     const el = localRef.current
     el.style.height = 'auto'
     const minHeight = Number.parseFloat(getComputedStyle(el).minHeight) || 88
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, minHeight), 360)}px`
+    const clamped = Math.min(Math.max(el.scrollHeight, minHeight), 360)
+    el.style.height = `${clamped}px`
+    el.style.overflowY = el.scrollHeight > 360 ? 'auto' : 'hidden'
   }, [autoGrow, value])
 
   return (
@@ -40,7 +42,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         className={cn(
           'min-h-[120px] w-full min-w-0 resize-y rounded-xl border border-border bg-input px-3.5 py-3 text-sm leading-relaxed break-words text-text placeholder:text-muted-2',
           'transition-[border-color,box-shadow] duration-200 ease-out hover:border-border-strong focus:border-accent/70 focus:outline-none disabled:cursor-not-allowed disabled:text-disabled disabled:hover:border-border',
-          autoGrow && 'resize-none overflow-hidden',
+          autoGrow && 'resize-none',
           className,
         )}
         {...props}

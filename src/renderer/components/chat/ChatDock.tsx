@@ -1,5 +1,5 @@
 import { GripVertical, MessageSquare, Sparkles, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   CHAT_DOCK_DEFAULT_HEIGHT,
   CHAT_DOCK_DEFAULT_WIDTH,
@@ -8,7 +8,6 @@ import {
   type ChatDockSize,
 } from '@shared/chat/chatDockSize'
 import { atlasAssistantCopy } from '@shared/assistant'
-import { ChatPage } from '../../pages/ChatPage'
 import { getAtlasApi } from '../../lib/api'
 import { onAtlasChatOpen } from '../../lib/chatEvents'
 import {
@@ -16,6 +15,8 @@ import {
   subscribeFabBottomClearance,
 } from '../../lib/fabClearance'
 import { cn } from '../../lib/utils'
+
+const ChatPage = lazy(() => import('../../pages/ChatPage').then((m) => ({ default: m.ChatPage })))
 
 const FAB_GAP = 20
 const FAB_SIZE = 48
@@ -183,21 +184,30 @@ export function ChatDock() {
   }, [])
 
   useEffect(() => {
+    let persistTimer: ReturnType<typeof setTimeout> | null = null
     function onResize() {
-      setFabPos((current) => {
-        if (!current) return current
+      const current = fabPosRef.current
+      if (current) {
         const next = clampFabPoint(current, clearanceRef.current)
-        if (next.x === current.x && next.y === current.y) return current
-        fabPosRef.current = next
-        persistFab({ x: next.x, y: next.y })
-        return next
-      })
-      setSize((current) =>
-        clampChatDockSize(current.width, current.height, viewportSize(), clearanceRef.current),
+        if (next.x !== current.x || next.y !== current.y) {
+          fabPosRef.current = next
+          setFabPos(next)
+          if (persistTimer) clearTimeout(persistTimer)
+          persistTimer = setTimeout(() => {
+            persistTimer = null
+            persistFab({ x: next.x, y: next.y })
+          }, 250)
+        }
+      }
+      setSize((currentSize) =>
+        clampChatDockSize(currentSize.width, currentSize.height, viewportSize(), clearanceRef.current),
       )
     }
     window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      if (persistTimer) clearTimeout(persistTimer)
+    }
   }, [persistFab])
 
   useEffect(() => {
@@ -488,13 +498,21 @@ export function ChatDock() {
             onPointerCancel={endResize}
           />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <ChatPage
-              variant="dock"
-              launchProjectId={launchProjectId}
-              onClose={() => setOpen(false)}
-              onLaunchConsumed={() => setLaunchProjectId(null)}
-              onResetSize={resetSize}
-            />
+            <Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center text-xs text-muted">
+                  Carregando assistente...
+                </div>
+              }
+            >
+              <ChatPage
+                variant="dock"
+                launchProjectId={launchProjectId}
+                onClose={() => setOpen(false)}
+                onLaunchConsumed={() => setLaunchProjectId(null)}
+                onResetSize={resetSize}
+              />
+            </Suspense>
           </div>
         </div>
       ) : null}

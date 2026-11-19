@@ -122,11 +122,19 @@ const FinanceiroPage = lazy(() =>
 )
 
 function preloadPages() {
-  // Um chunk por janela ociosa: antes os ~20 imports disparavam juntos e
-  // travavam a UI logo após o login enquanto o V8 compilava tudo de uma vez.
-  const queue = Object.values(pageLoaders)
+  // Pré-carrega só telas leves e mais acessadas em janela ociosa.
+  // Telas pesadas (EditorPage ~354 KB + GSAP, ShortsStudio, FlowPrompts, LipSync) carregam sob demanda.
+  const queue = [
+    pageLoaders.projects,
+    pageLoaders.channels,
+    pageLoaders.prompts,
+    pageLoaders.tasks,
+    pageLoaders.music,
+  ]
   let handle = 0
+  let cancelled = false
   const next = () => {
+    if (cancelled) return
     const load = queue.shift()
     if (!load) return
     void load()
@@ -134,11 +142,14 @@ function preloadPages() {
         /* o lazy() da rota tenta de novo e mostra o erro se falhar */
       })
       .finally(() => {
-        handle = window.requestIdleCallback(next, { timeout: 2500 })
+        if (!cancelled && queue.length > 0) {
+          handle = window.requestIdleCallback(next, { timeout: 5000 })
+        }
       })
   }
-  handle = window.requestIdleCallback(next, { timeout: 4000 })
+  handle = window.requestIdleCallback(next, { timeout: 5000 })
   return () => {
+    cancelled = true
     queue.length = 0
     window.cancelIdleCallback(handle)
   }
@@ -230,14 +241,14 @@ export default function App() {
     setTourOpen(false)
     const seen = settingsRef.current?.seenProductTours ?? []
     const seenProductTours = seen.includes('home') ? seen : [...seen, 'home']
-    void api.settings.update({ productTourCompleted: true, seenProductTours }).then(setSettings)
+    void api.settings.update({ productTourCompleted: true, seenProductTours }).then(setSettings).catch(() => undefined)
   }, [api])
 
   const finishTourAndConnect = useCallback(() => {
     setTourOpen(false)
     const seen = settingsRef.current?.seenProductTours ?? []
     const seenProductTours = seen.includes('home') ? seen : [...seen, 'home']
-    void api.settings.update({ productTourCompleted: true, seenProductTours }).then(setSettings)
+    void api.settings.update({ productTourCompleted: true, seenProductTours }).then(setSettings).catch(() => undefined)
     codexAuth.dismissOnboarding()
     setLinkModalOpen(true)
   }, [api, codexAuth])
@@ -250,7 +261,7 @@ export default function App() {
       ? { ...settingsRef.current, seenProductTours }
       : settingsRef.current
     setSettings((current) => (current ? { ...current, seenProductTours } : current))
-    void api.settings.update({ seenProductTours }).then(setSettings)
+    void api.settings.update({ seenProductTours }).then(setSettings).catch(() => undefined)
   }, [api])
 
   const handleOnboardingLink = useCallback(() => {
@@ -297,8 +308,8 @@ export default function App() {
           <div className="flex min-w-0 flex-1 flex-col bg-transparent">
             <TopBar settings={settings} />
             <main className="min-h-0 flex-1 overflow-hidden bg-transparent">
-              <Suspense fallback={<RouteFallback />}>
               <RouteTransition>
+              <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/" element={<HomePage />} />
 
@@ -359,8 +370,8 @@ export default function App() {
                 <Route path="/settings" element={<Navigate to="/configuracoes" replace />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
-              </RouteTransition>
               </Suspense>
+              </RouteTransition>
             </main>
           </div>
         </div>

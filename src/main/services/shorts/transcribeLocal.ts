@@ -1,8 +1,32 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { ShortsTranscriptSource, TranscriptCue } from '../../../shared/shorts'
 import { normalizeLanguageCode } from '../../../shared/shortsLanguage'
+
+const activeTranscribeChildren = new Set<ChildProcess>()
+const MAX_CMD_STDIO = 256 * 1024
+
+function appendCapped(current: string, chunk: string): string {
+  const next = current + chunk
+  return next.length > MAX_CMD_STDIO ? next.slice(-MAX_CMD_STDIO) : next
+}
+
+/** Encerra transcrições locais em andamento para não deixar Python/Whisper órfão ao sair. */
+export function killActiveTranscribeProcesses() {
+  for (const child of activeTranscribeChildren) {
+    try {
+      child.kill('SIGKILL')
+    } catch {
+      try {
+        child.kill()
+      } catch {
+        /* processo já encerrado */
+      }
+    }
+  }
+  activeTranscribeChildren.clear()
+}
 
 function runCommand(
   command: string,
@@ -13,27 +37,42 @@ function runCommand(
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       windowsHide: true,
-      shell: options?.shell ?? process.platform === 'win32',
+      shell: options?.shell ?? false,
     })
+    activeTranscribeChildren.add(child)
+    let settled = false
     let stdout = ''
     let stderr = ''
+    const finish = (result: { code: number | null; stdout: string; stderr: string }) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      activeTranscribeChildren.delete(child)
+      resolve(result)
+    }
     const timer = setTimeout(() => {
-      child.kill()
-      resolve({ code: 1, stdout, stderr: stderr + '\ntimeout' })
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        try {
+          child.kill()
+        } catch {
+          /* ignore */
+        }
+      }
+      finish({ code: 1, stdout, stderr: stderr + '\ntimeout' })
     }, timeoutMs)
     child.stdout?.on('data', (buf: Buffer) => {
-      stdout += buf.toString('utf8')
+      stdout = appendCapped(stdout, buf.toString('utf8'))
     })
     child.stderr?.on('data', (buf: Buffer) => {
-      stderr += buf.toString('utf8')
+      stderr = appendCapped(stderr, buf.toString('utf8'))
     })
     child.on('error', () => {
-      clearTimeout(timer)
-      resolve({ code: 1, stdout, stderr })
+      finish({ code: 1, stdout, stderr })
     })
     child.on('close', (code) => {
-      clearTimeout(timer)
-      resolve({ code, stdout, stderr })
+      finish({ code, stdout, stderr })
     })
   })
 }

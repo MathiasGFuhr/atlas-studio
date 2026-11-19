@@ -1,14 +1,11 @@
-import { useEffect, useState } from 'react'
 import { ChevronRight, RefreshCw, Zap } from 'lucide-react'
 import type { AtlasAiStatusView } from '@shared/atlasAiStatus'
 import {
-  atlasV2UpdateCopy,
-  isAtlasV2Release,
+  formatVersionTag,
   updateStateLabel,
   type AppUpdateStatus,
 } from '@shared/updates'
 import { useAppUpdate } from '../hooks/useAppUpdate'
-import { getAtlasApi } from '../lib/api'
 import { cn } from '../lib/utils'
 import logoAi from '../assets/brand/logo-ai.png'
 
@@ -26,60 +23,37 @@ const kindText: Record<AtlasAiStatusView['kind'], string> = {
   disconnected: 'text-muted',
 }
 
-function updateStatusLine(
-  status: AppUpdateStatus | null,
-  accountName: string,
-): {
+function updateStatusLine(status: AppUpdateStatus | null): {
   label: string
-  tone: 'ok' | 'warn' | 'muted' | 'busy' | 'premiere'
+  tone: 'ok' | 'warn' | 'muted' | 'busy'
 } {
   if (!status) return { label: '—', tone: 'muted' }
-  const v2Incoming =
-    isAtlasV2Release(status.availableVersion) &&
-    (status.state === 'available' || status.state === 'ready' || status.state === 'downloading')
-  const copy = v2Incoming ? atlasV2UpdateCopy(accountName) : null
+  const currentTag = formatVersionTag(status.currentVersion)
+  const availableTag = formatVersionTag(status.availableVersion)
 
   switch (status.state) {
     case 'up-to-date':
-      if (isAtlasV2Release(status.currentVersion)) {
-        return {
-          label: atlasV2UpdateCopy(accountName).statusInstalled,
-          tone: 'ok',
-        }
-      }
       return {
-        label: `Atualizado · v${status.currentVersion}`,
+        label: currentTag ? `Atualizado · ${currentTag}` : 'Atualizado',
         tone: 'ok',
       }
     case 'available':
-      if (copy) return { label: copy.statusAvailable, tone: 'premiere' }
       return {
-        label: status.availableVersion
-          ? `Nova versão · v${status.availableVersion}`
-          : 'Nova versão disponível',
+        label: availableTag ? `Nova versão · ${availableTag}` : 'Nova versão disponível',
         tone: 'warn',
       }
     case 'ready':
-      if (copy) return { label: copy.statusReady, tone: 'premiere' }
       return {
-        label: status.availableVersion
-          ? `Pronta · v${status.availableVersion}`
-          : 'Atualização pronta',
-        tone: 'warn',
+        label: availableTag ? `Pronta · ${availableTag}` : 'Atualização pronta',
+        tone: 'ok',
       }
     case 'downloading':
-      if (copy) {
-        return {
-          label:
-            status.downloadPercent != null
-              ? `${copy.statusDownloading} ${Math.round(status.downloadPercent)}%`
-              : copy.statusDownloading,
-          tone: 'premiere',
-        }
-      }
       return {
-        label:
-          status.downloadPercent != null
+        label: availableTag
+          ? status.downloadPercent != null
+            ? `Baixando ${availableTag} · ${Math.round(status.downloadPercent)}%`
+            : `Baixando ${availableTag}…`
+          : status.downloadPercent != null
             ? `Baixando · ${Math.round(status.downloadPercent)}%`
             : 'Baixando…',
         tone: 'busy',
@@ -94,7 +68,7 @@ function updateStatusLine(
       return { label: 'Atualizador indisponível', tone: 'muted' }
     case 'idle':
       return {
-        label: status.currentVersion ? `v${status.currentVersion}` : 'Aguardando verificação',
+        label: currentTag || 'Aguardando verificação',
         tone: 'muted',
       }
     default:
@@ -109,36 +83,15 @@ export function AtlasAiStatusCard({
   view,
   onClick,
   compact = false,
-  accountName = '',
 }: {
   view: AtlasAiStatusView
   onClick?: () => void
   compact?: boolean
-  accountName?: string
 }) {
-  const api = getAtlasApi()
   const { status, busy, check } = useAppUpdate()
-  const [resolvedName, setResolvedName] = useState(accountName)
-  const updateLine = updateStatusLine(status, resolvedName)
+  const updateLine = updateStatusLine(status)
   const checking = status?.state === 'checking' || busy
   const live = view.kind === 'connected' || view.kind === 'connecting'
-
-  useEffect(() => {
-    if (accountName.trim()) {
-      setResolvedName(accountName)
-      return
-    }
-    let cancelled = false
-    void api.settings
-      .get()
-      .then((settings) => {
-        if (!cancelled) setResolvedName(settings.accountName?.trim() || '')
-      })
-      .catch(() => undefined)
-    return () => {
-      cancelled = true
-    }
-  }, [accountName, api])
 
   if (compact) {
     return (
@@ -170,7 +123,7 @@ export function AtlasAiStatusCard({
           className="relative flex h-10 w-full items-center justify-center rounded-xl border border-border-soft bg-elevated text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-60"
         >
           <RefreshCw className={cn('h-3.5 w-3.5', checking && 'animate-spin')} />
-          {updateLine.tone === 'warn' || updateLine.tone === 'premiere' ? (
+          {updateLine.tone === 'warn' || status?.state === 'ready' ? (
             <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-accent" />
           ) : null}
         </button>
@@ -229,12 +182,11 @@ export function AtlasAiStatusCard({
           </p>
           <p
             className={cn(
-              'mt-0.5 text-xs leading-snug',
+              'mt-0.5 text-xs leading-snug tabular-nums',
               updateLine.tone === 'ok' && 'text-accent',
               updateLine.tone === 'warn' && 'text-warning',
-              updateLine.tone === 'busy' && 'text-muted',
+              updateLine.tone === 'busy' && 'text-accent',
               updateLine.tone === 'muted' && 'text-muted',
-              updateLine.tone === 'premiere' && 'text-accent',
             )}
             title={updateLine.label}
           >

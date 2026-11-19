@@ -2,8 +2,7 @@ import { Download, RefreshCw, RotateCcw } from 'lucide-react'
 import type { AppSettings } from '@shared/types'
 import {
   UPDATE_NOTES_FALLBACK,
-  atlasV2UpdateCopy,
-  isAtlasV2Release,
+  formatVersionTag,
   normalizeReleaseNotes,
   safeUpdateErrorText,
   updateStateLabel,
@@ -40,12 +39,18 @@ export function UpdatesSettingsCard({
   const showProgress = state === 'downloading'
   const percent = status?.downloadPercent
   const availableVersion = status?.availableVersion
-  const premiere = isAtlasV2Release(availableVersion)
-  const premiereCopy = premiere ? atlasV2UpdateCopy(settings.accountName) : null
-  const notes = availableVersion && !premiere
+  const availableTag = formatVersionTag(availableVersion)
+  const currentTag = formatVersionTag(status?.currentVersion)
+  const notes = availableVersion
     ? normalizeReleaseNotes(status?.releaseNotes, { displayedVersion: availableVersion })
     : { items: [] as string[] }
   const errorText = safeUpdateErrorText(status?.errorMessage)
+  const updateBoxTitle =
+    state === 'downloading'
+      ? 'Baixando atualização'
+      : state === 'ready'
+        ? 'Atualização pronta para instalar'
+        : 'Nova versão disponível'
 
   return (
     <Card id="atualizacoes" className={highlight ? 'ring-1 ring-accent/40' : undefined}>
@@ -67,45 +72,43 @@ export function UpdatesSettingsCard({
 
         {availableVersion &&
         (state === 'available' || state === 'error' || state === 'downloading' || state === 'ready') ? (
-          premiereCopy ? (
-            <div className="atlas-update-premiere relative overflow-hidden rounded-xl border border-accent/35 px-3.5 py-3.5">
-              <div className="atlas-update-premiere__glow pointer-events-none absolute inset-0" aria-hidden />
-              <div className="relative">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
-                  {premiereCopy.eyebrow}
-                </p>
-                <p className="home-greeting mt-1.5 text-xl leading-tight text-text">
-                  {premiereCopy.settingsTitle}
-                </p>
-                <p className="mt-1 text-sm text-accent">Atlas Studio {availableVersion}</p>
-                <p className="mt-2 text-xs leading-relaxed text-muted">{premiereCopy.settingsSubtitle}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-border-soft bg-elevated px-3.5 py-3">
-              <p className="text-sm font-semibold text-text">Nova versão disponível</p>
-              <p className="mt-0.5 text-sm text-accent">Atlas Studio {availableVersion}</p>
-              {notes.title ? (
-                <p className="mt-2 text-xs font-medium leading-relaxed text-text">{notes.title}</p>
-              ) : null}
-              {notes.items.length > 0 ? (
-                <ul className="mt-2 space-y-1">
-                  {notes.items.map((item, index) => (
-                    <li key={`${index}-${item.slice(0, 24)}`} className="flex gap-2 text-xs leading-relaxed text-muted">
-                      <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-muted/70" aria-hidden />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {notes.text ? (
-                <p className="mt-2 text-xs leading-relaxed text-muted">{notes.text}</p>
-              ) : null}
-              {notes.items.length === 0 && !notes.text ? (
-                <p className="mt-2 text-xs leading-relaxed text-muted">{UPDATE_NOTES_FALLBACK}</p>
+          <div className="rounded-xl border border-border-soft bg-elevated px-3.5 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-text">{updateBoxTitle}</p>
+              {availableTag ? (
+                <span className="shrink-0 rounded-md border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-accent">
+                  {availableTag}
+                </span>
               ) : null}
             </div>
-          )
+            <p className="mt-0.5 text-xs text-muted tabular-nums">
+              {currentTag && availableTag && currentTag !== availableTag
+                ? `Atlas Studio ${currentTag} → ${availableTag}`
+                : `Atlas Studio ${availableTag || availableVersion}`}
+            </p>
+            <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-2">
+              Novidades da atualização
+            </p>
+            {notes.title ? (
+              <p className="mt-1.5 text-xs font-medium leading-relaxed text-text">{notes.title}</p>
+            ) : null}
+            {notes.items.length > 0 ? (
+              <ul className="mt-1.5 space-y-1">
+                {notes.items.map((item, index) => (
+                  <li key={`${index}-${item.slice(0, 24)}`} className="flex gap-2 text-xs leading-relaxed text-muted">
+                    <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-accent/70" aria-hidden />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {notes.text ? (
+              <p className="mt-1.5 text-xs leading-relaxed text-muted">{notes.text}</p>
+            ) : null}
+            {notes.items.length === 0 && !notes.text && !notes.title ? (
+              <p className="mt-1.5 text-xs leading-relaxed text-muted">{UPDATE_NOTES_FALLBACK}</p>
+            ) : null}
+          </div>
         ) : null}
 
         {showProgress ? (
@@ -167,7 +170,7 @@ export function UpdatesSettingsCard({
               disabled={busy}
               onClick={() => void download()}
             >
-              {premiereCopy ? premiereCopy.ctaDownload : 'Baixar atualização'}
+              {availableTag ? `Baixar ${availableTag}` : 'Baixar atualização'}
             </Button>
           ) : null}
           {showInstall ? (
@@ -176,7 +179,7 @@ export function UpdatesSettingsCard({
                 disabled={busy}
                 onClick={() => void install()}
               >
-                {premiereCopy ? premiereCopy.ctaInstall : 'Reiniciar e atualizar'}
+                {availableTag ? `Reiniciar e instalar ${availableTag}` : 'Reiniciar e atualizar'}
               </Button>
               <Button variant="ghost" disabled={busy} onClick={minimizeSidebarCard}>
                 Depois

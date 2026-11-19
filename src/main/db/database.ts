@@ -390,6 +390,8 @@ function ensureDefaultSkillLibrary(database: AppDatabase) {
 function wrapDatabase(database: SqlJsDatabase): AppDatabase {
   let dirty = false
   let persistTimer: ReturnType<typeof setTimeout> | null = null
+  let consecutiveFailures = 0
+  const MAX_PERSIST_BACKOFF_MS = 30_000
 
   const writeToDisk = () => {
     const data = Buffer.from(database.export())
@@ -417,6 +419,7 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
     dirty = false
     try {
       writeToDisk()
+      consecutiveFailures = 0
     } catch (error) {
       dirty = true
       throw error
@@ -428,10 +431,11 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
       clearTimeout(persistTimer)
       persistTimer = null
     }
+    consecutiveFailures = 0
     writeDirty()
   }
 
-  const schedulePersist = () => {
+  const schedulePersist = (delayMs = PERSIST_DEBOUNCE_MS) => {
     dirty = true
     if (persistTimer) return
     persistTimer = setTimeout(() => {
@@ -439,10 +443,19 @@ function wrapDatabase(database: SqlJsDatabase): AppDatabase {
       try {
         writeDirty()
       } catch (error) {
-        logger.error('db.persist.failed', { message: (error as Error).message })
-        schedulePersist()
+        consecutiveFailures += 1
+        const nextDelay = Math.min(
+          MAX_PERSIST_BACKOFF_MS,
+          PERSIST_DEBOUNCE_MS * 2 ** Math.min(consecutiveFailures, 7),
+        )
+        logger.error('db.persist.failed', {
+          message: (error as Error).message,
+          consecutiveFailures,
+          nextRetryMs: nextDelay,
+        })
+        schedulePersist(nextDelay)
       }
-    }, PERSIST_DEBOUNCE_MS)
+    }, delayMs)
     // O Electron mantém o processo vivo; o timer não pode segurar o encerramento de testes.
     persistTimer.unref?.()
   }

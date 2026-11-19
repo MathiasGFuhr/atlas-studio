@@ -366,6 +366,21 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
     }
   })
 
+  const reservedShortPaths = new Set<string>()
+  const reserveNextShortPath = (folder: string): string => {
+    for (let i = 1; i < 10_000; i += 1) {
+      const candidate = path.join(folder, `short ${String(i).padStart(2, '0')}.mp4`)
+      const key = path.resolve(candidate).toLowerCase()
+      if (!reservedShortPaths.has(key) && !fs.existsSync(candidate)) {
+        reservedShortPaths.add(key)
+        return candidate
+      }
+    }
+    const fallback = nextShortOutputPath(folder)
+    reservedShortPaths.add(path.resolve(fallback).toLowerCase())
+    return fallback
+  }
+
   ipcMain.handle(IPC.editor.makeShort, async (_e, request: EditorMakeShortRequest) => {
     const project = requireProject(request?.projectId)
     const clipIds = Array.isArray(request?.clipIds) ? request.clipIds : []
@@ -375,7 +390,8 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
     }
     const resolution = isEditorExportResolution(request?.resolution) ? request.resolution : 1080
     const folder = resolveEditorProjectFolder(project)
-    const targetPath = nextShortOutputPath(folder)
+    const targetPath = reserveNextShortPath(folder)
+    const reservedKey = path.resolve(targetPath).toLowerCase()
     const win = getMainWindow()
     const send = (event: Omit<EditorExportProgress, 'projectId'>) => {
       if (win && !win.isDestroyed()) {
@@ -399,6 +415,8 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
       logger.error('editor.make_short.failed', { projectId: project.id, error: message })
       send({ stage: 'failed', percent: null, message })
       throw error
+    } finally {
+      reservedShortPaths.delete(reservedKey)
     }
   })
 }

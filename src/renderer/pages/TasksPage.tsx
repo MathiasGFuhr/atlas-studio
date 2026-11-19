@@ -46,15 +46,24 @@ export function TasksPage() {
   const [saving, setSaving] = useState(false)
   const openedQueryRef = useRef<string | null>(null)
 
+  const loadSeqRef = useRef(0)
+
   async function load() {
-    const [list, music, channelList] = await Promise.all([
-      api.tasks.list(),
-      api.projects.list({ projectType: 'music' }),
-      api.channels.list(),
-    ])
-    setTasks(list)
-    setMusicProjects(music)
-    setChannels(channelList)
+    const seq = ++loadSeqRef.current
+    try {
+      const [list, music, channelList] = await Promise.all([
+        api.tasks.list(),
+        api.projects.list({ projectType: 'music' }),
+        api.channels.list(),
+      ])
+      if (seq !== loadSeqRef.current) return
+      setTasks(list)
+      setMusicProjects(music)
+      setChannels(channelList)
+    } catch (error) {
+      if (seq !== loadSeqRef.current) return
+      pushError(error, 'Falha ao carregar tarefas')
+    }
   }
 
   useEffect(() => {
@@ -145,7 +154,6 @@ export function TasksPage() {
         push('Tarefa criada.', 'success')
       }
       setModalOpen(false)
-      await load()
       notifyTasksChanged()
     } catch (error) {
       pushError(error, 'Falha ao salvar tarefa')
@@ -158,7 +166,6 @@ export function TasksPage() {
     const next = task.status === 'pending' ? 'completed' : 'pending'
     try {
       await api.tasks.setStatus(task.id, next)
-      await load()
       notifyTasksChanged()
     } catch (error) {
       pushError(error, 'Falha ao atualizar tarefa')
@@ -171,7 +178,6 @@ export function TasksPage() {
       await api.tasks.remove(deleting.id)
       push('Tarefa excluída.', 'success')
       setDeleting(null)
-      await load()
       notifyTasksChanged()
     } catch (error) {
       pushError(error, 'Falha ao excluir tarefa')

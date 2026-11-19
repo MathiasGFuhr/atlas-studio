@@ -74,7 +74,24 @@ function toClips(
   }))
 }
 
+const inFlightAnalyzeByJob = new Map<string, Promise<ShortsJob>>()
+
 export async function analyzeShortsJob(input: {
+  request: ShortsAnalyzeInput
+  antigravity: AntigravityService
+  catalog: AgentModelCatalog
+  getWindow: () => BrowserWindow | null
+}): Promise<ShortsJob> {
+  const existing = inFlightAnalyzeByJob.get(input.request.jobId)
+  if (existing) return existing
+  const run = runAnalyzeShortsJob(input).finally(() => {
+    inFlightAnalyzeByJob.delete(input.request.jobId)
+  })
+  inFlightAnalyzeByJob.set(input.request.jobId, run)
+  return run
+}
+
+async function runAnalyzeShortsJob(input: {
   request: ShortsAnalyzeInput
   antigravity: AntigravityService
   catalog: AgentModelCatalog
@@ -434,7 +451,7 @@ export async function regenerateShortsClipCopy(input: {
     focus: clip,
     watchedVideo: job.analysisMode === 'audiovisual',
   })
-  const clips = await metadata.generate({
+  const generated = await metadata.generate({
     job,
     clips: job.clips,
     fields: input.fields,
@@ -442,5 +459,22 @@ export async function regenerateShortsClipCopy(input: {
     copyInputs,
     focus: clip,
   })
-  return shortsRepository.update(job.id, { clips })!
+  // Re-lê do banco antes de salvar para não apagar edições/exports feitos em paralelo em outros clipes.
+  const latest = shortsRepository.get(job.id)
+  if (!latest) return shortsRepository.update(job.id, { clips: generated })!
+  const updatedFocus = generated.find((item) => item.id === input.clipId)
+  const mergedClips = updatedFocus
+    ? latest.clips.map((item) =>
+        item.id === input.clipId
+          ? {
+              ...item,
+              hook: updatedFocus.hook,
+              title: updatedFocus.title,
+              description: updatedFocus.description,
+              hashtags: updatedFocus.hashtags,
+            }
+          : item,
+      )
+    : generated
+  return shortsRepository.update(job.id, { clips: mergedClips })!
 }

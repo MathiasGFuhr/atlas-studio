@@ -1032,6 +1032,7 @@ html[data-atlas-hidden] *::after {
   .atlas-nav-indicator {
     transition-duration: 1ms;
   }
+  button:not(:disabled):not([draggable="true"]):active,
   .atlas-press:active:not(:disabled),
   .atlas-lift:hover,
   .atlas-lift:active {
@@ -1045,8 +1046,12 @@ html[data-atlas-hidden] *::after {
   .atlas-modal-backdrop,
   .atlas-modal-panel,
   .atlas-pop,
-  .atlas-skeleton::after {
-    animation: none;
+  .atlas-route-bar,
+  .animate-pulse-dot,
+  .atlas-update-premiere__glow,
+  .atlas-skeleton::after,
+  [class*="atlas-bits-"] {
+    animation: none !important;
   }
   .atlas-shiny {
     -webkit-text-fill-color: currentColor;

@@ -39,16 +39,16 @@ export function WorkspaceCapabilitiesProvider({ children }: { children: ReactNod
   }, [api])
 
   useEffect(() => {
-    void refresh()
+    void refresh().catch(() => undefined)
     const stop = [
       onProjectsChanged(() => {
-        void refresh()
+        void refresh().catch(() => undefined)
       }),
       onChannelsChanged(() => {
-        void refresh()
+        void refresh().catch(() => undefined)
       }),
       onSettingsChanged(() => {
-        void refresh()
+        void refresh().catch(() => undefined)
       }),
     ]
     return () => {
@@ -58,10 +58,9 @@ export function WorkspaceCapabilitiesProvider({ children }: { children: ReactNod
 
   const enableArea = useCallback(
     async (area: ContentArea) => {
-      const saved = await api.settings.update(preferenceToSettings(preferenceEnablingArea(capabilities, area)))
-      void saved
-      notifySettingsChanged()
+      await api.settings.update(preferenceToSettings(preferenceEnablingArea(capabilities, area)))
       await refresh()
+      notifySettingsChanged()
     },
     [api, capabilities, refresh],
   )

@@ -163,10 +163,10 @@ async function runCliExec(options: {
 
       let stdoutBuf = ''
       let stderrBuf = ''
-
-      const onAbort = () => {
+      let settled = false
+      const killTree = () => {
         try {
-          if (process.platform === 'win32') {
+          if (process.platform === 'win32' && child.pid) {
             spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
               windowsHide: true,
               stdio: 'ignore',
@@ -175,9 +175,30 @@ async function runCliExec(options: {
             child.kill('SIGTERM')
           }
         } catch {
-          child.kill()
+          try {
+            child.kill()
+          } catch {
+            /* ignore */
+          }
         }
-        reject(new Error('Geração cancelada.'))
+      }
+      const finish = (err?: Error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeoutTimer)
+        options.signal?.removeEventListener('abort', onAbort)
+        if (err) reject(err)
+        else resolve(stdoutBuf)
+      }
+
+      const timeoutTimer = setTimeout(() => {
+        killTree()
+        finish(new Error('Timeout aguardando resposta do Codex.'))
+      }, 15 * 60_000)
+
+      const onAbort = () => {
+        killTree()
+        finish(new Error('Geração cancelada.'))
       }
       if (options.signal?.aborted) {
         onAbort()
@@ -197,20 +218,18 @@ async function runCliExec(options: {
         stderrBuf += buf.toString('utf8')
       })
       child.on('error', (err) => {
-        options.signal?.removeEventListener('abort', onAbort)
-        reject(err)
+        finish(err)
       })
       child.on('close', (code) => {
-        options.signal?.removeEventListener('abort', onAbort)
         if (options.signal?.aborted) {
-          reject(new Error('Geração cancelada.'))
+          finish(new Error('Geração cancelada.'))
           return
         }
         if (code === 0 || stdoutBuf.trim().length > 0 || existsSync(outputFile)) {
-          resolve(stdoutBuf)
+          finish()
           return
         }
-        reject(new Error(stderrBuf.trim() || `Codex encerrou com código ${code}`))
+        finish(new Error(stderrBuf.trim() || `Codex encerrou com código ${code}`))
       })
     })
 
@@ -277,10 +296,15 @@ async function runAppServerTurn(options: {
     let buffer = ''
     let finalText = ''
     let settled = false
+    let appServerTimer: ReturnType<typeof setTimeout> | null = null
 
     const finish = (err?: Error) => {
       if (settled) return
       settled = true
+      if (appServerTimer) {
+        clearTimeout(appServerTimer)
+        appServerTimer = null
+      }
       options.signal?.removeEventListener('abort', onAbort)
       try {
         child.kill()
@@ -372,7 +396,7 @@ async function runAppServerTurn(options: {
       else finish(new Error(`Codex app-server encerrou com código ${code}`))
     })
 
-    setTimeout(() => {
+    appServerTimer = setTimeout(() => {
       if (!settled && finalText.trim()) finish()
       else if (!settled) finish(new Error('Timeout aguardando resposta do Codex.'))
     }, 1000 * 60 * 20)

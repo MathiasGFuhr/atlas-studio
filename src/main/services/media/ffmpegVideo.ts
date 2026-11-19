@@ -398,8 +398,31 @@ export async function trimVideoToDuration(inputPath: string, durationSeconds: nu
     if (!fs.existsSync(temp) || fs.statSync(temp).size < 64) {
       throw new Error('O vídeo cortado ficou vazio.')
     }
-    if (fs.existsSync(resolved)) fs.unlinkSync(resolved)
-    fs.renameSync(temp, resolved)
+    const backup = `${resolved}.bak-${Date.now()}`
+    let movedOriginal = false
+    try {
+      if (fs.existsSync(resolved)) {
+        fs.renameSync(resolved, backup)
+        movedOriginal = true
+      }
+      fs.renameSync(temp, resolved)
+      if (movedOriginal) {
+        try {
+          fs.rmSync(backup, { force: true })
+        } catch {
+          /* backup residual será limpo depois */
+        }
+      }
+    } catch (swapError) {
+      if (movedOriginal && fs.existsSync(backup) && !fs.existsSync(resolved)) {
+        try {
+          fs.renameSync(backup, resolved)
+        } catch {
+          /* preserva backup se não conseguir restaurar */
+        }
+      }
+      throw swapError
+    }
   } catch (error) {
     fs.rmSync(temp, { force: true })
     throw error

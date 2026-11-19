@@ -307,7 +307,22 @@ export class RunpodLifecycleManager {
       if (request.dryRun) {
         raw = { ...raw, status: 'RUNNING', ports: raw.ports?.length ? raw.ports : ['8188/http', '22/tcp'] }
       } else {
-        raw = await client.getPod(podId)
+        try {
+          raw = await client.getPod(podId)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          state = this.stamp({
+            ...state,
+            phase: 'waiting_pod',
+            message: `Consultando status do Pod… (${message})`,
+            diagnostics: [
+              ...state.diagnostics.filter((line) => !line.startsWith('Último erro status Pod:')),
+              `Último erro status Pod: ${message}`,
+            ],
+            podStatus: pod.status,
+          })
+          continue
+        }
       }
       pod = summarizeV2Pod(raw)
       state = this.stamp({
@@ -316,13 +331,14 @@ export class RunpodLifecycleManager {
         message: `Pod em ${pod.status}…`,
         podStatus: pod.status,
       })
-      if (String(pod.status).toUpperCase() === 'ERROR') {
+      const polledUpper = String(pod.status).toUpperCase()
+      if (polledUpper === 'ERROR' || polledUpper === 'EXITED' || polledUpper === 'TERMINATED') {
         return this.stamp({
           ...state,
           phase: 'error',
-          message: 'O Pod entrou em ERROR após o start.',
+          message: `O Pod entrou em ${polledUpper} após o start.`,
           diagnostics: [...state.diagnostics, 'Verifique logs no painel RunPod.'],
-          error: 'Pod em ERROR.',
+          error: `Pod em ${polledUpper}.`,
         })
       }
     }
@@ -673,7 +689,11 @@ export class RunpodLifecycleManager {
     const promise = run().finally(() => {
       this.inFlight.delete(podId)
     })
-    this.inFlight.set(podId, promise.then((result) => result.lifecycle))
+    const tracked = promise.then(
+      (result) => result.lifecycle,
+      () => this.latest!,
+    )
+    this.inFlight.set(podId, tracked)
     return promise
   }
 }

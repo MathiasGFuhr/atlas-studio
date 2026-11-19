@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react'
 import { stripTechnicalErrorWrappers, toUserFacingError } from '@shared/userFacingError'
+import { getFabBottomClearance, subscribeFabBottomClearance } from '../lib/fabClearance'
 import { cn } from '../lib/utils'
 
 type ToastTone = 'default' | 'success' | 'error'
@@ -50,7 +51,14 @@ function prepareToastMessage(message: string, tone: ToastTone): string {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([])
+  const [bottomOffset, setBottomOffset] = useState(() => 80 + getFabBottomClearance())
   const timersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+
+  useEffect(() => {
+    const sync = () => setBottomOffset(80 + getFabBottomClearance())
+    sync()
+    return subscribeFabBottomClearance(sync)
+  }, [])
 
   const dismiss = useCallback((id: string) => {
     const timer = timersRef.current.get(id)
@@ -61,38 +69,48 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setItems((prev) => prev.filter((item) => item.id !== id))
   }, [])
 
-  const push = useCallback(
-    (message: string, tone: ToastTone = 'default') => {
-      const prepared = prepareToastMessage(message, tone)
-      if (!prepared) return
-
-      const id = crypto.randomUUID()
+  const appendToast = useCallback(
+    (entry: ToastItem, durationMs: number) => {
       setItems((prev) => {
-        const next = [...prev, { id, title: TOAST_TITLE[tone], message: prepared, tone }]
+        const next = [...prev, entry]
+        if (next.length > 4) {
+          for (const evicted of next.slice(0, next.length - 4)) {
+            const oldTimer = timersRef.current.get(evicted.id)
+            if (oldTimer) {
+              clearTimeout(oldTimer)
+              timersRef.current.delete(evicted.id)
+            }
+          }
+        }
         return next.slice(-4)
       })
-
-      const timer = setTimeout(() => dismiss(id), TOAST_DURATION_MS[tone])
-      timersRef.current.set(id, timer)
+      const timer = setTimeout(() => dismiss(entry.id), durationMs)
+      timersRef.current.set(entry.id, timer)
     },
     [dismiss],
   )
 
+  const push = useCallback(
+    (message: string, tone: ToastTone = 'default') => {
+      const prepared = prepareToastMessage(message, tone)
+      if (!prepared) return
+      appendToast(
+        { id: crypto.randomUUID(), title: TOAST_TITLE[tone], message: prepared, tone },
+        TOAST_DURATION_MS[tone],
+      )
+    },
+    [appendToast],
+  )
+
   const pushError = useCallback(
     (error: unknown, fallback = 'Algo deu errado. Tente novamente.') => {
-      const id = crypto.randomUUID()
       const prepared = toUserFacingError(error, fallback)
-      setItems((prev) => {
-        const next = [
-          ...prev,
-          { id, title: TOAST_TITLE.error, message: prepared, tone: 'error' as const },
-        ]
-        return next.slice(-4)
-      })
-      const timer = setTimeout(() => dismiss(id), TOAST_DURATION_MS.error)
-      timersRef.current.set(id, timer)
+      appendToast(
+        { id: crypto.randomUUID(), title: TOAST_TITLE.error, message: prepared, tone: 'error' },
+        TOAST_DURATION_MS.error,
+      )
     },
-    [dismiss],
+    [appendToast],
   )
 
   useEffect(() => {
@@ -109,9 +127,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed bottom-20 right-5 z-[60] flex w-[min(22rem,calc(100vw-2.5rem))] flex-col gap-2"
-        aria-live="polite"
-        aria-relevant="additions text"
+        className="pointer-events-none fixed right-5 z-[90] flex w-[min(22rem,calc(100vw-2.5rem))] flex-col gap-2"
+        style={{ bottom: bottomOffset }}
       >
         {items.map((item) => (
           <ToastCard key={item.id} item={item} onDismiss={() => dismiss(item.id)} />

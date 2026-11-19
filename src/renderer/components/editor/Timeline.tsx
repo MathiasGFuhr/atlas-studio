@@ -332,6 +332,14 @@ export function Timeline({
   const [reorderHint, setReorderHint] = useState<{ overId: string; edge: 'before' | 'after' } | null>(null)
   const scrollRafRef = useRef(0)
   const pendingScrollLeftRef = useRef(0)
+  const activePointerCleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => {
+      activePointerCleanupRef.current?.()
+      activePointerCleanupRef.current = null
+    }
+  }, [])
 
   const timelineRef = useRef(timeline)
   timelineRef.current = timeline
@@ -465,6 +473,7 @@ export function Timeline({
       if (event.button !== 0) return
       event.preventDefault()
       event.stopPropagation()
+      activePointerCleanupRef.current?.()
       store.pause()
       store.seek(timeFromClientX(event.clientX))
       const move = (e: PointerEvent) => store.seek(timeFromClientX(e.clientX))
@@ -473,7 +482,9 @@ export function Timeline({
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', up)
         window.removeEventListener('blur', up)
+        activePointerCleanupRef.current = null
       }
+      activePointerCleanupRef.current = up
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
       window.addEventListener('pointercancel', up)
@@ -491,6 +502,7 @@ export function Timeline({
     if (rect && event.clientX < rect.left + TIMELINE_HEADER_WIDTH) return
     event.preventDefault()
     event.stopPropagation()
+    activePointerCleanupRef.current?.()
     store.pause()
     store.seek(timeFromClientX(event.clientX))
     const startX = event.clientX
@@ -508,6 +520,13 @@ export function Timeline({
       panning = true
       node.scrollLeft = Math.max(0, startScroll - (e.clientX - startX))
     }
+    const detach = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      window.removeEventListener('blur', up)
+      activePointerCleanupRef.current = null
+    }
     const up = (e: Event) => {
       try {
         if ('pointerId' in e && typeof (e as PointerEvent).pointerId === 'number') {
@@ -516,11 +535,9 @@ export function Timeline({
       } catch {
         /* already released */
       }
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      window.removeEventListener('pointercancel', up)
-      window.removeEventListener('blur', up)
+      detach()
     }
+    activePointerCleanupRef.current = detach
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', up)
@@ -595,12 +612,22 @@ export function Timeline({
         marqueeRef.current = null
         marqueeActiveRef.current = false
         setMarquee(null)
+        activePointerCleanupRef.current = null
         if (!wasMarquee) {
           if (!additive) onSelectRef.current([])
           if (e instanceof PointerEvent) store.seek(timeFromClientX(e.clientX))
         }
       }
 
+      activePointerCleanupRef.current = () => {
+        window.removeEventListener('pointermove', move)
+        window.removeEventListener('pointerup', up)
+        window.removeEventListener('pointercancel', up)
+        window.removeEventListener('blur', up)
+        marqueeRef.current = null
+        marqueeActiveRef.current = false
+        activePointerCleanupRef.current = null
+      }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
       window.addEventListener('pointercancel', up)
@@ -696,6 +723,7 @@ export function Timeline({
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', up)
         window.removeEventListener('blur', up)
+        activePointerCleanupRef.current = null
         const drag = dragRef.current
         let result = draftRef.current
         dragRef.current = null
@@ -719,6 +747,16 @@ export function Timeline({
         if (result !== drag.base) onCommitRef.current(result)
       }
 
+      activePointerCleanupRef.current?.()
+      activePointerCleanupRef.current = () => {
+        window.removeEventListener('pointermove', move)
+        window.removeEventListener('pointerup', up)
+        window.removeEventListener('pointercancel', up)
+        window.removeEventListener('blur', up)
+        dragRef.current = null
+        draftRef.current = null
+        activePointerCleanupRef.current = null
+      }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
       window.addEventListener('pointercancel', up)

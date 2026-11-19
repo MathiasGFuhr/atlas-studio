@@ -181,11 +181,12 @@ export function ShortsGenerationProvider({ children }: { children: ReactNode }) 
       }))
 
       const run = (async () => {
+        let settled = false
         try {
           void api.shorts
             .get(input.jobId)
             .then((job) => {
-              if (!job) return
+              if (settled || !job) return
               rememberJob(
                 job.status === 'analyzing'
                   ? job
@@ -195,9 +196,11 @@ export function ShortsGenerationProvider({ children }: { children: ReactNode }) 
             .catch(() => undefined)
 
           const next = await api.shorts.analyze(input)
+          settled = true
           finishAnalyzing(next, options?.preservedCount ?? 0)
           return next
         } catch (error) {
+          settled = true
           setAnalyzingJobIds((current) => removeId(current, input.jobId))
           clearAnalyzeProgress(input.jobId)
           try {

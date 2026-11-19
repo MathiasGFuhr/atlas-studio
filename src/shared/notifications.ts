@@ -2,8 +2,8 @@ import type { AtlasTask } from './types'
 import { daysBetweenYmd, dueDateState, todayYmd } from './tasks'
 import {
   UPDATE_SETTINGS_HREF,
-  atlasV2UpdateCopy,
-  isAtlasV2Release,
+  formatVersionTag,
+  summarizeReleaseNotes,
   updateNotificationId,
   type AppUpdateState,
 } from './updates'
@@ -78,8 +78,8 @@ export function deriveUpdateNotification(
   status: {
     state: AppUpdateState | string
     availableVersion: string | null
+    releaseNotes?: string | null
   },
-  accountName = '',
 ): AtlasNotification | null {
   const version = status.availableVersion?.trim()
   if (!version) return null
@@ -87,25 +87,14 @@ export function deriveUpdateNotification(
     return null
   }
   const id = updateNotificationId(version)
-  if (isAtlasV2Release(version)) {
-    const copy = atlasV2UpdateCopy(accountName)
-    return {
-      id,
-      kind: 'app-update',
-      title: copy.notificationTitle,
-      body: copy.notificationBody,
-      hint: `Atlas Studio ${version}`,
-      href: UPDATE_SETTINGS_HREF,
-      sortAt: version,
-      createdAt: version,
-    }
-  }
+  const versionTag = formatVersionTag(version)
+  const summary = summarizeReleaseNotes(status.releaseNotes, 140)
   return {
     id,
     kind: 'app-update',
-    title: 'Atualização',
-    body: 'Nova versão do Atlas Studio disponível.',
-    hint: `Atlas Studio ${version}`,
+    title: versionTag ? `Atualização · ${versionTag}` : 'Atualização',
+    body: summary ?? 'Nova versão do Atlas Studio disponível.',
+    hint: versionTag ? `Atlas Studio ${versionTag}` : `Atlas Studio ${version}`,
     href: UPDATE_SETTINGS_HREF,
     sortAt: version,
     createdAt: version,

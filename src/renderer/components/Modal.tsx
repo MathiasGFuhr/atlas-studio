@@ -1,6 +1,10 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { Button } from './Button'
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 export function Modal({
   open,
@@ -17,21 +21,87 @@ export function Modal({
   footer?: ReactNode
   size?: 'md' | 'lg' | 'xl' | '2xl'
 }) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  useEffect(() => {
+    if (!open) return
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const panel = panelRef.current
+    if (panel) {
+      const alreadyInside = previousFocus && panel.contains(previousFocus)
+      if (!alreadyInside) {
+        const firstInput = panel.querySelector<HTMLElement>(
+          'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [autofocus]',
+        )
+        const target = firstInput ?? panel
+        target.focus({ preventScroll: true })
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault()
+        event.stopPropagation()
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== 'Tab' || !panelRef.current) return
+      const focusables = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter((el) => el.offsetParent !== null)
+      if (focusables.length === 0) {
+        event.preventDefault()
+        panelRef.current.focus()
+        return
+      }
+      const first = focusables[0]!
+      const last = focusables[focusables.length - 1]!
+      const active = document.activeElement as HTMLElement | null
+      if (event.shiftKey) {
+        if (!active || active === first || !panelRef.current.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+      } else if (!active || active === last || !panelRef.current.contains(active)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      if (previousFocus && previousFocus.isConnected) {
+        previousFocus.focus({ preventScroll: true })
+      }
+    }
+  }, [open])
+
   if (!open) return null
-  return (
-    <div className="atlas-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-overlay/78 p-3 sm:p-6">
+
+  const content = (
+    <div
+      className="atlas-modal-backdrop fixed inset-0 z-[80] flex items-center justify-center bg-overlay/78 p-3 sm:p-6"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCloseRef.current()
+      }}
+    >
       <div
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className={
           size === '2xl'
-            ? 'atlas-modal-panel atlas-surface flex max-h-[min(92vh,960px)] w-full min-w-0 max-w-6xl flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal'
+            ? 'atlas-modal-panel atlas-surface flex max-h-[min(92vh,960px)] w-full min-w-0 max-w-6xl flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal outline-none'
             : size === 'xl'
-              ? 'atlas-modal-panel atlas-surface flex max-h-[min(92vh,900px)] w-full min-w-0 max-w-4xl flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal'
+              ? 'atlas-modal-panel atlas-surface flex max-h-[min(92vh,900px)] w-full min-w-0 max-w-4xl flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal outline-none'
               : size === 'lg'
-                ? 'atlas-modal-panel atlas-surface flex max-h-[min(92vh,820px)] w-full min-w-0 max-w-2xl flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal'
-                : 'atlas-modal-panel atlas-surface flex max-h-[min(92vh,720px)] w-full min-w-0 max-w-lg flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal'
+                ? 'atlas-modal-panel atlas-surface flex max-h-[min(92vh,820px)] w-full min-w-0 max-w-2xl flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal outline-none'
+                : 'atlas-modal-panel atlas-surface flex max-h-[min(92vh,720px)] w-full min-w-0 max-w-lg flex-col overflow-hidden rounded-2xl border border-border-soft bg-card shadow-modal outline-none'
         }
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-soft px-4 py-3 sm:px-5 sm:py-4">
@@ -45,13 +115,15 @@ export function Modal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">{children}</div>
         {footer ? (
           <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border-soft px-4 py-3 sm:px-5 sm:py-4">{footer}</div>
         ) : null}
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(content, document.body) : content
 }
 
 export function ConfirmDialog({
@@ -74,11 +146,33 @@ export function ConfirmDialog({
   tone?: 'default' | 'warning' | 'danger'
   /** Enter confirma enquanto o diálogo está aberto (opt-in por tela). */
   confirmOnEnter?: boolean
-  onConfirm: () => void
+  onConfirm: () => void | Promise<unknown>
   onClose: () => void
 }) {
+  const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const onConfirmRef = useRef(onConfirm)
   onConfirmRef.current = onConfirm
+
+  useEffect(() => {
+    if (!open) {
+      submittingRef.current = false
+      setSubmitting(false)
+    }
+  }, [open])
+
+  const triggerConfirm = () => {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    setSubmitting(true)
+    Promise.resolve()
+      .then(() => onConfirmRef.current())
+      .catch(() => undefined)
+      .finally(() => {
+        submittingRef.current = false
+        setSubmitting(false)
+      })
+  }
 
   useEffect(() => {
     if (!open || !confirmOnEnter) return
@@ -91,7 +185,7 @@ export function ConfirmDialog({
       // Impede que o Enter reative o botão da página que abriu o diálogo.
       event.preventDefault()
       event.stopPropagation()
-      onConfirmRef.current()
+      triggerConfirm()
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
@@ -101,14 +195,17 @@ export function ConfirmDialog({
     <Modal
       open={open}
       title={title}
-      onClose={onClose}
+      onClose={() => {
+        if (!submittingRef.current) onClose()
+      }}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" disabled={submitting} onClick={onClose}>
             {cancelLabel}
           </Button>
           <Button
-            onClick={onConfirm}
+            disabled={submitting}
+            onClick={triggerConfirm}
             className={
               tone === 'warning'
                 ? 'bg-amber-600 text-white hover:bg-amber-500'

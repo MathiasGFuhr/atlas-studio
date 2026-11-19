@@ -23,6 +23,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export function Button({
   className,
   variant = 'primary',
+  type = 'button',
   icon,
   fullWidth,
   children,
@@ -30,6 +31,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
+      type={type}
       className={cn(
         'atlas-press inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold tracking-[-0.005em]',
         variants[variant],

@@ -212,7 +212,9 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const [snapping, setSnapping] = useState(true)
-  const [timelineHeight, setTimelineHeight] = useState(320)
+  const [timelineHeight, setTimelineHeight] = useState(() =>
+    typeof window !== 'undefined' && window.innerHeight <= 780 ? 240 : 300,
+  )
   const [busy, setBusy] = useState(false)
   const [shortBusy, setShortBusy] = useState(false)
   const [shortPercent, setShortPercent] = useState<number | null>(null)
@@ -303,21 +305,48 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
     [api, project.id, push, reset],
   )
 
+  const inFlightFlushRef = useRef<Promise<void> | null>(null)
+  const resizeCleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => {
+      resizeCleanupRef.current?.()
+      resizeCleanupRef.current = null
+    }
+  }, [])
+
   const flush = useCallback(async () => {
     if (timerRef.current) window.clearTimeout(timerRef.current)
     timerRef.current = null
-    const next = pendingRef.current
-    if (!next) return
-    pendingRef.current = null
-    if (mountedRef.current) setSaveState('saving')
-    try {
-      await api.editor.update(project.id, { timeline: next })
-      savedRef.current = next
-      if (mountedRef.current) setSaveState(pendingRef.current ? 'dirty' : 'saved')
-    } catch (error) {
-      pendingRef.current = pendingRef.current ?? next
-      if (mountedRef.current) setSaveState('error')
-      console.error('[atlas] falha ao salvar a timeline', error)
+    if (inFlightFlushRef.current) {
+      await inFlightFlushRef.current
+    }
+    while (pendingRef.current) {
+      const next = pendingRef.current
+      pendingRef.current = null
+      if (mountedRef.current) setSaveState('saving')
+      const savePromise = (async () => {
+        try {
+          await api.editor.update(project.id, { timeline: next })
+          savedRef.current = next
+          if (mountedRef.current) setSaveState(pendingRef.current ? 'dirty' : 'saved')
+        } catch (error) {
+          pendingRef.current = pendingRef.current ?? next
+          if (mountedRef.current) setSaveState('error')
+          console.error('[atlas] falha ao salvar a timeline', error)
+          throw error
+        }
+      })().finally(() => {
+        if (inFlightFlushRef.current === savePromise) {
+          inFlightFlushRef.current = null
+        }
+      })
+      inFlightFlushRef.current = savePromise
+      try {
+        await savePromise
+      } catch {
+        break
+      }
     }
   }, [api, project.id])
 
@@ -1289,36 +1318,52 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   // --- divisor redimensionável entre preview e timeline ---
   const startResize = (event: ReactPointerEvent) => {
     event.preventDefault()
+    resizeCleanupRef.current?.()
     const startY = event.clientY
     const startHeight = timelineHeight
     let latest = startHeight
     let raf = 0
     const move = (e: PointerEvent) => {
-      const max = Math.round(window.innerHeight * 0.7)
+      const max = Math.max(200, Math.min(Math.round(window.innerHeight * 0.58), window.innerHeight - 360))
       latest = Math.max(180, Math.min(max, startHeight - (e.clientY - startY)))
       if (raf) return
       raf = requestAnimationFrame(() => {
         raf = 0
-        setTimelineHeight(latest)
+        if (mountedRef.current) setTimelineHeight(latest)
       })
     }
-    const up = () => {
+    const detach = () => {
       if (raf) cancelAnimationFrame(raf)
+      raf = 0
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
       window.removeEventListener('blur', up)
+      resizeCleanupRef.current = null
+    }
+    const up = () => {
+      detach()
+      if (!mountedRef.current) return
       setTimelineHeight(latest)
       setFabBottomClearance(latest + 12)
     }
+    resizeCleanupRef.current = detach
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', up)
     window.addEventListener('blur', up)
   }
 
+  const handleRemoveTransition = useCallback(
+    (clipId: string) => {
+      commit(setClipTransition(timelineRef.current, clipId, null))
+      push('Transição removida.', 'default')
+    },
+    [commit, push],
+  )
+
   const toolButton =
-    'flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted transition-colors hover:bg-hover hover:text-text disabled:cursor-not-allowed disabled:text-disabled disabled:hover:bg-transparent'
+    'flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-muted transition-colors hover:bg-hover hover:text-text disabled:cursor-not-allowed disabled:text-disabled disabled:hover:bg-transparent'
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1326,6 +1371,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
         <button
           type="button"
           title="Voltar para os projetos"
+          aria-label="Voltar para os projetos"
           onClick={() => void goBackToProjects()}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-text"
         >
@@ -1378,7 +1424,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
       />
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[300px] shrink-0 flex-col overflow-hidden border-r border-border-soft bg-sidebar">
+        <aside className="flex w-[260px] xl:w-[300px] shrink-0 flex-col overflow-hidden border-r border-border-soft bg-sidebar">
           <MediaPanel
             tool={libraryTool}
             assets={assets}
@@ -1395,25 +1441,29 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
               else {
                 const cleaned = removeWatermarksUsingAsset(timelineRef.current, asset.id)
                 if (cleaned !== timelineRef.current) commit(cleaned)
-                void api.editor.removeAsset(asset.id).then(() =>
-                  setAssets((list) => list.filter((item) => item.id !== asset.id)),
-                )
+                void api.editor
+                  .removeAsset(asset.id)
+                  .then(() => setAssets((list) => list.filter((item) => item.id !== asset.id)))
+                  .catch((error) => pushError(error, 'Não foi possível remover a mídia.'))
               }
             }}
             onSetOrigin={(asset, origin) => {
-              void api.editor.setAssetOrigin(asset.id, origin).then((updated) => {
-                if (!updated) {
-                  push('Não foi possível mover o vídeo de pasta.', 'error')
-                  return
-                }
-                setAssets((list) => list.map((item) => (item.id === updated.id ? updated : item)))
-                push(
-                  origin === 'lipsync'
-                    ? `"${asset.name}" movido para Lipsync.`
-                    : `"${asset.name}" movido para Encenação e show.`,
-                  'success',
-                )
-              })
+              void api.editor
+                .setAssetOrigin(asset.id, origin)
+                .then((updated) => {
+                  if (!updated) {
+                    push('Não foi possível mover o vídeo de pasta.', 'error')
+                    return
+                  }
+                  setAssets((list) => list.map((item) => (item.id === updated.id ? updated : item)))
+                  push(
+                    origin === 'lipsync'
+                      ? `"${asset.name}" movido para Lipsync.`
+                      : `"${asset.name}" movido para Encenação e show.`,
+                    'success',
+                  )
+                })
+                .catch((error) => pushError(error, 'Não foi possível mover o vídeo de pasta.'))
             }}
             onPickEffect={(id, options) => toggleEffectOnTimeline(id, options)}
             activeEffectIds={activeEffectIds}
@@ -1511,17 +1561,17 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col bg-bg">
-          <div className="min-h-0 flex-1 p-4">
+          <div className="min-h-0 flex-1 p-3 xl:p-4">
             <PreviewPlayer timeline={timeline} assets={assetMap} store={store} />
           </div>
-          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border-soft px-4 py-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border-soft px-3 py-2 xl:px-4">
             <TimeDisplay store={store} duration={duration} fps={timeline.fps} />
             <TransportBar store={store} duration={duration} fps={timeline.fps} />
-            <span className="w-[140px] text-right text-[11px] text-muted-2">{timeline.aspect}</span>
+            <span className="shrink-0 text-right text-[11px] text-muted-2">{timeline.aspect}</span>
           </div>
         </section>
 
-        <aside className="flex w-[310px] shrink-0 flex-col overflow-hidden border-l border-border-soft bg-sidebar">
+        <aside className="flex w-[260px] xl:w-[310px] shrink-0 flex-col overflow-hidden border-l border-border-soft bg-sidebar">
           <PropertiesPanel
             timeline={timeline}
             clip={selectedClip}
@@ -1554,7 +1604,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
       />
 
       <div className="flex shrink-0 flex-col bg-sidebar" style={{ height: timelineHeight }}>
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border-soft px-2">
+        <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-border-soft px-2">
           <button type="button" title="Dividir no playhead (S)" className={toolButton} onClick={split}>
             <Scissors className="h-4 w-4" />
             Dividir
@@ -1636,8 +1686,8 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
             <Magnet className="h-4 w-4" />
             Encaixe
           </button>
-          <div className="ml-auto flex items-center gap-1">
-            <button type="button" title="Diminuir zoom (-)" className={toolButton} onClick={() => setZoom((v) => clampZoom(v / 1.25))}>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <button type="button" title="Diminuir zoom (-)" aria-label="Diminuir zoom" className={toolButton} onClick={() => setZoom((v) => clampZoom(v / 1.25))}>
               <ZoomOut className="h-4 w-4" />
             </button>
             <input
@@ -1647,13 +1697,13 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
               step={0.01}
               value={Math.log(zoom)}
               onChange={(event) => setZoom(clampZoom(Math.exp(Number(event.target.value))))}
-              className="w-28 accent-[var(--color-accent)]"
+              className="w-24 xl:w-28 accent-[var(--color-accent)]"
               aria-label="Zoom da timeline"
             />
-            <button type="button" title="Aumentar zoom (+)" className={toolButton} onClick={() => setZoom((v) => clampZoom(v * 1.25))}>
+            <button type="button" title="Aumentar zoom (+)" aria-label="Aumentar zoom" className={toolButton} onClick={() => setZoom((v) => clampZoom(v * 1.25))}>
               <ZoomIn className="h-4 w-4" />
             </button>
-            <button type="button" title="Ajustar à largura" className={toolButton} onClick={fitZoom}>
+            <button type="button" title="Ajustar à largura" aria-label="Ajustar à largura" className={toolButton} onClick={fitZoom}>
               <Maximize2 className="h-4 w-4" />
             </button>
           </div>
@@ -1683,10 +1733,7 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
                 newTrack: trackId === null,
               })
             }}
-            onRemoveTransition={(clipId) => {
-              commit(setClipTransition(timelineRef.current, clipId, null))
-              push('Transição removida.', 'default')
-            }}
+            onRemoveTransition={handleRemoveTransition}
           />
         </div>
       </div>
@@ -1750,6 +1797,7 @@ export function EditorPage() {
         setData(result)
       })
       .catch((error) => {
+        if (cancelled) return
         console.error('[atlas] falha ao abrir o projeto de edição', error)
         navigate('/editor', { replace: true })
       })

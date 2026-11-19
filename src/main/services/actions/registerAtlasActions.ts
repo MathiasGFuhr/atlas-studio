@@ -15,7 +15,7 @@ import { channelRepository } from '../../repositories/channelRepository'
 import { projectRepository } from '../../repositories/projectRepository'
 import { quickPromptRepository } from '../../repositories/quickPromptRepository'
 import { taskRepository } from '../../repositories/taskRepository'
-import { removeAtlasProject } from '../atlas-flow-v1/removeAtlasProject'
+import { removeProject } from '../videos/musicVideoProjectService'
 import {
   createProjectFolder,
   folderExists,
@@ -325,15 +325,13 @@ export function createAtlasActionRegistry(deps: {
     })
   })
 
-  registry.register('delete_project', async (input, ctx) => {
+  registry.register('delete_project', (input, ctx) => {
     const project = findProject(input, ctx)
-    const removed = await removeAtlasProject(project.id)
+    removeProject(project.id)
     return ok({
       name: 'delete_project',
-      title: removed.deletedOnFlow ? 'Projeto removido do Atlas e do Google Flow' : 'Projeto removido do Atlas',
-      subtitle: removed.deletedOnFlow
-        ? `${project.name} — excluído também no Google Flow. A pasta física não foi apagada.`
-        : `${project.name} — a pasta física não foi apagada.`,
+      title: 'Projeto removido do Atlas',
+      subtitle: `${project.name} — a pasta física não foi apagada.`,
       entityType: 'project',
       entityId: project.id,
     })

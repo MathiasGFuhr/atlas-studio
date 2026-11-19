@@ -37,17 +37,23 @@ export function usePrimaryChannel() {
     [musicChannels, routeChannelId, lastChannelId],
   )
 
-  const load = useCallback(async () => {
-    const list = await api.channels.list({ channelType: 'music' })
-    setChannels(list)
-  }, [api])
-
   useEffect(() => {
-    void load()
-    return onChannelsChanged(() => {
-      void load()
-    })
-  }, [load])
+    let active = true
+    const run = () => {
+      void api.channels
+        .list({ channelType: 'music' })
+        .then((list) => {
+          if (active) setChannels(list)
+        })
+        .catch(() => undefined)
+    }
+    run()
+    const unsub = onChannelsChanged(run)
+    return () => {
+      active = false
+      unsub()
+    }
+  }, [api])
 
   useEffect(() => {
     return onSidebarChannelChanged((id) => setLastChannelId(id))

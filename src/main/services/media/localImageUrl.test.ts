@@ -13,7 +13,7 @@ vi.mock('electron', () => ({
   },
 }))
 
-import { flowResultsRoot, isAllowedImagePath, localImageThumbUrl, localImageUrl } from './localImageUrl'
+import { isAllowedImagePath, localImageThumbUrl, localImageUrl } from './localImageUrl'
 import { parseThumbWidth } from './imageThumbnails'
 
 const TINY_PNG = Buffer.from(
@@ -82,17 +82,6 @@ describe('localImageUrl', () => {
     expect(parseThumbWidth('5000')).toBeNull()
     expect(parseThumbWidth(null)).toBeNull()
     expect(parseThumbWidth('abc')).toBeNull()
-  })
-
-  it('serve a imagem gerada do Flow via atlas-media', () => {
-    const file = writeImage(flowResultsRoot(), `cover-test-${Date.now()}.png`)
-    try {
-      expect(isAllowedImagePath(file)).toBe(true)
-      expect(localImageThumbUrl(file, 1080)).toMatch(/&w=1080$/)
-      expect(isAllowedImagePath(path.join(flowResultsRoot(), '..', 'staging', 'x.png'))).toBe(false)
-    } finally {
-      fs.rmSync(file, { force: true })
-    }
   })
 
   it('não libera arquivos fora das pastas de imagem nem extensões não-imagem', () => {

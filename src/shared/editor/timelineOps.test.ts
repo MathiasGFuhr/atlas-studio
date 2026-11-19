@@ -281,7 +281,7 @@ describe('moveTrack', () => {
   })
 
   it('não move a faixa de música', () => {
-    let timeline = insertAssetClip(createEmptyTimeline(), audio('music', 8)).timeline
+    const timeline = insertAssetClip(createEmptyTimeline(), audio('music', 8)).timeline
     const audioTrack = timeline.tracks.find((track) => track.kind === 'audio')!
     const videoTrack = timeline.tracks.find((track) => track.kind === 'video')!
     const next = moveTrack(timeline, audioTrack.id, videoTrack.id)

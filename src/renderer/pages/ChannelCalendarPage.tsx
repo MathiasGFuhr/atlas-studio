@@ -397,16 +397,26 @@ export function ChannelCalendarPage() {
     }
   }
 
+  const savingRef = useRef(false)
+  const [saving, setSaving] = useState(false)
+  const analyzeContextRef = useRef<{ open: boolean; videoId: string | null }>({
+    open: false,
+    videoId: null,
+  })
+  analyzeContextRef.current = { open: modalOpen, videoId: editing?.id ?? null }
+
   async function analyzeTitle() {
     if (!form.title.trim()) {
       push('Escreva o título antes de analisar.', 'error')
       return
     }
+    const targetVideoId = editing?.id ?? null
+    const targetTitle = form.title.trim()
     setAnalyzing(true)
     setAnalysisError(null)
     try {
       const result = await api.videos.analyzeTitle({
-        title: form.title.trim(),
+        title: targetTitle,
         description: form.description,
         channelId: channel?.id,
         channelName: channel?.name,
@@ -421,13 +431,25 @@ export function ChannelCalendarPage() {
           .map((item) => item.title)
           .filter(Boolean),
       })
+      if (
+        !analyzeContextRef.current.open ||
+        analyzeContextRef.current.videoId !== targetVideoId
+      ) {
+        return
+      }
       setAnalysis(result.analysis)
-      setAnalyzedTitle(form.title.trim())
+      setAnalyzedTitle(targetTitle)
       if (result.video) setEditing(result.video)
       push(`Força do título: ${result.analysis.score}/100`, 'success')
       notifyVideosChanged()
       await load()
     } catch (error) {
+      if (
+        !analyzeContextRef.current.open ||
+        analyzeContextRef.current.videoId !== targetVideoId
+      ) {
+        return
+      }
       setAnalysis(null)
       setAnalyzedTitle(null)
       const message = error instanceof Error ? error.message : 'Não foi possível analisar o título.'
@@ -442,16 +464,18 @@ export function ChannelCalendarPage() {
   }
 
   async function save() {
-    if (!id) return
+    if (!id || savingRef.current) return
+    if (!form.title.trim()) {
+      push('O título do vídeo é obrigatório.', 'error')
+      return
+    }
+    if (!form.scheduledDate) {
+      push('Escolha a data do vídeo.', 'error')
+      return
+    }
+    savingRef.current = true
+    setSaving(true)
     try {
-      if (!form.title.trim()) {
-        push('O título do vídeo é obrigatório.', 'error')
-        return
-      }
-      if (!form.scheduledDate) {
-        push('Escolha a data do vídeo.', 'error')
-        return
-      }
       let saved: ChannelVideo
       if (editing) {
         const updated = await api.videos.update(editing.id, {
@@ -507,6 +531,9 @@ export function ChannelCalendarPage() {
       await load()
     } catch (error) {
       pushError(error, 'Falha ao salvar vídeo')
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
   }
 
@@ -784,10 +811,12 @@ export function ChannelCalendarPage() {
                 Abrir projeto
               </Button>
             ) : null}
-            <Button variant="secondary" onClick={() => closeModal()}>
+            <Button variant="secondary" disabled={saving} onClick={() => closeModal()}>
               Cancelar
             </Button>
-            <Button onClick={() => void save()}>Salvar</Button>
+            <Button disabled={saving} onClick={() => void save()}>
+              {saving ? 'Salvando...' : 'Salvar'}
+            </Button>
           </>
         }
       >

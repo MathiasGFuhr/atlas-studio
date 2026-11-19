@@ -1,8 +1,8 @@
 {
   "name": "atlas-studio",
   "productName": "Atlas Studio",
-  "version": "2.0.19",
-  "description": "Atlas Studio ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ProduÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o musical com IA",
+  "version": "2.0.20",
+  "description": "Atlas Studio - Producao musical com IA",
   "private": true,
   "main": "dist-electron/main.js",
   "author": "Atlas Studio",
@@ -25,8 +25,6 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run",
     "electron:dev": "vite",
-    "atlas-flow:extension:build": "vite build --config ./apps/atlas-flow-extension/vite.config.ts",
-    "atlas-flow:coordinator": "node ./scripts/start-atlas-flow-coordinator.mjs",
     "electron:build": "npm run build && electron-builder --win --publish never",
     "electron:release": "npm run build && electron-builder --win --publish always",
     "codex:status": "npm run build && node scripts/check-codex-status.mjs",
@@ -95,9 +93,23 @@
       "!dist-electron/e2e-main.js",
       "!dist-electron/e2e-main.js.map",
       "!dist-electron/e2e-main.*",
-      "!dist-electron/**/runRealFlowTest*",
       "package.json",
-      "!node_modules/ffmpeg-static/**"
+      "!node_modules/ffmpeg-static/**",
+      "!node_modules/pixi.js/**",
+      "!node_modules/pixi-filters/**",
+      "!node_modules/lottie-react/**",
+      "!node_modules/lottie-web/**",
+      "!node_modules/motion/**",
+      "!node_modules/framer-motion/**",
+      "!node_modules/gl-transitions/**",
+      "!node_modules/zod/**",
+      "!node_modules/animejs/**",
+      "!node_modules/@tsparticles/**",
+      "!node_modules/lucide-react/**",
+      "!node_modules/gsap/**",
+      "!node_modules/react/**",
+      "!node_modules/react-dom/**",
+      "!node_modules/react-router-dom/**"
     ],
     "extraResources": [
       {
@@ -107,10 +119,6 @@
       {
         "from": "resources/sql-wasm.wasm",
         "to": "sql-wasm.wasm"
-      },
-      {
-        "from": "extensions/atlas-flow-bridge",
-        "to": "atlas-flow-bridge"
       },
       {
         "from": "build/icon.ico",

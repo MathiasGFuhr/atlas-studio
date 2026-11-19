@@ -8,7 +8,7 @@ export const ATLAS_MEDIA_SCHEME = 'atlas-media'
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 
 /** Pastas do userData cujas imagens o renderer pode carregar via atlas-media. */
-const IMAGE_ROOTS = ['lipsync-refs', 'channels', 'flow-refs']
+const IMAGE_ROOTS = ['lipsync-refs', 'channels']
 
 export function toAtlasMediaUrl(filePath: string): string {
   return `${ATLAS_MEDIA_SCHEME}://local/?p=${encodeURIComponent(path.resolve(filePath))}`
@@ -19,16 +19,10 @@ function isInside(root: string, candidate: string): boolean {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
 }
 
-/** Pasta onde o Flow grava as imagens geradas do projeto. */
-export function flowResultsRoot(): string {
-  return path.resolve(process.cwd(), 'docs', 'atlas-flow', 'results')
-}
-
 export function isAllowedImagePath(resolved: string): boolean {
   if (!IMAGE_EXT.has(path.extname(resolved).toLowerCase())) return false
-  if (isInside(flowResultsRoot(), resolved)) return true
-  const userData = getUserDataPath()
   const target = resolved.toLowerCase()
+  const userData = getUserDataPath()
   return IMAGE_ROOTS.some((dir) => isInside(path.join(userData, dir).toLowerCase(), target))
 }
 

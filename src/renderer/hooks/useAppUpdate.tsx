@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -72,21 +73,19 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false)
   const [userDownloadError, setUserDownloadError] = useState(false)
   const [sidebarMinimized, setSidebarMinimized] = useState(false)
-  const [accountName, setAccountName] = useState('')
 
   useEffect(() => {
-    void api.settings
-      .get()
-      .then((settings) => setAccountName(settings.accountName?.trim() || ''))
+    void api.updates
+      .status()
+      .then((next) => {
+        setStatus(next)
+        const version = next.availableVersion?.trim()
+        if (version && readMinimizedVersion() === version) setSidebarMinimized(true)
+        if (shouldAutoCheckOnStartup(next)) {
+          void api.updates.check().then(setStatus).catch(() => undefined)
+        }
+      })
       .catch(() => undefined)
-    void api.updates.status().then((next) => {
-      setStatus(next)
-      const version = next.availableVersion?.trim()
-      if (version && readMinimizedVersion() === version) setSidebarMinimized(true)
-      if (shouldAutoCheckOnStartup(next)) {
-        void api.updates.check().then(setStatus).catch(() => undefined)
-      }
-    })
     return api.updates.onChanged((next) => {
       setStatus(next)
     })
@@ -106,11 +105,14 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
     if (!version) return
     if (readToastedVersion(version)) return
     markToastedVersion(version)
-    push(sidebarUpdateToastMessage(version, accountName), 'success')
-  }, [status, accountName, push])
+    push(sidebarUpdateToastMessage(version), 'success')
+  }, [status, push])
 
+  const runLockRef = useRef(false)
   const run = useCallback(
     async (action: () => Promise<AppUpdateStatus>, kind: 'check' | 'download' | 'install') => {
+      if (runLockRef.current) return
+      runLockRef.current = true
       setBusy(true)
       if (kind === 'download') {
         setUserDownloadError(false)
@@ -124,6 +126,7 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
         if (kind === 'download') setUserDownloadError(true)
       } finally {
         setBusy(false)
+        runLockRef.current = false
       }
     },
     [],

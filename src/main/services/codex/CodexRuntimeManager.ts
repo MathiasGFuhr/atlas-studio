@@ -1090,37 +1090,25 @@ function pickAuthUrl(text: string): string | undefined {
 }
 
 async function openAuthInBrowser(url: string): Promise<void> {
-  if (process.platform === 'win32') {
-    try {
-      spawn('cmd', ['/c', 'start', '', url], {
-        windowsHide: true,
-        stdio: 'ignore',
-        detached: true,
-      }).unref()
-      logger.info('codex.login.browser_opened', { via: 'cmd_start', host: safeUrlHost(url) })
-    } catch (error) {
-      logger.warn('codex.login.cmd_start_failed', {
-        error: error instanceof Error ? error.message : String(error),
-        host: safeUrlHost(url),
-      })
-    }
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    logger.warn('codex.login.invalid_url', { host: 'invalid' })
+    return
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    logger.warn('codex.login.blocked_protocol', { protocol: parsed.protocol })
+    return
   }
 
   try {
-    await shell.openExternal(url)
-    logger.info('codex.login.browser_opened', { via: 'openExternal', host: safeUrlHost(url) })
+    await shell.openExternal(parsed.href)
+    logger.info('codex.login.browser_opened', { via: 'openExternal', host: parsed.host })
   } catch (error) {
     logger.warn('codex.login.openExternal_failed', {
       error: error instanceof Error ? error.message : String(error),
-      host: safeUrlHost(url),
+      host: parsed.host,
     })
-  }
-}
-
-function safeUrlHost(url: string): string {
-  try {
-    return new URL(url).host
-  } catch {
-    return 'invalid'
   }
 }

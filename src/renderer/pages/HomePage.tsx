@@ -237,7 +237,6 @@ export function HomePage() {
   async function saveWorldClocks(next: WorldClock[]) {
     const previous = worldClocks
     const normalizedNext = normalizeWorldClocks(next)
-    loadSeq.current += 1
     setWorldClocks(normalizedNext)
     setSavingClocks(true)
     try {

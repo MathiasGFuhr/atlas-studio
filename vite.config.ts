@@ -16,9 +16,7 @@ function stripE2eArtifactsPlugin(): Plugin {
       // Só remove artefatos e2e. Não apagar chunks do main (index-*.js, etc.)
       // — main.js importa esses arquivos e o Electron falha sem eles.
       for (const name of fs.readdirSync(dir)) {
-        const isE2e =
-          name.startsWith('e2e-main') ||
-          name.includes('runRealFlowTest')
+        const isE2e = name.startsWith('e2e-main')
         if (!isE2e) continue
         fs.rmSync(path.join(dir, name), { force: true, recursive: true })
       }

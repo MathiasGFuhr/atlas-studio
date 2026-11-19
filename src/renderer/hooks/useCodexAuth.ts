@@ -45,27 +45,33 @@ export function useCodexAuth(): CodexAuth {
   const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null)
   const initialized = useRef(false)
 
+  const lastStatusSigRef = useRef<string>('')
+  const applyStatus = useCallback((next: CodexStatus) => {
+    const sig = JSON.stringify(next)
+    if (sig === lastStatusSigRef.current) return
+    lastStatusSigRef.current = sig
+    setStatus(next)
+  }, [])
+
   // Fetch initial status + onboarding state
   useEffect(() => {
     if (initialized.current) return
     initialized.current = true
 
-    void (async () => {
-      const [s, dismissed] = await Promise.all([
-        api.codex.status(),
-        api.codex.isOnboardingDismissed(),
-      ])
-      setStatus(s)
-      if (!dismissed && s.authState !== 'connected' && s.authState !== 'initializing') {
-        setShowOnboarding(true)
-      }
-    })()
-  }, [api])
+    void Promise.all([api.codex.status(), api.codex.isOnboardingDismissed()])
+      .then(([s, dismissed]) => {
+        applyStatus(s)
+        if (!dismissed && s.authState !== 'connected' && s.authState !== 'initializing') {
+          setShowOnboarding(true)
+        }
+      })
+      .catch(() => undefined)
+  }, [api, applyStatus])
 
   // Listen for auth state changes from main process
   useEffect(() => {
     const cleanupAuth = api.codex.onAuthStateChanged((newStatus) => {
-      setStatus(newStatus)
+      applyStatus(newStatus)
       if (newStatus.authState === 'connected') {
         setShowOnboarding(false)
         setDeviceCode(null)
@@ -82,16 +88,16 @@ export function useCodexAuth(): CodexAuth {
       cleanupAuth()
       cleanupUrl?.()
     }
-  }, [api])
+  }, [api, applyStatus])
 
-  // Periodic health check (pausa com a janela oculta)
+  // Periodic health check (pausa com a janela oculta e evita re-render quando nada mudou)
   useEffect(() => {
     const timer = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-      void api.codex.status().then(setStatus)
+      void api.codex.status().then(applyStatus).catch(() => undefined)
     }, 30000)
     return () => clearInterval(timer)
-  }, [api])
+  }, [api, applyStatus])
 
   const startLink = useCallback(
     async (type: string = 'chatgpt') => {

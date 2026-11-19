@@ -99,12 +99,16 @@ export function ChannelsPage() {
     setPendingAvatar(file)
   }
 
+  const savingRef = useRef(false)
+
   async function save() {
+    if (savingRef.current) return
+    if (!form.name.trim()) {
+      push('O nome do canal é obrigatório.', 'error')
+      return
+    }
+    savingRef.current = true
     try {
-      if (!form.name.trim()) {
-        push('O nome do canal é obrigatório.', 'error')
-        return
-      }
       const payload = {
         name: form.name.trim(),
         description: form.description,
@@ -134,6 +138,8 @@ export function ChannelsPage() {
       await load()
     } catch (error) {
       pushError(error, 'Falha ao salvar canal')
+    } finally {
+      savingRef.current = false
     }
   }
 

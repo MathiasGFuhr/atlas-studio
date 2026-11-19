@@ -600,6 +600,8 @@ export class ChatService {
 
   private emitProgress(event: ChatProgressEvent) {
     const win = this.deps.getMainWindow()
-    win?.webContents.send(IPC.chat.progress, event)
+    if (win && !win.isDestroyed()) {
+      win.webContents.send(IPC.chat.progress, event)
+    }
   }
 }

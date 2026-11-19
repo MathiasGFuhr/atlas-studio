@@ -318,6 +318,9 @@ async function mapRoom(
   }
 }
 
+let startInFlight: Promise<void> | null = null
+let startGen = 0
+
 export const teamChatService = {
   attachWindow(next: () => BrowserWindow | null) {
     getWindow = next
@@ -622,60 +625,75 @@ export const teamChatService = {
   },
 
   async start() {
-    const supabase = getAtlasSupabase()
-    const session = await accountService.getSession()
-    if (!supabase || !session.user) {
+    if (startInFlight) return startInFlight
+    const gen = ++startGen
+    startInFlight = (async () => {
+      const supabase = getAtlasSupabase()
+      const session = await accountService.getSession()
+      if (gen !== startGen) return
+      if (!supabase || !session.user) {
+        this.stop()
+        return
+      }
       this.stop()
-      return
-    }
-    this.stop()
-    const user = session.user
-    presenceSelfId = user.id
-    presenceSelfName = user.name?.trim() || 'Usuário'
-    await accountService.syncProfile(user)
-    channel = supabase.channel('atlas-team', {
-      config: { presence: { key: user.id } },
-    })
-    channel.on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'team_messages' },
-      (payload) => {
-        const message = mapMessage(payload.new as TeamMessageRow)
-        if (!message) return
-        emit(IPC.teamChat.message, message)
-        showMessageToast(message)
-      },
-    )
-    channel.on('broadcast', { event: 'typing' }, (message) => {
-      const raw =
-        message && typeof message === 'object' && 'payload' in message
-          ? (message as { payload?: unknown }).payload
-          : message
-      const event = mapTyping(raw)
-      if (!event || event.userId === presenceSelfId) return
-      emit(IPC.teamChat.typing, event)
-    })
-    channel.on('presence', { event: 'sync' }, () => {
-      const next = peersFromPresence(channel?.presenceState() ?? {})
-      online = next
-      emit(IPC.teamChat.presence, onlineOthers())
-    })
-    const realtime = channel
-    await realtime.subscribe(async (status) => {
-      if (status !== 'SUBSCRIBED' || channel !== realtime) return
-      channelReady = true
-      await realtime.track({
-        id: user.id,
-        name: user.name,
-        email: user.email,
+      const user = session.user
+      presenceSelfId = user.id
+      presenceSelfName = user.name?.trim() || 'Usuário'
+      await accountService.syncProfile(user).catch(() => undefined)
+      if (gen !== startGen) return
+      channel = supabase.channel('atlas-team', {
+        config: { presence: { key: user.id } },
       })
+      channel.on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'team_messages' },
+        (payload) => {
+          const message = mapMessage(payload.new as TeamMessageRow)
+          if (!message) return
+          emit(IPC.teamChat.message, message)
+          showMessageToast(message)
+        },
+      )
+      channel.on('broadcast', { event: 'typing' }, (message) => {
+        const raw =
+          message && typeof message === 'object' && 'payload' in message
+            ? (message as { payload?: unknown }).payload
+            : message
+        const event = mapTyping(raw)
+        if (!event || event.userId === presenceSelfId) return
+        emit(IPC.teamChat.typing, event)
+      })
+      channel.on('presence', { event: 'sync' }, () => {
+        const next = peersFromPresence(channel?.presenceState() ?? {})
+        online = next
+        emit(IPC.teamChat.presence, onlineOthers())
+      })
+      const realtime = channel
+      await realtime.subscribe(async (status) => {
+        if (status !== 'SUBSCRIBED' || channel !== realtime) return
+        channelReady = true
+        try {
+          await realtime.track({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+          })
+        } catch {
+          /* falha transitória de presença não deve derrubar o processo */
+        }
+      })
+    })().finally(() => {
+      startInFlight = null
     })
+    return startInFlight
   },
 
   stop() {
+    startGen += 1
     if (channel) {
-      void channel.unsubscribe()
+      const active = channel
       channel = null
+      void Promise.resolve(active.unsubscribe()).catch(() => undefined)
     }
     online = []
     presenceSelfId = ''

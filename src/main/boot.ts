@@ -12,7 +12,6 @@ import { createAgentModelCatalog } from './services/agents/createAgentModelCatal
 import { getWorkspaceRoot } from './paths'
 import { settingsRepository } from './repositories/settingsRepository'
 import { registerAtlasMediaProtocol } from './services/media/atlasMediaProtocol'
-import { atlasFlowCoordinatorServer } from './services/atlas-flow-v1'
 
 let mainWindow: BrowserWindow | null = null
 let codexService: CodexService | null = null
@@ -112,27 +111,11 @@ export async function bootAtlasApp(): Promise<{
     getMainWindow,
   })
 
-  try {
-    const flowStatus = await atlasFlowCoordinatorServer.start()
-    console.log(
-      '[atlas] atlas-flow-v1 coordinator:',
-      flowStatus.running ? `http://127.0.0.1:${flowStatus.port}` : 'parado',
-      '| realFlowValidated: false',
-    )
-    if (flowStatus.hasPairingToken) {
-      console.log(
-        '[atlas] atlas-flow-v1 pairingToken presente em coordinator-pairing.local.json (não logado)',
-      )
-    }
-  } catch (error) {
-    console.error('[atlas] falha ao iniciar atlas-flow-v1 coordinator', error)
-  }
-
   void runtimeManager
     .initialize()
     .then((status) => {
       console.log('[atlas] codex status:', status.authState, '-', status.message)
-      void agentModelCatalog.refresh('codex')
+      void agentModelCatalog.refresh('codex').catch(() => undefined)
     })
     .catch(() => undefined)
 
@@ -140,7 +123,7 @@ export async function bootAtlasApp(): Promise<{
     .initialize()
     .then((status) => {
       console.log('[atlas] antigravity status:', status.authState, '-', status.message)
-      void agentModelCatalog.refresh('antigravity')
+      void agentModelCatalog.refresh('antigravity').catch(() => undefined)
     })
     .catch(() => undefined)
 

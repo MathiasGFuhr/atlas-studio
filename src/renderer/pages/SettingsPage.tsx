@@ -63,18 +63,23 @@ export function SettingsPage({
     })
   }, [api])
 
+  const settingsLoaded = Boolean(settings)
   useEffect(() => {
-    if (!settings) return
+    if (!settingsLoaded) return
     const target = aiHighlight ? 'ia' : updatesHighlight ? 'atualizacoes' : null
     if (!target) return
     document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [aiHighlight, updatesHighlight, settings])
+  }, [aiHighlight, updatesHighlight, settingsLoaded])
 
   async function handleLogout() {
     setConfirmLogout(false)
     if (codexAuth) {
-      await codexAuth.logout()
-      push('Codex desvinculado.', 'default')
+      try {
+        await codexAuth.logout()
+        push('Codex desvinculado.', 'default')
+      } catch (error) {
+        pushError(error, 'Não foi possível desvincular o Codex.')
+      }
     }
   }
 

@@ -6,8 +6,27 @@ import { clearImageDataUrlCache } from './profilePhoto'
 const MAX_BYTES = 8 * 1024 * 1024
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 
+function channelsRoot(): string {
+  return path.resolve(getUserDataPath(), 'channels')
+}
+
+function isInsideChannelsRoot(candidate: string): boolean {
+  const root = channelsRoot().toLowerCase()
+  const target = path.resolve(candidate).toLowerCase()
+  const rel = path.relative(root, target)
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
 function channelDir(channelId: string): string {
-  return path.join(getUserDataPath(), 'channels', channelId)
+  const trimmed = String(channelId ?? '').trim()
+  if (!trimmed || /[\\/]/.test(trimmed) || trimmed === '.' || trimmed === '..') {
+    throw new Error('ID de canal inválido.')
+  }
+  const dest = path.resolve(channelsRoot(), trimmed)
+  if (!isInsideChannelsRoot(dest)) {
+    throw new Error('ID de canal inválido.')
+  }
+  return dest
 }
 
 export function importChannelImage(
@@ -59,6 +78,7 @@ export function removeVideoThumbnailFile(filePath: string) {
   try {
     const resolved = path.resolve(filePath)
     clearImageDataUrlCache(resolved)
+    if (!isInsideChannelsRoot(resolved)) return
     if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
       fs.unlinkSync(resolved)
     }

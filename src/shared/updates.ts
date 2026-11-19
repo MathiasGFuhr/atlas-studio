@@ -153,14 +153,15 @@ export function normalizeReleaseNotes(
 
   const leftover = blockText
     .split(/\n+/)
-    .map((line) => inlineHtmlToText(line))
+    .map((line) => stripInlineMarkdown(inlineHtmlToText(line)))
     .filter(Boolean)
 
   const paragraphs: string[] = []
   for (const line of leftover) {
     const bullet = line.match(/^(?:[-*•]|–)\s+(.+)$/)
     if (bullet?.[1]) {
-      items.push(bullet[1].trim())
+      const cleaned = stripInlineMarkdown(bullet[1])
+      if (cleaned) items.push(cleaned)
       continue
     }
     paragraphs.push(line)
@@ -177,12 +178,15 @@ export function normalizeReleaseNotes(
 
   const uniqueItems = dedupeKeepOrder(
     items
-      .map((item) => item.trim())
+      .map((item) => stripInlineMarkdown(item))
       .filter(Boolean)
       .filter((item) => !isDuplicateTitle(item, options.displayedVersion)),
   ).slice(0, MAX_NOTE_ITEMS)
 
-  const text = clampText(paragraphs.join('\n').trim(), MAX_NOTE_TEXT) || undefined
+  const cleanedParagraphs = paragraphs.filter(
+    (paragraph) => !isDuplicateTitle(paragraph, options.displayedVersion),
+  )
+  const text = clampText(cleanedParagraphs.join('\n').trim(), MAX_NOTE_TEXT) || undefined
 
   return {
     title,
@@ -235,6 +239,15 @@ function inlineHtmlToText(html: string): string {
   return decodeHtmlEntities(withoutTags).replace(/[ \t\f\v]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim()
 }
 
+function stripInlineMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .trim()
+}
+
 function decodeHtmlEntities(value: string): string {
   return value
     .replace(/&#x([0-9a-f]+);/gi, (_match, hex: string) => codePointToChar(Number.parseInt(hex, 16)))
@@ -266,8 +279,11 @@ function isHeadingLike(text: string, version?: string | null): boolean {
 }
 
 function isDuplicateTitle(text: string, version?: string | null): boolean {
-  const compact = text.replace(/\s+/g, ' ').trim().replace(/[.]+$/, '')
+  const compact = text.replace(/\s+/g, ' ').trim().replace(/[.:]+$/, '')
   const lower = compact.toLowerCase()
+  if (/^(novidades|o que há de novo|o que mudou|changelog|release notes)$/i.test(compact)) {
+    return true
+  }
   const ver = version?.trim()
   if (!ver) {
     return /^atlas studio$/i.test(compact)
@@ -359,73 +375,14 @@ export function isSidebarUpdateRelevant(
   return false
 }
 
-export function sidebarUpdateToastMessage(version: string, accountName = ''): string {
-  if (isAtlasV2Release(version)) return atlasV2UpdateCopy(accountName).toast
-  return `Atlas Studio ${version} está disponível.`
+export function formatVersionTag(version: string | null | undefined): string {
+  const clean = version?.trim().replace(/^v/i, '') ?? ''
+  return clean ? `v${clean}` : ''
 }
 
-/** Primeiro nome para personalizar a experiência de update. */
-export function updateFirstName(accountName: string | null | undefined): string {
-  const first = (accountName ?? '').trim().split(/\s+/)[0] ?? ''
-  return first
-}
-
-/** Detecta a grande estreia da linha 2.x (ex.: 2.0.0, 2.1.3). */
-export function isAtlasV2Release(version: string | null | undefined): boolean {
-  const match = version?.trim().match(/^v?(\d+)/i)
-  return Boolean(match && Number(match[1]) === 2)
-}
-
-export type AtlasV2UpdateCopy = {
-  eyebrow: string
-  headline: string
-  line: string
-  statusAvailable: string
-  statusReady: string
-  statusDownloading: string
-  statusInstalled: string
-  installedHeadline: string
-  installedLine: string
-  ctaDownload: string
-  ctaInstall: string
-  toast: string
-  notificationTitle: string
-  notificationBody: string
-  settingsTitle: string
-  settingsSubtitle: string
-}
-
-/** Copy da atualização 2.0 — tom de première, personalizado pelo nome. */
-export function atlasV2UpdateCopy(accountName = ''): AtlasV2UpdateCopy {
-  const first = updateFirstName(accountName)
-  const addressed = first || null
-
-  return {
-    eyebrow: 'Era 2.0',
-    headline: addressed ? `${addressed}, o Atlas te esperava.` : 'O Atlas te esperava.',
-    line: addressed
-      ? `${addressed}, isso não é um update qualquer. É a 2.0 — o sistema de criação mais avançado que você já usou.`
-      : 'Isso não é um update qualquer. É a 2.0 — o sistema de criação mais avançado que você já usou.',
-    statusAvailable: addressed ? `${addressed}, a 2.0 te espera` : 'A 2.0 te espera',
-    statusReady: addressed ? `${addressed}, a 2.0 está pronta` : 'A 2.0 está pronta',
-    statusDownloading: 'Entrando na era 2.0…',
-    statusInstalled: addressed ? `${addressed}, você está na era 2.0` : 'Você está na era 2.0',
-    installedHeadline: addressed ? `${addressed}, bem-vindo à era 2.0.` : 'Bem-vindo à era 2.0.',
-    installedLine: 'Você está no sistema de criação mais avançado do Atlas.',
-    ctaDownload: 'Baixar a 2.0',
-    ctaInstall: 'Reiniciar na 2.0',
-    toast: addressed
-      ? `${addressed}, o Atlas Studio 2.0 chegou. Seu próximo nível começa agora.`
-      : 'O Atlas Studio 2.0 chegou. Seu próximo nível começa agora.',
-    notificationTitle: 'Atlas Studio 2.0',
-    notificationBody: addressed
-      ? `${addressed}, a era definitiva do Atlas está pronta pra você.`
-      : 'A era definitiva do Atlas está pronta pra você.',
-    settingsTitle: 'A era 2.0 chegou',
-    settingsSubtitle: addressed
-      ? `${addressed}, prepare-se: o Atlas Studio 2.0 redefine o que um estúdio com IA pode ser.`
-      : 'O Atlas Studio 2.0 redefine o que um estúdio com IA pode ser.',
-  }
+export function sidebarUpdateToastMessage(version: string): string {
+  const tag = formatVersionTag(version)
+  return tag ? `Atlas Studio ${tag} está disponível.` : 'Nova versão do Atlas Studio está disponível.'
 }
 
 export function sidebarDownloadProgressLabel(percent: number | null): string {

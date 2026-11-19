@@ -628,7 +628,7 @@ export function applyEffectToFullTimeline(
   const existingIds = timeline.clips
     .filter((clip) => isEffectClip(clip) && clip.effectId === effectId)
     .map((clip) => clip.id)
-  let next = existingIds.length > 0 ? deleteClips(timeline, existingIds, false) : timeline
+  const next = existingIds.length > 0 ? deleteClips(timeline, existingIds, false) : timeline
   const duration = Math.max(mediaTimelineDuration(next), EDITOR_DEFAULT_EFFECT_DURATION)
   return insertEffectClip(next, effectId, { start: 0, duration, exactStart: true })
 }

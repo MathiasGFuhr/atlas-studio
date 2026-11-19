@@ -3,6 +3,7 @@ import path from 'node:path'
 import { getUserDataPath } from '../../paths'
 
 const MAX_BYTES = 8 * 1024 * 1024
+const MAX_PREVIEW_READ_BYTES = 16 * 1024 * 1024
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 const MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
@@ -55,7 +56,7 @@ export function readImageDataUrl(filePath: string): string | null {
   let stat: fs.Stats
   try {
     stat = fs.statSync(resolved)
-    if (!stat.isFile()) {
+    if (!stat.isFile() || stat.size === 0 || stat.size > MAX_PREVIEW_READ_BYTES) {
       cacheDelete(resolved)
       return null
     }

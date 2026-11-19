@@ -238,10 +238,11 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
     }).catch((error) => pushError(error, 'Não foi possível carregar o chat.'))
 
     const offMessage = api.teamChat.onMessage((message) => {
+      let roomMissing = false
       setRooms((current) => {
         const index = current.findIndex((room) => room.id === message.roomId)
         if (index < 0) {
-          void refreshRooms()
+          roomMissing = true
           return current
         }
         const next = [...current]
@@ -254,6 +255,9 @@ export function TeamChatPage({ account }: { account: AtlasAccount }) {
         next.unshift(room)
         return next
       })
+      if (roomMissing) {
+        void refreshRooms().catch(() => undefined)
+      }
       if (activeRoomIdRef.current === message.roomId) {
         setMessages((current) => appendTeamMessage(current, message))
       }

@@ -296,48 +296,69 @@ async function buildProxy(asset: EditorAsset, dir: string): Promise<string> {
   if (asset.hasAudio) args.push('-c:a', 'aac', '-b:a', '128k', '-ac', '2')
   else args.push('-an')
   args.push('-movflags', '+faststart', temp)
-  await runFfmpegResult(args, {
-    timeoutMs: Math.min(60 * 60_000, Math.max(2 * 60_000, Math.round(asset.duration * 3000))),
-    timeoutMessage: 'O FFmpeg demorou demais para gerar o proxy de edição.',
-    failMessage: 'Falha ao gerar o proxy de edição.',
-  })
-  if (!fileExists(temp) || fs.statSync(temp).size < 64) throw new Error('Proxy vazio.')
-  fs.rmSync(output, { force: true })
-  fs.renameSync(temp, output)
-  return output
+  try {
+    await runFfmpegResult(args, {
+      timeoutMs: Math.min(60 * 60_000, Math.max(2 * 60_000, Math.round(asset.duration * 3000))),
+      timeoutMessage: 'O FFmpeg demorou demais para gerar o proxy de edição.',
+      failMessage: 'Falha ao gerar o proxy de edição.',
+    })
+    if (!fileExists(temp) || fs.statSync(temp).size < 64) throw new Error('Proxy vazio.')
+    fs.rmSync(output, { force: true })
+    fs.renameSync(temp, output)
+    return output
+  } catch (error) {
+    fs.rmSync(temp, { force: true })
+    throw error
+  }
 }
+
+const inFlightCovers = new Map<string, Promise<string>>()
 
 /** Frame do arquivo original em alta resolução para cards do Editor. */
 async function buildCoverFrame(sourcePath: string, duration: number, dir: string): Promise<string> {
-  const output = path.join(dir, 'cover-v2.jpg')
-  const temp = path.join(dir, 'cover-v2.tmp.jpg')
-  fs.rmSync(temp, { force: true })
-  const seek = Math.min(Math.max(0.5, duration * 0.15), Math.max(0, duration - 0.05))
-  await runFfmpegResult(
-    [
-      '-y',
-      '-ss',
-      seek.toFixed(3),
-      '-i',
-      sourcePath,
-      '-frames:v',
-      '1',
-      '-vf',
-      "scale='min(1440,iw)':-2:flags=lanczos",
-      '-q:v',
-      '2',
-      temp,
-    ],
-    {
-      timeoutMs: 90_000,
-      timeoutMessage: 'O FFmpeg demorou demais para gerar a capa.',
-      failMessage: 'Falha ao gerar a capa do vídeo.',
-    },
-  )
-  if (!fileExists(temp) || fs.statSync(temp).size < 32) throw new Error('Capa vazia.')
-  fs.rmSync(output, { force: true })
-  fs.renameSync(temp, output)
-  return output
+  const key = path.resolve(dir).toLowerCase()
+  const existing = inFlightCovers.get(key)
+  if (existing) return existing
+  const job = (async () => {
+    const output = path.join(dir, 'cover-v2.jpg')
+    const temp = path.join(dir, `cover-v2.tmp-${process.pid}-${Date.now()}.jpg`)
+    fs.rmSync(temp, { force: true })
+    const seek = Math.min(Math.max(0.5, duration * 0.15), Math.max(0, duration - 0.05))
+    try {
+      await runFfmpegResult(
+        [
+          '-y',
+          '-ss',
+          seek.toFixed(3),
+          '-i',
+          sourcePath,
+          '-frames:v',
+          '1',
+          '-vf',
+          "scale='min(1440,iw)':-2:flags=lanczos",
+          '-q:v',
+          '2',
+          temp,
+        ],
+        {
+          timeoutMs: 90_000,
+          timeoutMessage: 'O FFmpeg demorou demais para gerar a capa.',
+          failMessage: 'Falha ao gerar a capa do vídeo.',
+        },
+      )
+      if (!fileExists(temp) || fs.statSync(temp).size < 32) throw new Error('Capa vazia.')
+      fs.rmSync(output, { force: true })
+      fs.renameSync(temp, output)
+      return output
+    } catch (error) {
+      fs.rmSync(temp, { force: true })
+      throw error
+    }
+  })().finally(() => {
+    inFlightCovers.delete(key)
+  })
+  inFlightCovers.set(key, job)
+  return job
 }
 
 /** Garante capa nítida a partir do original (não usa proxy/thumbs). */

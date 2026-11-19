@@ -453,9 +453,10 @@ async function runCreateWithVolume(
   deps.saveConfig({ runpodPreferredPodId: newPod.id })
 
   // Aguarda Comfy via lifecycle (Pod pode já vir RUNNING do create).
+  // Usa o custo real reportado pelo pod criado para não abandonar um pod já faturando por centavos de diferença do catálogo.
   const lifecycle = await deps.lifecycle.startExistingPod({
     podId: newPod.id,
-    confirmedCostPerHr: request.confirmedCostPerHr ?? newPod.costPerHr,
+    confirmedCostPerHr: newPod.costPerHr ?? request.confirmedCostPerHr,
     dryRun: false,
     acceptBilling: true,
   })
@@ -509,7 +510,7 @@ async function runCreateWithVolume(
     }
   }
 
-  let config = deps.saveConfig({
+  const config = deps.saveConfig({
     baseUrl: lifecycle.baseUrl,
     runpodPreferredPodId: newPod.id,
   })

@@ -31,7 +31,18 @@ function createFileAuthStorage(filePath: string): SupportedStorage {
   }
   const write = (data: Record<string, string>) => {
     fs.mkdirSync(path.dirname(filePath), { recursive: true })
-    fs.writeFileSync(filePath, JSON.stringify(data))
+    const tmp = `${filePath}.tmp`
+    fs.writeFileSync(tmp, JSON.stringify(data), { encoding: 'utf8', mode: 0o600 })
+    try {
+      fs.renameSync(tmp, filePath)
+    } catch {
+      fs.writeFileSync(filePath, JSON.stringify(data), { encoding: 'utf8', mode: 0o600 })
+      try {
+        fs.rmSync(tmp, { force: true })
+      } catch {
+        /* ignore */
+      }
+    }
   }
   return {
     getItem: (key) => read()[key] ?? null,

@@ -343,4 +343,69 @@ describe('RunpodLifecycleManager.stopExistingPod', () => {
     expect(result.dryRun).toBe(true)
     expect(methods.every((m) => m === 'GET')).toBe(true)
   })
+
+  it('recupera de falha transitória de rede no polling waiting_pod até chegar em RUNNING', async () => {
+    let getCount = 0
+    const fetchFn = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase()
+      if (method === 'POST') {
+        return jsonResponse({ ...exitedPod(), status: 'STARTING', actions: ['stop'] })
+      }
+      getCount += 1
+      if (getCount === 1) return jsonResponse(exitedPod())
+      if (getCount === 2) throw new Error('ECONNRESET transitório')
+      return jsonResponse({ ...exitedPod(), status: 'RUNNING', actions: ['stop'] })
+    })
+    const manager = new RunpodLifecycleManager({
+      createClient: (apiKey) =>
+        new RunpodClientV2({ apiKey, fetchFn: fetchFn as unknown as typeof fetch, maxRetries: 0 }),
+      getApiKey: () => 'test-key',
+      getWorkflow: () => null,
+      saveBaseUrl: () => undefined,
+      getDryRunDefault: () => false,
+      sleep: async () => undefined,
+      probeComfy: async () => ({
+        connection: { ok: true, message: 'ok', gpu: 'RTX 4090' },
+        nodes: { ok: true, present: ['LoadImage'], missing: [], hasLtxMarker: true, message: 'ok' },
+      }),
+    })
+    const state = await manager.startExistingPod({
+      podId: 'podltx12345',
+      confirmedCostPerHr: 0.44,
+      dryRun: false,
+      acceptBilling: true,
+    })
+    expect(state.phase).toBe('ready')
+    expect(getCount).toBe(3)
+  })
+
+  it('encerra imediatamente quando o Pod cai para EXITED durante waiting_pod', async () => {
+    let getCount = 0
+    const fetchFn = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase()
+      if (method === 'POST') {
+        return jsonResponse({ ...exitedPod(), status: 'STARTING', actions: ['stop'] })
+      }
+      getCount += 1
+      return jsonResponse(exitedPod())
+    })
+    const manager = new RunpodLifecycleManager({
+      createClient: (apiKey) =>
+        new RunpodClientV2({ apiKey, fetchFn: fetchFn as unknown as typeof fetch, maxRetries: 0 }),
+      getApiKey: () => 'test-key',
+      getWorkflow: () => null,
+      saveBaseUrl: () => undefined,
+      getDryRunDefault: () => false,
+      sleep: async () => undefined,
+    })
+    const state = await manager.startExistingPod({
+      podId: 'podltx12345',
+      confirmedCostPerHr: 0.44,
+      dryRun: false,
+      acceptBilling: true,
+    })
+    expect(state.phase).toBe('error')
+    expect(state.error).toContain('EXITED')
+    expect(getCount).toBe(2)
+  })
 })

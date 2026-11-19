@@ -75,6 +75,60 @@ function isAudioFile(filePath: string): boolean {
   return LIPSYNC_AUDIO_EXTENSIONS.includes(path.extname(filePath).toLowerCase())
 }
 
+const ALLOWED_CACHE_TTL_MS = 3_000
+type AllowedMediaCache = {
+  refreshedAt: number
+  lipSyncAudios: Set<string>
+  projectFolders: string[]
+  shortsSources: Set<string>
+}
+let allowedCache: AllowedMediaCache | null = null
+
+function refreshAllowedMediaCache(): AllowedMediaCache {
+  const lipSyncAudios = new Set<string>()
+  const projectFolders: string[] = []
+  const shortsSources = new Set<string>()
+  try {
+    for (const ref of lipSyncRefRepository.list({ status: 'active' })) {
+      const audio = ref.audioPath?.trim()
+      if (audio) lipSyncAudios.add(path.resolve(audio).toLowerCase())
+    }
+  } catch {
+    /* repositório ainda não pronto */
+  }
+  try {
+    for (const project of projectRepository.list()) {
+      const folder = project.projectFolderPath?.trim()
+      if (folder) projectFolders.push(path.resolve(folder).toLowerCase() + path.sep)
+    }
+  } catch {
+    /* repositório ainda não pronto */
+  }
+  try {
+    for (const source of shortsRepository.listSourcePaths()) {
+      if (source) shortsSources.add(path.resolve(source).toLowerCase())
+    }
+  } catch {
+    /* repositório ainda não pronto */
+  }
+  allowedCache = {
+    refreshedAt: Date.now(),
+    lipSyncAudios,
+    projectFolders,
+    shortsSources,
+  }
+  return allowedCache
+}
+
+function checkCachedDynamicMedia(resolved: string, isAudio: boolean, cache: AllowedMediaCache): boolean {
+  const target = resolved.toLowerCase()
+  if (isAudio) {
+    if (cache.lipSyncAudios.has(target)) return true
+    if (cache.projectFolders.some((root) => target.startsWith(root))) return true
+  }
+  return cache.shortsSources.has(target)
+}
+
 function isAllowedMediaPath(resolved: string): boolean {
   if (isInsideRoot(resolved, shortsRoot()) || isInsideRoot(resolved, musicRoot())) return true
   if (isAllowedImagePath(resolved)) return true
@@ -84,34 +138,16 @@ function isAllowedMediaPath(resolved: string): boolean {
   } catch {
     /* repositório ainda não pronto */
   }
-  if (isAudioFile(resolved) && isInsideRoot(resolved, lipsyncRefsRoot())) return true
-  if (isAudioFile(resolved)) {
-    try {
-      const target = resolved.toLowerCase()
-      const refs = lipSyncRefRepository.list({ status: 'active' })
-      if (
-        refs.some((ref) => {
-          const audio = ref.audioPath?.trim()
-          return audio ? path.resolve(audio).toLowerCase() === target : false
-        })
-      ) {
-        return true
-      }
-      const projects = projectRepository.list()
-      if (
-        projects.some((project) => {
-          const folder = project.projectFolderPath?.trim()
-          return folder ? isInsideRoot(resolved, folder) : false
-        })
-      ) {
-        return true
-      }
-    } catch {
-      /* repositório ainda não pronto */
-    }
+  const isAudio = isAudioFile(resolved)
+  if (isAudio && isInsideRoot(resolved, lipsyncRefsRoot())) return true
+
+  const now = Date.now()
+  if (allowedCache && now - allowedCache.refreshedAt < ALLOWED_CACHE_TTL_MS) {
+    if (checkCachedDynamicMedia(resolved, isAudio, allowedCache)) return true
   }
-  const target = resolved.toLowerCase()
-  return shortsRepository.listSourcePaths().some((source) => path.resolve(source).toLowerCase() === target)
+  // Cache miss ou expirado: atualiza imediatamente para reconhecer arquivos recém-importados.
+  const fresh = refreshAllowedMediaCache()
+  return checkCachedDynamicMedia(resolved, isAudio, fresh)
 }
 
 function statFile(filePath: string): fs.Stats | null {

@@ -231,14 +231,21 @@ export function QuickPromptLibrary({
     }
   }
 
+  const savingPromptLockRef = useRef(false)
+  const savingTabLockRef = useRef(false)
+  const copyingSharedIdsRef = useRef(new Set<string>())
+
   async function addSharedToLibrary(item: SharedPrompt) {
+    if (copyingSharedIdsRef.current.has(item.id)) return
+    copyingSharedIdsRef.current.add(item.id)
     try {
       await api.quickPrompts.copyShared(item.id)
       push('Prompt adicionado à sua biblioteca.', 'success')
       notifyPromptsChanged()
-      await load()
     } catch (error) {
       pushError(error, 'Falha ao copiar o prompt público')
+    } finally {
+      copyingSharedIdsRef.current.delete(item.id)
     }
   }
 
@@ -294,6 +301,8 @@ export function QuickPromptLibrary({
   }
 
   async function savePrompt() {
+    if (savingPromptLockRef.current) return
+    savingPromptLockRef.current = true
     try {
       const payload = {
         name: form.name,
@@ -313,9 +322,10 @@ export function QuickPromptLibrary({
       push(editing ? 'Prompt atualizado.' : 'Prompt salvo.', 'success')
       setFormOpen(false)
       notifyPromptsChanged()
-      await load()
     } catch (error) {
       pushError(error, 'Falha ao salvar o prompt')
+    } finally {
+      savingPromptLockRef.current = false
     }
   }
 
@@ -327,13 +337,14 @@ export function QuickPromptLibrary({
       await api.quickPrompts.remove(target.id)
       push('Prompt excluído.', 'success')
       notifyPromptsChanged()
-      await load()
     } catch (error) {
       pushError(error, 'Falha ao excluir o prompt')
     }
   }
 
   async function saveTab() {
+    if (savingTabLockRef.current) return
+    savingTabLockRef.current = true
     try {
       const name = tabForm.name.trim()
       if (tabEditor === 'new') {
@@ -341,7 +352,6 @@ export function QuickPromptLibrary({
         push('Aba criada.', 'success')
         setTabEditor(null)
         notifyPromptsChanged()
-        await load()
         selectTab(created.id)
         return
       }
@@ -350,9 +360,10 @@ export function QuickPromptLibrary({
       push('Aba atualizada.', 'success')
       setTabEditor(null)
       notifyPromptsChanged()
-      await load()
     } catch (error) {
       pushError(error, 'Falha ao salvar a aba')
+    } finally {
+      savingTabLockRef.current = false
     }
   }
 

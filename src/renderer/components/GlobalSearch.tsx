@@ -73,6 +73,7 @@ export function GlobalSearch() {
     function onKey(event: KeyboardEvent) {
       const meta = event.metaKey || event.ctrlKey
       if (meta && event.key.toLowerCase() === 'k') {
+        if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
         event.preventDefault()
         inputRef.current?.focus()
         setOpen(true)
@@ -163,12 +164,30 @@ export function GlobalSearch() {
 
   let flatIndex = -1
 
+  useEffect(() => {
+    if (!open || hits.length === 0) return
+    const activeEl = document.getElementById(`${listId}-option-${activeIndex}`)
+    activeEl?.scrollIntoView({ block: 'nearest' })
+  }, [open, hits.length, activeIndex, listId])
+
   return (
-    <div ref={rootRef} className="relative min-w-0 flex-1">
+    <div
+      ref={rootRef}
+      className="relative min-w-0 flex-1"
+      onBlur={(event) => {
+        if (!rootRef.current?.contains(event.relatedTarget as Node | null)) {
+          close()
+        }
+      }}
+    >
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-2" />
         <input
           ref={inputRef}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-label="Buscar projetos e canais"
+          aria-activedescendant={open && hits[activeIndex] ? `${listId}-option-${activeIndex}` : undefined}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)
@@ -189,6 +208,8 @@ export function GlobalSearch() {
       {open ? (
         <div
           id={listId}
+          role="listbox"
+          aria-label="Resultados da busca"
           className="atlas-pop [--pop-origin:top_center] absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-2xl border border-border bg-card shadow-popover"
         >
           {query.trim().length < MIN_CHARS ? (
@@ -213,6 +234,9 @@ export function GlobalSearch() {
                       return (
                         <button
                           key={hit.id}
+                          id={`${listId}-option-${index}`}
+                          role="option"
+                          aria-selected={index === activeIndex}
                           type="button"
                           className={cn(
                             'flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors',

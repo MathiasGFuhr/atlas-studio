@@ -59,11 +59,26 @@ export const accountService = {
   async getSession(): Promise<AtlasSession> {
     const supabase = getAtlasSupabase()
     if (!supabase) return { user: null }
-    const { data, error } = await supabase.auth.getUser()
-    if (error || !data.user) return { user: null }
-    const user = mapAtlasAccount(data.user)
-    await this.syncProfile(user)
-    return { user }
+    // Usa sessão local primeiro para não bloquear o boot nem deslogar o usuário offline.
+    const { data: sessionData } = await supabase.auth.getSession()
+    const cachedUser = sessionData.session?.user ?? null
+    if (cachedUser) {
+      const user = mapAtlasAccount(cachedUser)
+      persistLocalProfile(user)
+      // Sincroniza perfil em segundo plano sem travar a abertura do app.
+      void upsertAtlasProfile(user).catch(() => undefined)
+      return { user }
+    }
+    try {
+      const { data, error } = await supabase.auth.getUser()
+      if (error || !data.user) return { user: null }
+      const user = mapAtlasAccount(data.user)
+      persistLocalProfile(user)
+      void upsertAtlasProfile(user).catch(() => undefined)
+      return { user }
+    } catch {
+      return { user: null }
+    }
   },
 
   async signIn(input: AtlasAuthInput): Promise<AtlasSession> {

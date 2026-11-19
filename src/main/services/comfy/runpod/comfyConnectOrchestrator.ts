@@ -251,6 +251,7 @@ export class ComfyConnectOrchestrator {
     )
 
     if (!preferred || !isRunningStatus(preferred.status)) {
+      const previousBaseUrl = config.baseUrl
       config = clearStaleUrl(this.deps, 'preferred_pod_offline')
       return {
         phase: 'gpu_off',
@@ -260,7 +261,7 @@ export class ComfyConnectOrchestrator {
           ? `GPU desligada (${preferred.name} · ${preferred.status}). Use Conectar ComfyUI para iniciar.`
           : 'Nenhum pod com porta 8188 encontrado. Configure o Pod preferencial nas Configurações.',
         config,
-        urlChanged: Boolean(this.deps.getConfig().baseUrl !== config.baseUrl),
+        urlChanged: Boolean(previousBaseUrl !== config.baseUrl),
       }
     }
 
@@ -496,7 +497,7 @@ export class ComfyConnectOrchestrator {
         if (live) return live
       }
       // Comfy ainda não saudável — espera via lifecycle (idempotente; sem POST se já RUNNING).
-      const waitResult = await this.runConfirm({
+      const waitResult = await this.confirm({
         podId: preferred.id,
         confirmedCostPerHr: preferred.costPerHr,
         dryRun: false,
@@ -667,7 +668,7 @@ export class ComfyConnectOrchestrator {
     const baseUrl = preferred.comfyProxyUrl || ''
     if (!baseUrl) return null
 
-    let config = this.deps.saveConfig({
+    const config = this.deps.saveConfig({
       baseUrl,
       runpodPreferredPodId: preferred.id,
     })

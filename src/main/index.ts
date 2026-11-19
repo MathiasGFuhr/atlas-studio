@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 
@@ -12,8 +12,9 @@ import {
   setMainWindow,
 } from './boot'
 import { flushDatabasePersist } from './db/database'
-import { atlasFlowCoordinatorServer } from './services/atlas-flow-v1'
 import { killActiveFfmpegProcesses } from './services/audio/ffmpeg'
+import { killActiveTranscribeProcesses } from './services/shorts/transcribeLocal'
+import { teamChatService } from './services/teamChat/teamChatService'
 import { comfyQueueService, remapActiveComfyOutputDirs } from './services/comfy'
 import {
   registerAtlasMediaScheme,
@@ -106,6 +107,17 @@ function createWindow() {
     const isError = severity === 'error' || severity === 'warning' || Number(severity) >= 2
     if (!isError) return
     console.error('[atlas] renderer console', { level: severity, message: text })
+  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        void shell.openExternal(parsed.href).catch(() => undefined)
+      }
+    } catch {
+      /* ignora URL inválida */
+    }
+    return { action: 'deny' }
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('[atlas] renderer process gone', details)
@@ -210,9 +222,10 @@ app.on('before-quit', () => {
   }
   splashController?.dispose()
   splashController = null
+  teamChatService.stop()
   comfyQueueService.stop()
   killActiveFfmpegProcesses()
-  void atlasFlowCoordinatorServer.stop()
+  killActiveTranscribeProcesses()
   void getCodexService()?.disconnect()
   void getRuntimeManager()?.shutdown()
 })

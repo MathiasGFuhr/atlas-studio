@@ -1,9 +1,13 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 
-/** Seção da rota (primeiro segmento) — trocar de aba anima; mudar só o id interno não. */
+/** Seção da rota — trocar entre abas principais ou sub-abas do Estúdio anima; mudar só o id interno não. */
 function sectionOf(pathname: string) {
-  return pathname.split('/')[1] ?? ''
+  const parts = pathname.split('/').filter(Boolean)
+  if (parts[0] === 'musica' && parts[1] && parts[1] !== 'projetos') {
+    return `musica/${parts[1]}`
+  }
+  return parts[0] ?? ''
 }
 
 /**

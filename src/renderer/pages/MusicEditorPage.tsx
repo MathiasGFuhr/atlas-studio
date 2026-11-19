@@ -265,11 +265,15 @@ export function MusicEditorPage() {
         setPeaks(computePeaks(editorialSamples, 1200))
         setSelectedId(nextTrack.selectedId ?? nextTrack.cuts[0]?.id ?? null)
         refreshHistoryFlags()
-        const settings = await api.settings.get()
-        if (!cancelled) setExportFolder(settings.musicExportFolder || '')
-        const status = await api.codex.status()
-        if (!cancelled && !(status.connected && status.authenticated)) {
-          setCodexNotice('Codex não está conectado. Usando análise local.')
+        const settings = await api.settings.get().catch(() => null)
+        if (!cancelled && settings) setExportFolder(settings.musicExportFolder || '')
+        try {
+          const status = await api.codex.status()
+          if (!cancelled && !(status.connected && status.authenticated)) {
+            setCodexNotice('Codex não está conectado. Usando análise local.')
+          }
+        } catch {
+          if (!cancelled) setCodexNotice('Codex não está conectado. Usando análise local.')
         }
       } catch (error) {
         if (!cancelled) {
@@ -282,6 +286,10 @@ export function MusicEditorPage() {
     })()
     return () => {
       cancelled = true
+      if (persistTimer.current) {
+        clearTimeout(persistTimer.current)
+        persistTimer.current = null
+      }
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current)
         objectUrlRef.current = null
@@ -289,6 +297,8 @@ export function MusicEditorPage() {
       setPreviewUrl(null)
     }
   }, [api, id, navigate, push, pushError])
+
+  const trackId = track?.id ?? null
 
   useEffect(() => {
     const audio = audioRef.current
@@ -309,22 +319,26 @@ export function MusicEditorPage() {
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
     }
-  }, [previewUrl, track])
+  }, [previewUrl, trackId])
 
   useEffect(() => {
     const audio = audioRef.current
     if (audio) audio.volume = muted ? 0 : volume
-  }, [volume, muted, track])
+  }, [volume, muted, trackId])
 
   useEffect(() => {
     let raf = 0
-    const tick = () => {
+    let lastUiUpdate = 0
+    const tick = (now: number) => {
       const audio = audioRef.current
       if (audio) {
         const limit = track?.duration ?? audio.duration ?? 0
         const time = Math.min(audio.currentTime, limit)
         if (audio.currentTime > limit) audio.currentTime = limit
-        setPlayhead(time)
+        if (now - lastUiUpdate >= 50) {
+          lastUiUpdate = now
+          setPlayhead(time)
+        }
         const region = playbackModeRef.current === 'region' ? selected : null
         const next = nextPlaybackTime({
           currentTime: time,
@@ -333,8 +347,15 @@ export function MusicEditorPage() {
           loop,
           region: region ? { start: region.start, end: region.end } : null,
         })
-        if (next.looped) audio.currentTime = next.currentTime
-        if (!next.playing && !audio.paused) audio.pause()
+        if (next.looped) {
+          audio.currentTime = next.currentTime
+          lastUiUpdate = now
+          setPlayhead(next.currentTime)
+        }
+        if (!next.playing && !audio.paused) {
+          audio.pause()
+          setPlayhead(time)
+        }
       }
       raf = requestAnimationFrame(tick)
     }
@@ -342,15 +363,25 @@ export function MusicEditorPage() {
     return () => cancelAnimationFrame(raf)
   }, [playing, loop, selected, track?.duration])
 
+  const activeTrackIdRef = useRef<string | null>(null)
+  activeTrackIdRef.current = track?.id ?? null
+  const persistSeqRef = useRef(0)
+
   async function persist(patch: Partial<MusicTrack>) {
-    if (!track) return
-    const updated = await api.music.update(track.id, patch)
-    if (updated) setTrack(updated)
+    const currentId = activeTrackIdRef.current
+    if (!currentId) return
+    const seq = ++persistSeqRef.current
+    const updated = await api.music.update(currentId, patch)
+    if (updated && activeTrackIdRef.current === currentId && seq === persistSeqRef.current) {
+      setTrack(updated)
+    }
   }
 
   function queuePersist(patch: Partial<MusicTrack>) {
     if (persistTimer.current) clearTimeout(persistTimer.current)
+    persistSeqRef.current += 1
     persistTimer.current = setTimeout(() => {
+      persistTimer.current = null
       void persist(patch).catch((error) => pushError(error, 'Não foi possível salvar os cortes'))
     }, 180)
   }

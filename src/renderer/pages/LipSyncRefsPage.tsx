@@ -645,10 +645,23 @@ export function LipSyncRefsPage() {
         }
       }
       setItems((current) => current.map((item) => (item.id === id ? updated : item)))
-      setDrafts((current) => ({
-        ...current,
-        [id]: toDraft(updated),
-      }))
+      setDrafts((current) => {
+        const latest = current[id]
+        // Só substitui o rascunho se o usuário não tiver editado novamente durante o save.
+        if (
+          latest &&
+          (latest.label !== draft.label ||
+            latest.prompt !== draft.prompt ||
+            latest.lyrics !== draft.lyrics ||
+            latest.projectId !== draft.projectId)
+        ) {
+          return current
+        }
+        return {
+          ...current,
+          [id]: toDraft(updated),
+        }
+      })
       return true
     } catch (error) {
       pushError(error, 'Não foi possível salvar.')
@@ -1746,11 +1759,18 @@ export function LipSyncRefsPage() {
     try {
       const results = await Promise.allSettled(ids.map((id) => api.lipSyncRefs.remove(id)))
       const failed = results.filter((result) => result.status === 'rejected')
-      // Sem isso o refresh tentaria gravar rascunhos de cenas que acabaram de ser apagadas.
-      itemsRef.current = []
-      draftsRef.current = {}
-      setItems([])
-      setDrafts({})
+      const removedSet = new Set(ids)
+      // Remove apenas as cenas apagadas (deste projeto), preservando rascunhos de outros projetos.
+      itemsRef.current = itemsRef.current.filter((item) => !removedSet.has(item.id))
+      const nextDrafts = { ...draftsRef.current }
+      for (const removedId of ids) delete nextDrafts[removedId]
+      draftsRef.current = nextDrafts
+      setItems((current) => current.filter((item) => !removedSet.has(item.id)))
+      setDrafts((current) => {
+        const cleaned = { ...current }
+        for (const removedId of ids) delete cleaned[removedId]
+        return cleaned
+      })
       await refresh()
       if (failed.length > 0) {
         const reason = (failed[0] as PromiseRejectedResult).reason
@@ -1780,19 +1800,23 @@ export function LipSyncRefsPage() {
     })
   }
 
+  const selectSceneSeqRef = useRef(0)
+
   async function selectScene(id: string) {
     if (id === selectedId) {
       setMenu(null)
       return
     }
+    const seq = ++selectSceneSeqRef.current
     if (selectedId) {
       const currentItem = items.find((entry) => entry.id === selectedId)
       const draft = drafts[selectedId]
       if (currentItem && draft && isDirty(currentItem, draft)) {
         const saved = await saveItem(selectedId)
-        if (!saved) return
+        if (!saved || seq !== selectSceneSeqRef.current) return
       }
     }
+    if (seq !== selectSceneSeqRef.current) return
     setMenu(null)
     setSelectedId(id)
     setFocusSceneId(id)

@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { runFfmpegResult } from '../audio/ffmpeg'
 import { ffmpegProgressPercent, parseFfmpegProgressTime } from '../media/ffmpegParse'
 import { logger } from '../logging/logger'
@@ -71,7 +72,10 @@ export async function exportEditorProject(input: {
 
   const size = editorOutputSize(timeline.aspect, input.resolution)
   const outputPath = path.resolve(input.outputPath)
-  const workDir = path.join(path.dirname(outputPath), `.atlas-editor-${project.id.slice(0, 8)}`)
+  const workDir = path.join(
+    path.dirname(outputPath),
+    `.atlas-editor-${project.id.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+  )
   const plan = buildEditorExportPlan({
     timeline,
     assets,

@@ -22,14 +22,6 @@ out/
 auth.json
 credentials.json
 .codex/
-docs/atlas-flow/coordinator-pairing.local.json
-docs/atlas-flow/coordinator-live.json
-docs/atlas-flow/references-store.json
-docs/atlas-flow/last-*.json
-docs/atlas-flow/results/
-docs/atlas-flow/evidence/
-docs/atlas-flow/fixtures/
-docs/atlas-flow/staging/
 
 # Logs and caches
 *.log

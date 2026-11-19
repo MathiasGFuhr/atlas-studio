@@ -13,17 +13,35 @@ export function assetPlaybackUrl(asset: EditorAsset | undefined): string | null 
   return asset.url || asset.proxyUrl || null
 }
 
+const MAX_WAVEFORM_CACHE = 50
 const waveformCache = new Map<string, Promise<EditorWaveform | null>>()
 
 export function loadWaveform(asset: EditorAsset): Promise<EditorWaveform | null> {
   if (!asset.waveformPath) return Promise.resolve(null)
   const key = `${asset.id}|${asset.waveformPath}`
   let pending = waveformCache.get(key)
-  if (!pending) {
-    pending = getAtlasApi()
-      .editor.waveform(asset.id)
-      .catch(() => null)
+  if (pending) {
+    // Marca como usado recentemente (LRU)
+    waveformCache.delete(key)
     waveformCache.set(key, pending)
+    return pending
+  }
+  pending = getAtlasApi()
+    .editor.waveform(asset.id)
+    .then((result) => {
+      if (!result && waveformCache.get(key) === pending) {
+        waveformCache.delete(key)
+      }
+      return result
+    })
+    .catch(() => {
+      if (waveformCache.get(key) === pending) waveformCache.delete(key)
+      return null
+    })
+  waveformCache.set(key, pending)
+  if (waveformCache.size > MAX_WAVEFORM_CACHE) {
+    const oldest = waveformCache.keys().next().value
+    if (oldest !== undefined) waveformCache.delete(oldest)
   }
   return pending
 }

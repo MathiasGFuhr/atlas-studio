@@ -128,10 +128,22 @@ export function ComfyQueueProvider({ children }: { children: ReactNode }) {
   const acceptStopRef = useRef(connectAcceptStopOriginal)
   acceptStopRef.current = connectAcceptStopOriginal
 
+  const lastViewsSigRef = useRef('')
+  const lastConfigSigRef = useRef('')
+  const startBatchLockRef = useRef(false)
+
   const refresh = useCallback(async () => {
     const [nextViews, nextConfig] = await Promise.all([api.comfy.list(), api.comfy.getConfig()])
-    setViews(nextViews)
-    setConfig(nextConfig)
+    const viewsSig = JSON.stringify(nextViews)
+    if (viewsSig !== lastViewsSigRef.current) {
+      lastViewsSigRef.current = viewsSig
+      setViews(nextViews)
+    }
+    const configSig = JSON.stringify(nextConfig)
+    if (configSig !== lastConfigSigRef.current) {
+      lastConfigSigRef.current = configSig
+      setConfig(nextConfig)
+    }
     return nextViews
   }, [api])
 
@@ -147,12 +159,19 @@ export function ComfyQueueProvider({ children }: { children: ReactNode }) {
       .catch(() => {})
   }, [refresh])
 
+  const hasActiveBatch = useMemo(
+    () => views.some((view) => isComfyBatchInProgress(view.batch.status)),
+    [views],
+  )
+
   useEffect(() => {
-    const active = views.some((view) => isComfyBatchInProgress(view.batch.status))
-    if (!visible && !active) return
-    const timer = setInterval(() => void refresh().catch(() => {}), POLL_MS)
+    if (!visible && !hasActiveBatch) return
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      void refresh().catch(() => {})
+    }, POLL_MS)
     return () => clearInterval(timer)
-  }, [visible, views, refresh])
+  }, [visible, hasActiveBatch, refresh])
 
   const activeProjectIds = useMemo(
     () =>
@@ -209,27 +228,32 @@ export function ComfyQueueProvider({ children }: { children: ReactNode }) {
 
   const pollLifecycleWhile = useCallback(
     async (run: () => Promise<void>) => {
+      let finished = false
       const timer = window.setInterval(() => {
-        void api.comfy.getRunpodLifecycle().then((life) => {
-          if (!life) return
-          setConnectPhase(mapLifecyclePhaseToConnectUi(life.phase, life.dryRun))
-          setConnectMessage(
-            life.dryRun && life.phase === 'ready'
-              ? COMFY_CONNECT_SIMULATED_MESSAGE
-              : life.message,
-          )
-          if (life.comfy) setConnectConnection(life.comfy)
-          // Dry-run nunca aplica URL simulada na config/fila.
-          if (life.baseUrl && !life.dryRun) {
-            setConfig((current) =>
-              current ? { ...current, baseUrl: life.baseUrl! } : current,
+        void api.comfy
+          .getRunpodLifecycle()
+          .then((life) => {
+            if (finished || !life) return
+            setConnectPhase(mapLifecyclePhaseToConnectUi(life.phase, life.dryRun))
+            setConnectMessage(
+              life.dryRun && life.phase === 'ready'
+                ? COMFY_CONNECT_SIMULATED_MESSAGE
+                : life.message,
             )
-          }
-        })
+            if (life.comfy) setConnectConnection(life.comfy)
+            // Dry-run nunca aplica URL simulada na config/fila.
+            if (life.baseUrl && !life.dryRun) {
+              setConfig((current) =>
+                current ? { ...current, baseUrl: life.baseUrl! } : current,
+              )
+            }
+          })
+          .catch(() => undefined)
       }, 800)
       try {
         await run()
       } finally {
+        finished = true
         window.clearInterval(timer)
       }
     },
@@ -238,6 +262,7 @@ export function ComfyQueueProvider({ children }: { children: ReactNode }) {
 
   const refreshConnectStatus = useCallback(async () => {
     if (connectLock.current) return
+    connectLock.current = true
     setConnectBusy(true)
     try {
       const result = await api.comfy.refreshComfyConnectStatus()
@@ -250,6 +275,7 @@ export function ComfyQueueProvider({ children }: { children: ReactNode }) {
       setConnectMessage(error instanceof Error ? error.message : String(error))
     } finally {
       setConnectBusy(false)
+      connectLock.current = false
     }
   }, [api])
 
@@ -551,6 +577,8 @@ export function ComfyQueueProvider({ children }: { children: ReactNode }) {
 
   const startBatchNow = useCallback(
     async (nextPending: ComfyPendingStart) => {
+      if (startBatchLockRef.current) return
+      startBatchLockRef.current = true
       setBusy(true)
       try {
         const result = await api.comfy.start(nextPending.projectId, nextPending.refIds)
@@ -569,6 +597,7 @@ export function ComfyQueueProvider({ children }: { children: ReactNode }) {
         pushError(error, 'Não foi possível começar o envio.')
       } finally {
         setBusy(false)
+        startBatchLockRef.current = false
       }
     },
     [api, applyView, push, pushError],

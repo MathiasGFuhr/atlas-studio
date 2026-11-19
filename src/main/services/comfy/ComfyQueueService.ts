@@ -25,6 +25,8 @@ import { ComfyUnreachableError, comfyExecutionError, type ComfyApi, type ComfyQu
 import type { ComfyStore, StoredComfyJob } from './comfyStore'
 
 const TICK_MS = 3_000
+const MAX_BACKOFF_TICK_MS = 30_000
+const MAX_LOST_PROMPT_RETRIES = 3
 
 export type ComfyQueueDeps = {
   store: ComfyStore
@@ -60,8 +62,10 @@ export class ComfyQueueService {
   private readonly onVideoDownloaded: NonNullable<ComfyQueueDeps['onVideoDownloaded']>
   private readonly clientId = randomUUID()
   private readonly downloads = new Map<string, Promise<void>>()
-  private timer: ReturnType<typeof setInterval> | null = null
+  private timer: ReturnType<typeof setTimeout> | null = null
   private ticking: Promise<void> | null = null
+  private unreachableStreak = 0
+  private stopped = false
 
   constructor(deps: ComfyQueueDeps) {
     this.store = deps.store
@@ -83,7 +87,8 @@ export class ComfyQueueService {
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer)
+    this.stopped = true
+    if (this.timer) clearTimeout(this.timer)
     this.timer = null
   }
 
@@ -125,6 +130,7 @@ export class ComfyQueueService {
     }))
     this.store.createBatch(batch, jobs)
     this.log('comfy.batch.start', { batchId: batch.id, scenes: jobs.length })
+    this.unreachableStreak = 0
     this.ensureTimer()
     void this.tick()
     return this.view(batch.id)!
@@ -169,6 +175,7 @@ export class ComfyQueueService {
     const batch = this.store.getBatch(batchId)
     if (batch?.status === 'paused') {
       this.store.updateBatch(batchId, { status: 'running', lastError: null })
+      this.unreachableStreak = 0
       this.ensureTimer()
       void this.tick()
     }
@@ -187,6 +194,7 @@ export class ComfyQueueService {
     }
     if (retried > 0) {
       this.store.updateBatch(batchId, { status: 'running', lastError: null })
+      this.unreachableStreak = 0
       this.ensureTimer()
       void this.tick()
     }
@@ -233,8 +241,20 @@ export class ComfyQueueService {
   }
 
   private ensureTimer() {
+    this.stopped = false
     if (this.timer) return
-    this.timer = setInterval(() => void this.tick(), TICK_MS)
+    const delay =
+      this.unreachableStreak > 0
+        ? Math.min(MAX_BACKOFF_TICK_MS, TICK_MS * 2 ** Math.min(this.unreachableStreak, 4))
+        : TICK_MS
+    this.timer = setTimeout(() => {
+      this.timer = null
+      void this.tick().finally(() => {
+        if (!this.stopped && (this.store.activeBatches().length > 0 || this.downloads.size > 0)) {
+          this.ensureTimer()
+        }
+      })
+    }, delay)
     this.timer.unref?.()
   }
 
@@ -272,9 +292,12 @@ export class ComfyQueueService {
       await this.checkQueued(client, batch, mapping)
     } catch (error) {
       if (!(error instanceof ComfyUnreachableError)) throw error
+      this.unreachableStreak += 1
       this.store.updateBatch(batch.id, { lastError: error.message })
       return
     }
+
+    if (this.store.getBatch(batch.id)?.status === 'canceled') return
 
     for (const job of this.store.listJobs(batch.id)) {
       if (job.status === 'downloading' && job.output && !this.downloads.has(job.id)) {
@@ -293,8 +316,18 @@ export class ComfyQueueService {
         config.queueSize,
         occupiedElsewhere,
       )
-      if (reachable && current.lastError) this.store.updateBatch(batch.id, { lastError: null })
+      if (reachable) {
+        this.unreachableStreak = 0
+        if (current.lastError) this.store.updateBatch(batch.id, { lastError: null })
+      } else {
+        this.unreachableStreak += 1
+      }
+    } else if (current?.status === 'paused') {
+      this.unreachableStreak = 0
     }
+
+    const latestBatch = this.store.getBatch(batch.id)
+    if (!latestBatch || latestBatch.status === 'canceled') return
 
     const jobs = this.store.listJobs(batch.id)
     const pendingDownloads = jobs.some((job) => this.downloads.has(job.id))
@@ -305,11 +338,19 @@ export class ComfyQueueService {
     }
   }
 
+  private isBatchCanceled(batchId: string): boolean {
+    return this.store.getBatch(batchId)?.status === 'canceled'
+  }
+
   private async checkQueued(client: ComfyApi, batch: ComfyBatch, mapping: ComfyWorkflowMapping) {
     let queueState: ComfyQueueState | null = null
     for (const job of this.store.listJobs(batch.id)) {
       if (job.status !== 'queued' || !job.promptId) continue
+      if (this.isBatchCanceled(batch.id)) return
       const entry = await client.history(job.promptId)
+      if (this.isBatchCanceled(batch.id)) return
+      const freshJob = this.store.listJobs(batch.id).find((j) => j.id === job.id)
+      if (!freshJob || freshJob.status !== 'queued') continue
       const statusStr = entry?.status?.status_str
       if (entry && (statusStr === 'error' || statusStr === 'success' || entry.status?.completed)) {
         if (statusStr === 'error') {
@@ -326,12 +367,25 @@ export class ComfyQueueService {
         continue
       }
       queueState ??= await client.queue()
+      if (this.isBatchCanceled(batch.id)) return
       if (queueState.running.includes(job.promptId) || queueState.pending.includes(job.promptId)) continue
       // Sumiu da fila sem histórico: o pod reiniciou. Confere o histórico de novo antes de reenviar.
       if (await client.history(job.promptId)) continue
+      if (this.isBatchCanceled(batch.id)) return
+      const nextAttempts = freshJob.attempts + 1
+      if (nextAttempts > MAX_LOST_PROMPT_RETRIES) {
+        this.store.updateJob(job.id, {
+          status: 'error',
+          promptId: null,
+          attempts: nextAttempts,
+          error: 'O ComfyUI perdeu esta cena repetidas vezes (limite de tentativas atingido).',
+        })
+        continue
+      }
       this.store.updateJob(job.id, {
         status: 'pending',
         promptId: null,
+        attempts: nextAttempts,
         error: 'O ComfyUI perdeu esta cena (reinício do pod?). Reenviando.',
       })
     }
@@ -347,16 +401,25 @@ export class ComfyQueueService {
     occupiedElsewhere = 0,
   ): Promise<boolean> {
     for (const job of jobsToSubmit(this.store.listJobs(batch.id), queueSize, occupiedElsewhere)) {
+      if (this.store.getBatch(batch.id)?.status !== 'running') break
       this.store.updateJob(job.id, { status: 'uploading' })
       try {
         const imageName = await client.upload(
           job.imagePath,
           comfyUploadName(batch.id, job.sceneNumber, path.extname(job.imagePath) || '.png'),
         )
+        if (this.store.getBatch(batch.id)?.status !== 'running') {
+          this.restoreAbortedUpload(batch.id, job.id)
+          break
+        }
         const audioName = await client.upload(
           job.audioPath,
           comfyUploadName(batch.id, job.sceneNumber, path.extname(job.audioPath) || '.mp3'),
         )
+        if (this.store.getBatch(batch.id)?.status !== 'running') {
+          this.restoreAbortedUpload(batch.id, job.id)
+          break
+        }
         const sceneWorkflow = buildComfySceneWorkflow(workflow, mapping, {
           imageName,
           audioName,
@@ -366,9 +429,19 @@ export class ComfyQueueService {
           outputPrefix: comfyOutputPrefix(batch.id, job.sceneNumber),
         })
         const promptId = await client.queuePrompt(sceneWorkflow, this.clientId)
+        if (this.isBatchCanceled(batch.id)) {
+          // Cancelado durante o POST /prompt: remove da fila remota para evitar geração cobrada.
+          void client.deleteQueued([promptId]).catch(() => undefined)
+          this.store.updateJob(job.id, { status: 'canceled', promptId: null })
+          break
+        }
         this.store.updateJob(job.id, { status: 'queued', promptId, error: null })
         this.log('comfy.job.queued', { batchId: batch.id, scene: job.sceneNumber, promptId })
       } catch (error) {
+        if (this.isBatchCanceled(batch.id)) {
+          this.store.updateJob(job.id, { status: 'canceled' })
+          break
+        }
         if (error instanceof ComfyUnreachableError) {
           this.store.updateJob(job.id, { status: 'pending' })
           this.store.updateBatch(batch.id, { lastError: error.message })
@@ -382,6 +455,15 @@ export class ComfyQueueService {
       }
     }
     return true
+  }
+
+  private restoreAbortedUpload(batchId: string, jobId: string) {
+    const status = this.store.getBatch(batchId)?.status
+    if (status === 'canceled') {
+      this.store.updateJob(jobId, { status: 'canceled' })
+    } else {
+      this.store.updateJob(jobId, { status: 'pending' })
+    }
   }
 
   private occupiedSlots(exceptBatchId?: string): number {
@@ -419,6 +501,7 @@ export class ComfyQueueService {
             })
           }
         }
+        if (this.isBatchCanceled(batch.id)) return
         this.store.updateJob(job.id, { status: 'done', outputPath: saved, error: null })
         this.log('comfy.job.downloaded', { batchId: batch.id, scene: job.sceneNumber, dest: saved })
         try {
@@ -433,6 +516,7 @@ export class ComfyQueueService {
         }
       })
       .catch((error: unknown) => {
+        if (this.isBatchCanceled(batch.id)) return
         // Falha de rede: continua em "downloading" e tenta no próximo ciclo; o arquivo segue no pod.
         const retry = error instanceof ComfyUnreachableError
         this.store.updateJob(job.id, retry ? { error: errorMessage(error) } : { status: 'error', error: errorMessage(error) })

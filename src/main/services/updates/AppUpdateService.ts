@@ -32,6 +32,7 @@ let autoCheckTimer: ReturnType<typeof setTimeout> | null = null
 let autoCheckInterval: ReturnType<typeof setInterval> | null = null
 let lastBackgroundCheckAt = 0
 let checkInFlight: Promise<AppUpdateStatus> | null = null
+let downloadInFlight: Promise<AppUpdateStatus> | null = null
 
 export function getAppUpdateStatus(): AppUpdateStatus {
   return { ...status, autoCheckEnabled: readAutoCheck() }
@@ -204,8 +205,8 @@ async function performUpdateCheck(opts: { silent?: boolean } = {}): Promise<AppU
 
 export async function downloadAppUpdate(): Promise<AppUpdateStatus> {
   if (!app.isPackaged || !updater) return getAppUpdateStatus()
-  if (status.state !== 'available' && status.state !== 'error' && status.state !== 'downloading') {
-    if (status.state !== 'ready') return getAppUpdateStatus()
+  if (downloadInFlight) return downloadInFlight
+  if (status.state !== 'available' && status.state !== 'error') {
     return getAppUpdateStatus()
   }
 
@@ -217,18 +218,23 @@ export async function downloadAppUpdate(): Promise<AppUpdateStatus> {
   }
   emit()
 
-  try {
-    await updater.downloadUpdate()
-  } catch (error) {
-    console.error('[updates]', userFacingUpdateError('download'), error)
-    status = {
-      ...getAppUpdateStatus(),
-      state: 'error',
-      errorMessage: userFacingUpdateError('download'),
+  downloadInFlight = (async () => {
+    try {
+      await updater!.downloadUpdate()
+    } catch (error) {
+      console.error('[updates]', userFacingUpdateError('download'), error)
+      status = {
+        ...getAppUpdateStatus(),
+        state: 'error',
+        errorMessage: userFacingUpdateError('download'),
+      }
+      emit()
     }
-    emit()
-  }
-  return getAppUpdateStatus()
+    return getAppUpdateStatus()
+  })().finally(() => {
+    downloadInFlight = null
+  })
+  return downloadInFlight
 }
 
 export function installAppUpdate(): AppUpdateStatus {

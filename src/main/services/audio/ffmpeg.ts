@@ -42,6 +42,13 @@ export type FfmpegRunOptions = {
   onStderr?: (chunk: string) => void
 }
 
+const MAX_STDIO_CHARS = 256 * 1024
+
+function appendCapped(current: string, chunk: string): string {
+  const combined = current + chunk
+  return combined.length > MAX_STDIO_CHARS ? combined.slice(-MAX_STDIO_CHARS) : combined
+}
+
 export function runFfmpegResult(
   args: string[],
   options: FfmpegRunOptions = {},
@@ -51,28 +58,51 @@ export function runFfmpegResult(
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { windowsHide: true })
     activeChildren.add(child)
-    child.once('exit', () => activeChildren.delete(child))
+    let settled = false
+    const cleanup = () => {
+      activeChildren.delete(child)
+      clearTimeout(timer)
+    }
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => {
-      child.kill()
+      if (settled) return
+      settled = true
+      cleanup()
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        try {
+          child.kill()
+        } catch {
+          /* ignore */
+        }
+      }
       reject(new Error(options.timeoutMessage || 'O FFmpeg demorou demais para cortar o áudio.'))
     }, timeoutMs)
     child.stdout?.on('data', (buf: Buffer) => {
-      stdout += buf.toString('utf8')
+      stdout = appendCapped(stdout, buf.toString('utf8'))
     })
     child.stderr?.on('data', (buf: Buffer) => {
       const chunk = buf.toString('utf8')
-      stderr += chunk
-      options.onStderr?.(chunk)
+      stderr = appendCapped(stderr, chunk)
+      try {
+        options.onStderr?.(chunk)
+      } catch {
+        /* callback do chamador não deve derrubar o processo principal */
+      }
     })
     child.on('error', (error) => {
-      clearTimeout(timer)
+      if (settled) return
+      settled = true
+      cleanup()
       reject(new Error('FFmpeg não encontrado. Instale o FFmpeg ou gere o instalador do Atlas de novo.'))
       void error
     })
     child.on('close', (code) => {
-      clearTimeout(timer)
+      if (settled) return
+      settled = true
+      cleanup()
       if (code === 0 || options.allowNonZero) {
         resolve({ code, stdout, stderr })
         return

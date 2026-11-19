@@ -393,4 +393,70 @@ describe('ComfyQueueService', () => {
     expect(fs.existsSync(path.join(outputDir, '1 2.mp4'))).toBe(true)
     expect(store.listJobs(batch.id)[0].outputPath).toBe(path.join(outputDir, '1 2.mp4'))
   })
+
+  it('cancelar no meio do upload não envia prompt ao ComfyUI nem ressuscita o job', async () => {
+    let releaseUpload!: () => void
+    const uploadBlocked = new Promise<void>((resolve) => {
+      releaseUpload = resolve
+    })
+    const origUpload = comfy.upload.bind(comfy)
+    let first = true
+    comfy.upload = async (localPath, remoteName) => {
+      if (first) {
+        first = false
+        await uploadBlocked
+      }
+      return origUpload(localPath, remoteName)
+    }
+
+    const { batch } = service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(2) })
+    await new Promise((r) => setTimeout(r, 10))
+    await service.cancel(batch.id)
+    releaseUpload()
+    await cycle()
+
+    expect(comfy.submitted).toHaveLength(0)
+    expect(store.getBatch(batch.id)?.status).toBe('canceled')
+    expect(statuses(batch.id)).toEqual(['canceled', 'canceled'])
+  })
+
+  it('pausar no meio do upload volta a cena para pending sem enfileirar na GPU', async () => {
+    let releaseUpload!: () => void
+    const uploadBlocked = new Promise<void>((resolve) => {
+      releaseUpload = resolve
+    })
+    const origUpload = comfy.upload.bind(comfy)
+    let first = true
+    comfy.upload = async (localPath, remoteName) => {
+      if (first) {
+        first = false
+        await uploadBlocked
+      }
+      return origUpload(localPath, remoteName)
+    }
+
+    const { batch } = service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(2) })
+    await new Promise((r) => setTimeout(r, 10))
+    service.pause(batch.id)
+    releaseUpload()
+    await cycle()
+
+    expect(comfy.submitted).toHaveLength(0)
+    expect(store.getBatch(batch.id)?.status).toBe('paused')
+    expect(statuses(batch.id)).toEqual(['pending', 'pending'])
+  })
+
+  it('limita reenvios quando o ComfyUI perde a mesma cena repetidas vezes (evita loop infinito)', async () => {
+    const { batch } = service.startBatch({ projectId: 'p1', outputDir, scenes: scenes(1) })
+    await cycle()
+    // Simula 4 reinícios consecutivos do pod perdendo o prompt sem histórico
+    for (let i = 0; i < 4; i += 1) {
+      comfy.order = []
+      await cycle()
+    }
+    const [job] = store.listJobs(batch.id)
+    expect(job.status).toBe('error')
+    expect(job.error).toContain('limite de tentativas')
+    expect(store.getBatch(batch.id)?.status).toBe('done')
+  })
 })

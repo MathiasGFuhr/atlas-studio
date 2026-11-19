@@ -218,6 +218,18 @@ async function resolvePlacement(input: {
  * Quando o Comfy termina um N.mp4: garante o projeto do Editor daquela música,
  * importa o vídeo e posiciona no tempo do corte N (ou fallback).
  */
+const ingestQueues = new Map<string, Promise<unknown>>()
+
+function serializeByProject<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = ingestQueues.get(key) ?? Promise.resolve()
+  const next = prev.catch(() => undefined).then(fn)
+  const tracked = next.finally(() => {
+    if (ingestQueues.get(key) === tracked) ingestQueues.delete(key)
+  })
+  ingestQueues.set(key, tracked)
+  return next
+}
+
 export async function ingestComfyVideoToEditor(input: {
   musicProjectId: string | null | undefined
   sceneNumber: number
@@ -229,6 +241,17 @@ export async function ingestComfyVideoToEditor(input: {
   if (!musicProjectId || !videoPath || !Number.isInteger(sceneNumber) || sceneNumber < 1) {
     return null
   }
+  return serializeByProject(musicProjectId, () =>
+    runIngestComfyVideoToEditor({ musicProjectId, sceneNumber, videoPath }),
+  )
+}
+
+async function runIngestComfyVideoToEditor(input: {
+  musicProjectId: string
+  sceneNumber: number
+  videoPath: string
+}): Promise<ComfyEditorIngestResult | null> {
+  const { musicProjectId, videoPath, sceneNumber } = input
 
   let project = ensureEditorProjectForMusicProject(musicProjectId)
   if (!project) {
