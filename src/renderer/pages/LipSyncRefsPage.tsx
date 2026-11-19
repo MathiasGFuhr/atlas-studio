@@ -1594,6 +1594,91 @@ export function LipSyncRefsPage() {
     )
   }
 
+  async function copyAllPrompts() {
+    await copyNumberedSceneTexts(
+      scenePromptTexts(),
+      'Nenhum prompt nas cenas.',
+      'Todos os prompts foram copiados.',
+      'Não foi possível copiar os prompts.',
+    )
+  }
+
+  async function copyParsedNumberedPrompts() {
+    const parsed = parseScenePromptsForImport(numberedPromptsText)
+    if (parsed.length === 0) {
+      push('Nenhum prompt reconhecido para copiar.')
+      return
+    }
+    const text = parsed.map((entry) => `${entry.number}- ${entry.text}`).join('\n\n')
+    try {
+      await api.system.copyText(text)
+      push(
+        parsed.length === 1 ? 'Prompt copiado.' : `${parsed.length} prompts copiados.`,
+        'success',
+      )
+    } catch (error) {
+      pushError(error, 'Não foi possível copiar os prompts.')
+    }
+  }
+
+  function loadNumberedPromptsText(text: string, originLabel: string) {
+    const cleaned = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
+    if (!cleaned.trim()) {
+      push(`${originLabel} está vazio.`)
+      return
+    }
+    setNumberedPromptsText(cleaned)
+    const count = parseScenePromptsForImport(cleaned).length
+    push(
+      count === 0
+        ? `${originLabel} carregado. Nenhum prompt Comfy reconhecido ainda.`
+        : count === 1
+          ? `${originLabel} · 1 prompt reconhecido.`
+          : `${originLabel} · ${count} prompts reconhecidos.`,
+      count > 0 ? 'success' : undefined,
+    )
+  }
+
+  async function pasteNumberedPromptsFromClipboard() {
+    try {
+      const clipboard = (await api.system.readText()).trim()
+      if (!clipboard) {
+        push('A área de transferência está vazia.')
+        return
+      }
+      loadNumberedPromptsText(clipboard, 'Texto colado')
+    } catch (error) {
+      pushError(error, 'Não foi possível ler a área de transferência.')
+    }
+  }
+
+  async function importNumberedPromptsFromFile() {
+    try {
+      const activeProject = projects.find((entry) => entry.id === currentProjectId())
+      const doc = await api.dialog.selectTextDocument({
+        title: 'Documento de prompts ComfyUI',
+        defaultPath: activeProject?.projectFolderPath ?? undefined,
+      })
+      if (!doc) return
+      loadNumberedPromptsText(doc.text, doc.fileName)
+    } catch (error) {
+      pushError(error, 'Não foi possível abrir o documento.')
+    }
+  }
+
+  async function dropNumberedPromptsFile(file: File) {
+    if (file.size > 2 * 1024 * 1024) {
+      push('O documento passa de 2 MB.', 'error')
+      return
+    }
+    try {
+      const text = await file.text()
+      loadNumberedPromptsText(text, file.name)
+    } catch (error) {
+      pushError(error, 'Não foi possível ler o arquivo arrastado.')
+    }
+  }
+
   async function openNumberedPrompts() {
     const current = formatNumberedSceneTexts(scenePromptTexts(), { includeEmpty: true })
     let next = current
@@ -1673,6 +1758,10 @@ export function LipSyncRefsPage() {
   const selectedProjectFolder = selectedProject?.projectFolderPath?.trim() ?? ''
   const hasSceneExcerpts = useMemo(
     () => formatNumberedSceneTexts(sceneExcerptTexts()).length > 0,
+    [visibleItems, drafts],
+  )
+  const hasScenePrompts = useMemo(
+    () => formatNumberedSceneTexts(scenePromptTexts()).length > 0,
     [visibleItems, drafts],
   )
   const numberedPromptCount = useMemo(
@@ -1977,10 +2066,21 @@ export function LipSyncRefsPage() {
                 className={toolbarButtonClass}
                 icon={<ClipboardPaste className="h-3.5 w-3.5" />}
                 disabled={editsDisabled || visibleItems.length === 0}
-                title="Cola a lista numerada de prompts em cada cena, para o Comfy."
+                title="Cola ou puxa do PC (.txt/.md) a lista numerada ou o documento de direção de prompts para o Comfy."
                 onClick={() => void openNumberedPrompts()}
               >
                 Colocar prompts
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className={toolbarButtonClass}
+                icon={<Copy className="h-3.5 w-3.5" />}
+                disabled={visibleItems.length === 0 || !hasScenePrompts}
+                title="Copia todos os prompts das cenas de uma única vez, numerados na ordem da fila."
+                onClick={() => void copyAllPrompts()}
+              >
+                Copiar todos
               </Button>
               <Button
                 type="button"
@@ -2279,7 +2379,7 @@ export function LipSyncRefsPage() {
                               type="button"
                               className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition-colors hover:text-accent-hover disabled:opacity-40"
                               disabled={editsDisabled || visibleItems.length === 0}
-                              title="Cola a lista numerada de prompts em cada cena, para o Comfy."
+                              title="Cola ou puxa do PC (.txt/.md) a lista numerada ou o documento de direção de prompts para o Comfy."
                               onClick={() => void openNumberedPrompts()}
                             >
                               <ClipboardPaste className="h-3.5 w-3.5" />
@@ -2484,6 +2584,10 @@ export function LipSyncRefsPage() {
         text={numberedPromptsText}
         applying={busy}
         onChange={setNumberedPromptsText}
+        onPasteClipboard={() => void pasteNumberedPromptsFromClipboard()}
+        onImportFile={() => void importNumberedPromptsFromFile()}
+        onCopyAll={() => void copyParsedNumberedPrompts()}
+        onDropFile={(file) => void dropNumberedPromptsFile(file)}
         onClose={() => {
           if (busy) return
           setNumberedPromptsOpen(false)

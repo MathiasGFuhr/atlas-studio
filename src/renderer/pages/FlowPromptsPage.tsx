@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Check, ClipboardPaste, Copy, Eraser, Layers } from 'lucide-react'
+import { useMemo, useState, type DragEvent } from 'react'
+import { Check, ClipboardPaste, Copy, Eraser, FileUp, Layers } from 'lucide-react'
 import { parseFlowPromptsForImport } from '@shared/scenePromptImport'
 import { Button } from '../components/Button'
 import { PageHeader } from '../components/PageHeader'
@@ -23,12 +23,32 @@ export function FlowPromptsPage() {
   const { push, pushError } = useToast()
   const [source, setSource] = useState(readFlowSource)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copiedAll, setCopiedAll] = useState(false)
+  const [draggingFile, setDraggingFile] = useState(false)
 
   const prompts = useMemo(() => parseFlowPromptsForImport(source), [source])
 
   function updateSource(value: string) {
     setSource(value)
     writeFlowSource(value)
+  }
+
+  function applyImportedText(text: string, originLabel: string) {
+    const cleaned = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
+    if (!cleaned.trim()) {
+      push(`${originLabel} está vazio.`)
+      return
+    }
+    updateSource(cleaned)
+    const count = parseFlowPromptsForImport(cleaned).length
+    push(
+      count === 0
+        ? `${originLabel} carregado. Nenhum prompt Flow reconhecido ainda.`
+        : count === 1
+          ? `${originLabel} · 1 prompt Flow reconhecido.`
+          : `${originLabel} · ${count} prompts Flow reconhecidos.`,
+      count > 0 ? 'success' : undefined,
+    )
   }
 
   async function pasteFromClipboard() {
@@ -38,18 +58,50 @@ export function FlowPromptsPage() {
         push('A área de transferência está vazia.')
         return
       }
-      updateSource(text)
-      const count = parseFlowPromptsForImport(text).length
-      push(
-        count === 0
-          ? 'Texto colado. Nenhum prompt Flow reconhecido ainda.'
-          : count === 1
-            ? '1 prompt Flow reconhecido.'
-            : `${count} prompts Flow reconhecidos.`,
-        count > 0 ? 'success' : undefined,
-      )
+      applyImportedText(text, 'Texto colado')
     } catch (error) {
       pushError(error, 'Não foi possível ler a área de transferência.')
+    }
+  }
+
+  async function importFromFile() {
+    try {
+      const doc = await api.dialog.selectTextDocument({
+        title: 'Documento de prompts Flow',
+      })
+      if (!doc) return
+      applyImportedText(doc.text, doc.fileName)
+    } catch (error) {
+      pushError(error, 'Não foi possível abrir o documento.')
+    }
+  }
+
+  function handleDragOver(event: DragEvent<HTMLElement>) {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    if (!draggingFile) setDraggingFile(true)
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    setDraggingFile(false)
+  }
+
+  async function handleDrop(event: DragEvent<HTMLElement>) {
+    setDraggingFile(false)
+    const file = event.dataTransfer.files?.[0]
+    if (!file) return
+    event.preventDefault()
+    if (file.size > 2 * 1024 * 1024) {
+      push('O documento passa de 2 MB.', 'error')
+      return
+    }
+    try {
+      const text = await file.text()
+      applyImportedText(text, file.name)
+    } catch (error) {
+      pushError(error, 'Não foi possível ler o arquivo arrastado.')
     }
   }
 
@@ -77,6 +129,8 @@ export function FlowPromptsPage() {
       .join('\n\n')
     try {
       await api.system.copyText(text)
+      setCopiedAll(true)
+      window.setTimeout(() => setCopiedAll(false), 1600)
       push(
         prompts.length === 1 ? 'Prompt Flow copiado.' : `${prompts.length} prompts Flow copiados.`,
         'success',
@@ -96,7 +150,7 @@ export function FlowPromptsPage() {
       <PageHeader
         breadcrumb={environmentBreadcrumb('music', 'Flow')}
         title="Prompts Flow"
-        subtitle="Cole o documento de direção (CENA/CORTE, com ou sem ```). Só o bloco FLOW — IMAGEM entra — Comfy e Veo ficam de fora."
+        subtitle="Cole ou puxe do PC o documento de direção (CENA/CORTE, com ou sem ```). Só o bloco FLOW — IMAGEM entra — Comfy e Veo ficam de fora."
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -111,11 +165,19 @@ export function FlowPromptsPage() {
         <Button
           type="button"
           variant="secondary"
-          icon={<Copy className="h-3.5 w-3.5" />}
+          icon={<FileUp className="h-3.5 w-3.5" />}
+          onClick={() => void importFromFile()}
+        >
+          Puxar do PC
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          icon={copiedAll ? <Check className="h-3.5 w-3.5 text-accent" /> : <Copy className="h-3.5 w-3.5" />}
           disabled={prompts.length === 0}
           onClick={() => void copyAll()}
         >
-          Copiar todos
+          {copiedAll ? 'Todos copiados' : 'Copiar todos'}
         </Button>
         <Button
           type="button"
@@ -128,7 +190,7 @@ export function FlowPromptsPage() {
         </Button>
         <p className="text-xs text-muted">
           {prompts.length === 0
-            ? 'Lista 1- 2- 3- ou documento CENA/CORTE/SCENE + bloco FLOW.'
+            ? 'Lista 1- 2- 3- ou documento CENA/CORTE/SCENE + bloco FLOW (.txt ou .md).'
             : prompts.length === 1
               ? '1 prompt Flow pronto para copiar.'
               : `${prompts.length} prompts Flow prontos para copiar.`}
@@ -136,10 +198,21 @@ export function FlowPromptsPage() {
       </div>
 
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <section className="flex min-h-0 flex-col rounded-2xl border border-border-soft bg-card/50 p-3 sm:p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <Layers className="h-4 w-4 text-muted" />
-            <h2 className="text-sm font-medium text-text">Documento</h2>
+        <section
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={(event) => void handleDrop(event)}
+          className={cn(
+            'flex min-h-0 flex-col rounded-2xl border bg-card/50 p-3 transition-colors sm:p-4',
+            draggingFile ? 'border-accent bg-accent/5' : 'border-border-soft',
+          )}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-muted" />
+              <h2 className="text-sm font-medium text-text">Documento</h2>
+            </div>
+            <span className="text-[11px] text-muted-2">Cole, digite ou arraste um .txt / .md</span>
           </div>
           <textarea
             value={source}

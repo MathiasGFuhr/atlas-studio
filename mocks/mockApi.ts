@@ -1326,6 +1326,7 @@ export const mockApi = {
     selectFolder: async () => null,
     selectImage: async () => null,
     selectAudio: async () => null,
+    selectTextDocument: async () => null,
     selectImages: async () => [],
     readImageDataUrl: async () => null,
     selectFiles: async () => [],

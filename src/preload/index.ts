@@ -15,6 +15,7 @@ import type {
   Channel,
   ChannelPrompt,
   SelectFolderOptions,
+  SelectedTextDocument,
   ChannelVideo,
   ChannelVideoWriteInput,
   DiscoveredSkill,
@@ -589,6 +590,11 @@ const api = {
     selectImage: () => ipcRenderer.invoke(IPC.dialog.selectImage) as Promise<string | null>,
     selectAudio: (options?: SelectFolderOptions) =>
       ipcRenderer.invoke(IPC.dialog.selectAudio, options) as Promise<string | null>,
+    selectTextDocument: (options?: SelectFolderOptions) =>
+      ipcRenderer.invoke(
+        IPC.dialog.selectTextDocument,
+        options,
+      ) as Promise<SelectedTextDocument | null>,
     readImageDataUrl: (filePath: string) =>
       ipcRenderer.invoke(IPC.dialog.readImageDataUrl, filePath) as Promise<string | null>,
     selectFiles: () => ipcRenderer.invoke(IPC.dialog.selectFiles) as Promise<string[]>,

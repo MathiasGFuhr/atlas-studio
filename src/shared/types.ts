@@ -189,6 +189,12 @@ export type SelectFolderOptions = {
   defaultPath?: string
 }
 
+export type SelectedTextDocument = {
+  fileName: string
+  path: string
+  text: string
+}
+
 export type TitleAnalysisProfile = 'music' | 'history' | 'general'
 export type TitleAlternativeStrategy = 'original_refined' | 'hook_first' | 'compact'
 
@@ -963,6 +969,7 @@ export const IPC = {
     selectImage: 'dialog:selectImage',
     selectImages: 'dialog:selectImages',
     selectAudio: 'dialog:selectAudio',
+    selectTextDocument: 'dialog:selectTextDocument',
     readImageDataUrl: 'dialog:readImageDataUrl',
     selectFiles: 'dialog:selectFiles',
     selectExecutable: 'dialog:selectExecutable',

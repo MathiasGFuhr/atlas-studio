@@ -1273,6 +1273,33 @@ export function registerIpcHandlers(deps: {
     if (result.canceled || !result.filePaths[0]) return null
     return result.filePaths[0]
   })
+  ipcMain.handle(IPC.dialog.selectTextDocument, async (_e, options?: SelectFolderOptions) => {
+    const win = getMainWindow()
+    const preferred = typeof options?.defaultPath === 'string' ? options.defaultPath : ''
+    const title = typeof options?.title === 'string' ? options.title.trim() : ''
+    const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: title || 'Selecionar documento',
+      properties: ['openFile'],
+      defaultPath: preferred && folderExists(preferred) ? preferred : undefined,
+      filters: [
+        { name: 'Documento de texto', extensions: ['txt', 'md'] },
+        { name: 'Todos os arquivos', extensions: ['*'] },
+      ],
+    })
+    const filePath = result.filePaths[0]
+    if (result.canceled || !filePath) return null
+    const stats = fs.statSync(filePath)
+    if (!stats.isFile()) throw new Error('Selecione um arquivo válido.')
+    if (stats.size > 2 * 1024 * 1024) {
+      throw new Error('O documento passa de 2 MB.')
+    }
+    const text = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
+    return {
+      fileName: path.basename(filePath),
+      path: filePath,
+      text,
+    }
+  })
   ipcMain.handle(IPC.dialog.readImageDataUrl, (_e, filePath: string) => readImageDataUrl(filePath))
 
   ipcMain.handle(IPC.lipSyncRefs.list, (_e, filters?: LipSyncRefListFilters) =>
