@@ -299,14 +299,29 @@ export type EditorExportRequest = {
   maxQuality?: boolean
 }
 
+export type EditorExportClipsRequest = {
+  projectId: string
+  clipIds?: string[]
+  stripAudio?: boolean
+  maxQuality?: boolean
+}
+
+export type EditorExportClipsResult = {
+  directory: string
+  files: string[]
+}
+
 export type EditorMakeShortRequest = {
   projectId: string
   clipIds: string[]
   resolution?: EditorExportResolution
 }
 
+export type EditorExportKind = 'video' | 'clips' | 'short'
+
 export type EditorExportProgress = {
   projectId: string
+  kind?: EditorExportKind
   stage: 'rendering' | 'done' | 'failed'
   percent: number | null
   message: string

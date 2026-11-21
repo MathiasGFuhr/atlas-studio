@@ -16,6 +16,7 @@ import {
   isEditorExportResolution,
   type EditorAspect,
   type EditorAssetOrigin,
+  type EditorExportClipsRequest,
   type EditorExportProgress,
   type EditorExportRequest,
   type EditorMakeShortRequest,
@@ -43,7 +44,7 @@ import {
   sceneNumberFromComfyPath,
 } from '../services/editor/editorComfyIngest'
 import { listEditorLipsyncGroups } from '../services/editor/editorLipsync'
-import { exportEditorProject, nextShortOutputPath } from '../services/editor/editorExport'
+import { exportEditorClipCuts, exportEditorProject, nextShortOutputPath } from '../services/editor/editorExport'
 import {
   createProjectFolder,
   folderExists,
@@ -341,9 +342,9 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
     })
     if (result.canceled || !result.filePath) return null
 
-    const send = (event: Omit<EditorExportProgress, 'projectId'>) => {
+    const send = (event: Omit<EditorExportProgress, 'projectId' | 'kind'>) => {
       if (win && !win.isDestroyed()) {
-        win.webContents.send(IPC.editor.exportProgress, { projectId: project.id, ...event })
+        win.webContents.send(IPC.editor.exportProgress, { projectId: project.id, kind: 'video', ...event })
       }
     }
     send({ stage: 'rendering', percent: 0, message: 'Preparando exportação...' })
@@ -361,6 +362,59 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       logger.error('editor.export.failed', { projectId: project.id, error: message })
+      send({ stage: 'failed', percent: null, message })
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC.editor.exportClips, async (_e, request: EditorExportClipsRequest) => {
+    const project = requireProject(request?.projectId)
+    const clipIds = Array.isArray(request?.clipIds)
+      ? request.clipIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      : undefined
+    const stripAudio = Boolean(request?.stripAudio)
+    const maxQuality = Boolean(request?.maxQuality)
+    const win = getMainWindow()
+    const musicFolder = project.musicProjectId
+      ? projectRepository.get(project.musicProjectId)?.projectFolderPath?.trim()
+      : undefined
+    const defaultDir = project.lastExportPath
+      ? path.dirname(project.lastExportPath)
+      : musicFolder && folderExists(musicFolder)
+        ? path.resolve(musicFolder)
+        : undefined
+    const result = await dialog.showOpenDialog(win ?? undefined!, {
+      title: 'Escolher pasta para salvar os clipes cortados',
+      defaultPath: defaultDir,
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+
+    const send = (event: Omit<EditorExportProgress, 'projectId' | 'kind'>) => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send(IPC.editor.exportProgress, { projectId: project.id, kind: 'clips', ...event })
+      }
+    }
+    send({ stage: 'rendering', percent: 0, message: 'Preparando cenas cortadas...' })
+    try {
+      const exported = await exportEditorClipCuts({
+        projectId: project.id,
+        outputDir: result.filePaths[0],
+        clipIds,
+        stripAudio,
+        maxQuality,
+        onProgress: (percent, message) => send({ stage: 'rendering', percent, message }),
+      })
+      send({
+        stage: 'done',
+        percent: 100,
+        message: `${exported.files.length} ${exported.files.length === 1 ? 'cena exportada' : 'cenas exportadas'}.`,
+        outputPath: exported.directory,
+      })
+      return exported
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      logger.error('editor.export_clips.failed', { projectId: project.id, error: message })
       send({ stage: 'failed', percent: null, message })
       throw error
     }
@@ -393,9 +447,9 @@ export function registerEditorHandlers(getMainWindow: () => BrowserWindow | null
     const targetPath = reserveNextShortPath(folder)
     const reservedKey = path.resolve(targetPath).toLowerCase()
     const win = getMainWindow()
-    const send = (event: Omit<EditorExportProgress, 'projectId'>) => {
+    const send = (event: Omit<EditorExportProgress, 'projectId' | 'kind'>) => {
       if (win && !win.isDestroyed()) {
-        win.webContents.send(IPC.editor.exportProgress, { projectId: project.id, ...event })
+        win.webContents.send(IPC.editor.exportProgress, { projectId: project.id, kind: 'short', ...event })
       }
     }
     send({ stage: 'rendering', percent: 0, message: 'Preparando Short 9:16...' })

@@ -942,6 +942,8 @@ export const mockApi = {
       musicAssetId: '',
     }),
     export: async () => null,
+    exportClips: async () => null,
+    makeShort: async () => '',
     pathForFile: () => '',
     onAssetChanged: () => () => {},
     onExportProgress: () => () => {},

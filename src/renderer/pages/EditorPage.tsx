@@ -106,6 +106,7 @@ import {
   TIMELINE_MIN_ZOOM,
 } from '../components/editor/Timeline'
 import { useEditorHistory } from '../hooks/useEditorHistory'
+import { useEditorExport } from '../hooks/useEditorExport'
 import { createPlaybackStore, type PlaybackStore } from '../lib/editor/playbackStore'
 import { getAtlasApi } from '../lib/api'
 import { clearFabBottomClearance, setFabBottomClearance } from '../lib/fabClearance'
@@ -194,6 +195,9 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   const api = getAtlasApi()
   const navigate = useNavigate()
   const { push, pushError } = useToast()
+  const editorExport = useEditorExport()
+  const exportJob = editorExport.jobFor(project.id)
+  const isExportingProject = exportJob?.status === 'picking' || exportJob?.status === 'rendering'
   const history = useEditorHistory(project.timeline)
   const { timeline, commit, undo, redo, reset, canUndo, canRedo } = history
   const timelineRef = useRef(timeline)
@@ -602,9 +606,16 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
   }, [commit, selectedIds])
 
   useEffect(() => {
+    return editorExport.onOpenModalRequested(project.id, () => {
+      store.pause()
+      setExportOpen(true)
+    })
+  }, [editorExport, project.id, store])
+
+  useEffect(() => {
     if (!shortBusy) return
     return api.editor.onExportProgress((event) => {
-      if (event.projectId === project.id && event.stage === 'rendering') {
+      if (event.projectId === project.id && event.stage === 'rendering' && (!event.kind || event.kind === 'short')) {
         setShortPercent(event.percent)
       }
     })
@@ -816,6 +827,24 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
       selectedAudioClip: firstAudio,
     }
   }, [assetMap, selectedIds, timeline])
+
+  const { timelineVideoClipCount, selectedVideoClipIds } = useMemo(() => {
+    const visibleVideoTrackIds = new Set(
+      timeline.tracks.filter((track) => track.kind === 'video' && !track.hidden).map((track) => track.id),
+    )
+    const selectedSet = new Set(selectedIds)
+    let count = 0
+    const selectedVideo: string[] = []
+    for (const clip of timeline.clips) {
+      if (isEffectClip(clip) || isTextClip(clip)) continue
+      if (!visibleVideoTrackIds.has(clip.trackId)) continue
+      const asset = assetMap.get(clip.assetId)
+      if (!asset || asset.kind !== 'video') continue
+      count += 1
+      if (selectedSet.has(clip.id)) selectedVideo.push(clip.id)
+    }
+    return { timelineVideoClipCount: count, selectedVideoClipIds: selectedVideo }
+  }, [assetMap, selectedIds, timeline.clips, timeline.tracks])
 
   const activeEffectIds = useMemo(
     () =>
@@ -1396,14 +1425,18 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
           </button>
           <Button
             className="ml-2 h-9 py-0"
-            icon={<Download className="h-4 w-4" />}
-            disabled={duration <= 0}
+            icon={isExportingProject ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            disabled={!isExportingProject && duration <= 0}
             onClick={() => {
               store.pause()
               setExportOpen(true)
             }}
           >
-            Exportar
+            {exportJob?.status === 'rendering'
+              ? `Exportando ${exportJob.percent ?? 0}%`
+              : exportJob?.status === 'picking'
+                ? 'Exportando...'
+                : 'Exportar'}
           </Button>
         </div>
       </header>
@@ -1756,8 +1789,11 @@ function EditorWorkspace({ project, initialAssets }: { project: EditorProject; i
       <ExportModal
         open={exportOpen}
         projectId={project.id}
+        projectName={name.trim() || project.name}
         aspect={timeline.aspect}
         duration={duration}
+        videoClipCount={timelineVideoClipCount}
+        selectedVideoClipIds={selectedVideoClipIds}
         onBeforeExport={flush}
         onClose={() => setExportOpen(false)}
       />

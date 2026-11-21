@@ -28,7 +28,9 @@ import { AppUpdateProvider } from './hooks/useAppUpdate'
 import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
 import { MusicCaptionGenerationProvider } from './hooks/useMusicCaptionGeneration'
 import { ComfyQueueProvider } from './hooks/useComfyQueue'
+import { EditorExportProvider } from './hooks/useEditorExport'
 import { ComfyQueueDock } from './components/lipsync/ComfyQueueDock'
+import { EditorExportTopBar } from './components/editor/EditorExportTopBar'
 import {
   MUSIC_COVERS_PATH,
   MUSIC_FLOW_PATH,
@@ -313,8 +315,11 @@ export default function App() {
         <CreateActionsProvider>
         <ShortsGenerationProvider>
         <MusicCaptionGenerationProvider>
+        <EditorExportProvider>
         <ComfyQueueProvider>
-        <div className="atlas-shell flex h-full w-full overflow-hidden text-text">
+        <div className="atlas-shell flex h-full w-full flex-col overflow-hidden text-text">
+          <EditorExportTopBar />
+          <div className="flex min-h-0 flex-1 overflow-hidden">
           <AppSidebar codexStatus={codexAuth.status} accountId={session.user.id} />
           <div className="flex min-w-0 flex-1 flex-col bg-transparent">
             <TopBar settings={settings} />
@@ -386,6 +391,7 @@ export default function App() {
               </RouteTransition>
             </main>
           </div>
+          </div>
         </div>
         <ChatDock />
         <ComfyQueueDock />
@@ -437,6 +443,7 @@ export default function App() {
           onClose={() => setLinkModalOpen(false)}
         />
         </ComfyQueueProvider>
+        </EditorExportProvider>
         </MusicCaptionGenerationProvider>
         </ShortsGenerationProvider>
         </CreateActionsProvider>

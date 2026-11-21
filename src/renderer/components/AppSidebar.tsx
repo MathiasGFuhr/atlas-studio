@@ -39,6 +39,7 @@ import { useAntigravityStatus } from '../hooks/useAntigravityStatus'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useShortsGeneration } from '../hooks/useShortsGeneration'
 import { useMusicCaptionGeneration } from '../hooks/useMusicCaptionGeneration'
+import { useOptionalEditorExport } from '../hooks/useEditorExport'
 import { PRODUCT_TOUR_ACTIVE_EVENT } from '../lib/productTourEvents'
 
 type NavItem = {
@@ -136,6 +137,7 @@ export function AppSidebar({
   const aiStatus = deriveAtlasAiStatus(codexStatus, antigravityStatus)
   const shortsGeneration = useShortsGeneration()
   const musicCaptionGeneration = useMusicCaptionGeneration()
+  const editorExport = useOptionalEditorExport()
   const [pendingCount, setPendingCount] = useState(0)
   const [onlineCount, setOnlineCount] = useState(0)
   const compactViewport = useMediaQuery('(max-width: 1100px)')
@@ -326,6 +328,9 @@ export function AppSidebar({
                 musicCaptionGeneration.hasActiveGeneration ? (
                   <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
                 ) : null}
+                {collapsed && item.to === '/editor' && editorExport?.hasActiveExport ? (
+                  <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />
+                ) : null}
               </span>
 
               {collapsed ? null : (
@@ -347,7 +352,8 @@ export function AppSidebar({
                     </span>
                   ) : null}
                   {(item.to === '/shorts' && shortsGeneration.hasActiveAnalysis) ||
-                  (item.to === MUSIC_TRACKS_PATH && musicCaptionGeneration.hasActiveGeneration) ? (
+                  (item.to === MUSIC_TRACKS_PATH && musicCaptionGeneration.hasActiveGeneration) ||
+                  (item.to === '/editor' && editorExport?.hasActiveExport) ? (
                     <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
                   ) : item.badge ? null : (
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-2/80 transition-[color,transform] duration-200 group-hover:translate-x-0.5 group-hover:text-muted" />
