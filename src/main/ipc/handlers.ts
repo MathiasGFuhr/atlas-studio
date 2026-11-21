@@ -920,13 +920,16 @@ export function registerIpcHandlers(deps: {
 
   ipcMain.handle(
     IPC.music.saveCover,
-    async (_e, payload: { bytes: Uint8Array; defaultName?: string }) => {
+    async (_e, payload: { bytes: Uint8Array; defaultName?: string; sourcePath?: string | null }) => {
       const win = getMainWindow()
-      const lastFolder = settingsRepository.get().musicExportFolder
+      const rawSource = payload.sourcePath?.trim()
+      const sourceDir =
+        rawSource && fs.existsSync(path.dirname(rawSource)) ? path.dirname(rawSource) : null
+      const defaultDir = sourceDir || settingsRepository.get().musicExportFolder || null
       const suggested = path.basename(payload.defaultName?.trim() || 'capa-musica-1400x1400.jpg')
       const result = await dialog.showSaveDialog(win ?? undefined!, {
         title: 'Salvar capa da música (1400×1400 JPG)',
-        defaultPath: lastFolder ? path.join(lastFolder, suggested) : suggested,
+        defaultPath: defaultDir ? path.join(defaultDir, suggested) : suggested,
         filters: [{ name: 'Imagem JPG', extensions: ['jpg', 'jpeg'] }],
       })
       if (result.canceled || !result.filePath) return null
@@ -934,7 +937,6 @@ export function registerIpcHandlers(deps: {
         ? result.filePath
         : `${result.filePath}.jpg`
       fs.writeFileSync(target, Buffer.from(payload.bytes))
-      settingsRepository.update({ musicExportFolder: path.dirname(target) })
       return target
     },
   )

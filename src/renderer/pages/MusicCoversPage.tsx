@@ -22,12 +22,13 @@ import { cn } from '../lib/utils'
 type LoadedCoverImage = {
   url: string
   fileName: string
+  sourcePath: string | null
   naturalWidth: number
   naturalHeight: number
   element: HTMLImageElement
 }
 
-function loadImageFromFile(file: File): Promise<LoadedCoverImage> {
+function loadImageFromFile(file: File, sourcePath: string | null): Promise<LoadedCoverImage> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file)
     const img = new Image()
@@ -35,6 +36,7 @@ function loadImageFromFile(file: File): Promise<LoadedCoverImage> {
       resolve({
         url: objectUrl,
         fileName: file.name,
+        sourcePath,
         naturalWidth: img.naturalWidth || 1,
         naturalHeight: img.naturalHeight || 1,
         element: img,
@@ -109,7 +111,13 @@ export function MusicCoversPage() {
         return
       }
       try {
-        const next = await loadImageFromFile(file)
+        let sourcePath: string | null = null
+        try {
+          sourcePath = api.editor?.pathForFile?.(file) || null
+        } catch {
+          sourcePath = null
+        }
+        const next = await loadImageFromFile(file, sourcePath)
         setCover(next)
         setZoom(MUSIC_COVER_MIN_ZOOM)
         setOffsetX(0)
@@ -118,7 +126,7 @@ export function MusicCoversPage() {
         pushError(error, 'Não foi possível carregar a imagem')
       }
     },
-    [push, pushError],
+    [api, push, pushError],
   )
 
   useEffect(() => {
@@ -213,7 +221,11 @@ export function MusicCoversPage() {
       const defaultName = buildCoverOutputFilename(cover.fileName)
       if (isElectronRuntime() && typeof api.music.saveCover === 'function') {
         const bytes = new Uint8Array(await blob.arrayBuffer())
-        const savedPath = await api.music.saveCover({ bytes, defaultName })
+        const savedPath = await api.music.saveCover({
+          bytes,
+          defaultName,
+          sourcePath: cover.sourcePath,
+        })
         if (savedPath) {
           push(`Capa salva em 1400×1400 JPG.`, 'success')
         }
