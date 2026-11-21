@@ -239,6 +239,8 @@ export async function initDatabase(workspaceRoot: string): Promise<AppDatabase> 
 
     CREATE TABLE IF NOT EXISTS music_tracks (
       id TEXT PRIMARY KEY,
+      project_id TEXT,
+      channel_id TEXT,
       name TEXT NOT NULL,
       original_path TEXT NOT NULL,
       preview_path TEXT NOT NULL,

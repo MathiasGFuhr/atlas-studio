@@ -96,6 +96,9 @@ export interface MusicTrack {
   id: string
   /** Projeto de Música dono desta faixa. */
   projectId?: string | null
+  /** Cantor/Canal vinculado a esta faixa. */
+  channelId?: string | null
+  channelName?: string | null
   name: string
   originalPath: string
   previewPath: string

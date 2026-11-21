@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import type { Channel } from '@shared/types'
 import {
   Captions,
   Download,
@@ -130,9 +131,11 @@ type HistorySnapshot = {
 
 export function MusicEditorPage() {
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
   const api = getAtlasApi()
   const navigate = useNavigate()
   const { push, pushError } = useToast()
+  const [channels, setChannels] = useState<Channel[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const samplesRef = useRef<Float32Array | null>(null)
@@ -311,6 +314,19 @@ export function MusicEditorPage() {
   }, [api, id, navigate, push, pushError])
 
   const trackId = track?.id ?? null
+
+  useEffect(() => {
+    void api.channels
+      .list({ channelType: 'music' })
+      .then((list) =>
+        setChannels(
+          list
+            .filter((channel) => channel.active !== false)
+            .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })),
+        ),
+      )
+      .catch(() => undefined)
+  }, [api])
 
   useEffect(() => {
     if (!activeCaptionJob) return
@@ -920,6 +936,36 @@ export function MusicEditorPage() {
   const captions = track.captions ?? []
   const liveCaption = captions.find((caption) => playhead >= caption.start && playhead < caption.end)?.text ?? ''
 
+  const backCantor = searchParams.get('cantor') || track.channelId || null
+  const backUrl = backCantor
+    ? `/musica/faixas?cantor=${encodeURIComponent(backCantor)}`
+    : '/musica/faixas'
+
+  async function updateTrackChannel(nextChannelId: string) {
+    if (!track) return
+    const targetId = nextChannelId.trim() || null
+    try {
+      const updated = await api.music.update(track.id, { channelId: targetId })
+      if (updated) {
+        setTrack((current) =>
+          current
+            ? {
+                ...current,
+                channelId: updated.channelId ?? null,
+                channelName: updated.channelName ?? null,
+              }
+            : updated,
+        )
+      }
+      const label = targetId
+        ? channels.find((item) => item.id === targetId)?.name ?? 'cantor'
+        : 'Sem cantor'
+      push(`Música vinculada a ${label}.`, 'success')
+    } catch (error) {
+      pushError(error, 'Não foi possível vincular o cantor')
+    }
+  }
+
   return (
     <PageShell>
       <audio
@@ -937,9 +983,24 @@ export function MusicEditorPage() {
       />
 
       <div data-tour="page-actions" className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl border border-border-soft bg-card px-4 py-3">
-        <Button variant="ghost" onClick={() => navigate('/musica/faixas')}>
+        <Button variant="ghost" onClick={() => navigate(backUrl)}>
           ← Voltar
         </Button>
+        {channels.length > 0 ? (
+          <select
+            aria-label="Cantor da música"
+            value={track.channelId ?? ''}
+            onChange={(event) => void updateTrackChannel(event.target.value)}
+            className="h-10 max-w-[190px] rounded-xl border border-border-soft bg-elevated px-3 text-xs text-text focus:border-accent/50 focus:outline-none"
+          >
+            <option value="">Sem cantor</option>
+            {channels.map((channel) => (
+              <option key={channel.id} value={channel.id}>
+                {channel.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <Button
           type="button"
           className="h-12 px-5"

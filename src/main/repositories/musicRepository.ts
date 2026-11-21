@@ -11,6 +11,9 @@ import { buildFfmpegExportArgs, type AudioExportFormat, type Mp3Bitrate } from '
 type TrackRow = {
   id: string
   project_id: string | null
+  channel_id?: string | null
+  resolved_channel_id?: string | null
+  channel_name?: string | null
   name: string
   original_path: string
   preview_path: string
@@ -23,7 +26,7 @@ type TrackRow = {
   updated_at: string
 }
 
-function ensureCaptionColumns() {
+function ensureMusicColumns() {
   const database = getDb()
   const columns = database.prepare('PRAGMA table_info(music_tracks)').all() as Array<{ name: string }>
   const names = new Set(columns.map((column) => column.name))
@@ -33,6 +36,43 @@ function ensureCaptionColumns() {
   if (!names.has('captions_language')) {
     database.exec('ALTER TABLE music_tracks ADD COLUMN captions_language TEXT')
   }
+  if (!names.has('channel_id')) {
+    database.exec('ALTER TABLE music_tracks ADD COLUMN channel_id TEXT')
+  }
+}
+
+function hasTable(name: string): boolean {
+  const row = getDb()
+    .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+    .get(name) as { ok?: number } | undefined
+  return Boolean(row?.ok)
+}
+
+function buildTrackSelectSql(): string {
+  const hasProjects = hasTable('projects')
+  const hasChannels = hasTable('channels')
+  const hasEditor = hasTable('editor_projects')
+  if (!hasProjects || !hasChannels) {
+    return 'SELECT m.*, m.channel_id AS resolved_channel_id, NULL AS channel_name FROM music_tracks m'
+  }
+  const editorChannelExpr = hasEditor
+    ? `(SELECT NULLIF(TRIM(ep.channel_id), '')
+        FROM editor_projects ep
+        WHERE ep.music_track_id = m.id
+          AND ep.channel_id IS NOT NULL
+          AND TRIM(ep.channel_id) != ''
+        ORDER BY ep.updated_at DESC
+        LIMIT 1)`
+    : 'NULL'
+  const resolvedExpr = `COALESCE(NULLIF(TRIM(m.channel_id), ''), NULLIF(TRIM(p.channel_id), ''), ${editorChannelExpr})`
+  return `
+    SELECT m.*,
+      c.id AS resolved_channel_id,
+      c.name AS channel_name
+    FROM music_tracks m
+    LEFT JOIN projects p ON p.id = m.project_id
+    LEFT JOIN channels c ON c.id = ${resolvedExpr}
+  `
 }
 
 function parseCaptions(value: string | null | undefined): MusicCaption[] {
@@ -62,6 +102,8 @@ function mapTrack(row: TrackRow): MusicTrack {
   return {
     id: row.id,
     projectId: row.project_id ?? null,
+    channelId: row.resolved_channel_id?.trim() || null,
+    channelName: row.channel_name?.trim() || null,
     name: row.name,
     originalPath: row.original_path,
     previewPath: row.preview_path,
@@ -82,27 +124,40 @@ function trackDir(id: string) {
 }
 
 export const musicRepository = {
-  list(filters?: { projectId?: string }): MusicTrack[] {
+  list(filters?: { projectId?: string; channelId?: string }): MusicTrack[] {
+    ensureMusicColumns()
+    const baseSelect = buildTrackSelectSql()
     if (filters?.projectId) {
       return (
         getDb()
-          .prepare('SELECT * FROM music_tracks WHERE project_id = ? ORDER BY created_at DESC')
+          .prepare(`${baseSelect} WHERE m.project_id = ? ORDER BY m.created_at DESC`)
           .all(filters.projectId) as TrackRow[]
       ).map(mapTrack)
     }
-    return (
+    const items = (
       getDb()
-        .prepare('SELECT * FROM music_tracks ORDER BY created_at DESC')
+        .prepare(`${baseSelect} ORDER BY m.created_at DESC`)
         .all() as TrackRow[]
     ).map(mapTrack)
+    if (filters?.channelId) {
+      return items.filter((item) => item.channelId === filters.channelId)
+    }
+    return items
   },
 
   get(id: string): MusicTrack | null {
-    const row = getDb().prepare('SELECT * FROM music_tracks WHERE id = ?').get(id) as TrackRow | undefined
+    ensureMusicColumns()
+    const baseSelect = buildTrackSelectSql()
+    const row = getDb().prepare(`${baseSelect} WHERE m.id = ?`).get(id) as TrackRow | undefined
     return row ? mapTrack(row) : null
   },
 
-  async importFromFile(sourcePath: string, projectId?: string | null): Promise<MusicTrack> {
+  async importFromFile(
+    sourcePath: string,
+    projectId?: string | null,
+    channelId?: string | null,
+  ): Promise<MusicTrack> {
+    ensureMusicColumns()
     const resolved = path.resolve(sourcePath)
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
       throw new Error('Arquivo de áudio não encontrado.')
@@ -123,12 +178,13 @@ export const musicRepository = {
     getDb()
       .prepare(
         `INSERT INTO music_tracks
-          (id, project_id, name, original_path, preview_path, duration, cut_mode, cuts_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, project_id, channel_id, name, original_path, preview_path, duration, cut_mode, cuts_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
         projectId || null,
+        channelId?.trim() || null,
         name,
         originalPath,
         previewPath,
@@ -144,21 +200,28 @@ export const musicRepository = {
 
   update(
     id: string,
-    patch: Partial<Pick<MusicTrack, 'name' | 'duration' | 'cutMode' | 'cuts' | 'selectedId' | 'appliedPreset'>>,
+    patch: Partial<
+      Pick<MusicTrack, 'name' | 'duration' | 'cutMode' | 'cuts' | 'selectedId' | 'appliedPreset' | 'channelId'>
+    >,
   ): MusicTrack | null {
+    ensureMusicColumns()
     const current = this.get(id)
     if (!current) return null
+    const nextChannelId =
+      patch.channelId !== undefined ? patch.channelId?.trim() || null : current.channelId ?? null
     const next = {
       ...current,
       ...patch,
+      channelId: nextChannelId,
       updatedAt: new Date().toISOString(),
     }
     getDb()
       .prepare(
-        `UPDATE music_tracks SET name = ?, duration = ?, cut_mode = ?, cuts_json = ?, updated_at = ? WHERE id = ?`,
+        `UPDATE music_tracks SET name = ?, channel_id = ?, duration = ?, cut_mode = ?, cuts_json = ?, updated_at = ? WHERE id = ?`,
       )
       .run(
         next.name,
+        nextChannelId,
         next.duration,
         next.cutMode,
         serializeMusicCutsJson({
@@ -169,13 +232,18 @@ export const musicRepository = {
         next.updatedAt,
         id,
       )
+    if (patch.channelId !== undefined && hasTable('editor_projects')) {
+      getDb()
+        .prepare('UPDATE editor_projects SET channel_id = ? WHERE music_track_id = ?')
+        .run(nextChannelId, id)
+    }
     return this.get(id)
   },
 
   saveCaptions(id: string, captions: MusicCaption[], language: string | null): MusicTrack | null {
     const current = this.get(id)
     if (!current) return null
-    ensureCaptionColumns()
+    ensureMusicColumns()
     getDb()
       .prepare(
         `UPDATE music_tracks SET captions_json = ?, captions_language = ?, updated_at = ? WHERE id = ?`,

@@ -281,11 +281,11 @@ const api = {
     },
   },
   music: {
-    list: (filters?: { projectId?: string }) =>
+    list: (filters?: { projectId?: string; channelId?: string }) =>
       ipcRenderer.invoke(IPC.music.list, filters) as Promise<MusicTrack[]>,
     get: (id: string) => ipcRenderer.invoke(IPC.music.get, id) as Promise<MusicTrack | null>,
-    import: (projectId?: string | null) =>
-      ipcRenderer.invoke(IPC.music.import, projectId) as Promise<MusicTrack | null>,
+    import: (projectId?: string | null, channelId?: string | null) =>
+      ipcRenderer.invoke(IPC.music.import, projectId, channelId) as Promise<MusicTrack | null>,
     update: (
       id: string,
       patch: Partial<{
@@ -295,6 +295,7 @@ const api = {
         cuts: MusicSegment[]
         selectedId: string | null
         appliedPreset: AutoCutPreset | null
+        channelId: string | null
       }>,
     ) => ipcRenderer.invoke(IPC.music.update, id, patch) as Promise<MusicTrack | null>,
     remove: (id: string) => ipcRenderer.invoke(IPC.music.remove, id) as Promise<boolean>,

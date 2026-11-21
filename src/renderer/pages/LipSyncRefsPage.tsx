@@ -40,6 +40,7 @@ import {
   looksLikeFlowDirectionDoc,
   parseFlowPromptsForImport,
   parseScenePromptsForImport,
+  stripLeadingSubtitleLines,
 } from '@shared/scenePromptImport'
 import { formatNumberedSceneTexts } from '@shared/songLyrics'
 import type { Channel, Project } from '@shared/types'
@@ -137,7 +138,7 @@ function folderPromptByScene(scan: LipSyncFolderScan): Map<number, string> {
     }
   }
   for (const prompt of scan.prompts ?? []) {
-    const text = prompt.text.trim()
+    const text = stripLeadingSubtitleLines(prompt.text)
     if (text) prompts.set(prompt.number, text)
   }
   return prompts

@@ -568,11 +568,11 @@ export function registerIpcHandlers(deps: {
     fs.writeFileSync(`${audioPath.replace(/\.[^.]+$/, '')}.srt`, `${srt}\n`, 'utf8')
   }
 
-  ipcMain.handle(IPC.music.list, (_e, filters?: { projectId?: string }) =>
+  ipcMain.handle(IPC.music.list, (_e, filters?: { projectId?: string; channelId?: string }) =>
     musicRepository.list(filters),
   )
   ipcMain.handle(IPC.music.get, (_e, id: string) => musicRepository.get(id))
-  ipcMain.handle(IPC.music.import, async (_e, projectId?: string | null) => {
+  ipcMain.handle(IPC.music.import, async (_e, projectId?: string | null, channelId?: string | null) => {
     const win = getMainWindow()
     const result = await dialog.showOpenDialog(win ?? undefined!, {
       properties: ['openFile'],
@@ -590,14 +590,21 @@ export function registerIpcHandlers(deps: {
     if (targetProjectId && projectRepository.get(targetProjectId)?.projectType !== 'music') {
       targetProjectId = null
     }
+    const existingProject = targetProjectId ? projectRepository.get(targetProjectId) : null
+    const resolvedChannelId = channelId?.trim() || existingProject?.channelId || null
     if (!targetProjectId) {
       targetProjectId = projectRepository.create({
         name: path.basename(result.filePaths[0], path.extname(result.filePaths[0])),
         projectType: 'music',
+        channelId: resolvedChannelId,
       }).id
     }
 
-    const track = await musicRepository.importFromFile(result.filePaths[0], targetProjectId)
+    const track = await musicRepository.importFromFile(
+      result.filePaths[0],
+      targetProjectId,
+      resolvedChannelId,
+    )
     projectRepository.touch(targetProjectId)
     void import('../services/editor/editorComfyIngest')
       .then(({ seedEditorForMusicProject }) => seedEditorForMusicProject(targetProjectId, track.id))
@@ -618,8 +625,25 @@ export function registerIpcHandlers(deps: {
         cuts: MusicSegment[]
         selectedId: string | null
         appliedPreset: AutoCutPreset | null
+        channelId: string | null
       }>,
-    ) => musicRepository.update(id, patch),
+    ) => {
+      const updated = musicRepository.update(id, patch)
+      if (!updated) return null
+      if (patch.channelId !== undefined) {
+        const nextChannelId = patch.channelId?.trim() || null
+        if (updated.projectId && projectRepository.get(updated.projectId)) {
+          projectRepository.update(updated.projectId, { channelId: nextChannelId })
+          void import('../services/editor/editorComfyIngest')
+            .then(({ ensureEditorProjectForMusicProject }) =>
+              ensureEditorProjectForMusicProject(updated.projectId!, updated.id),
+            )
+            .catch(() => undefined)
+        }
+        return musicRepository.get(id)
+      }
+      return updated
+    },
   )
   ipcMain.handle(IPC.music.remove, (_e, id: string) => musicRepository.remove(id))
   ipcMain.handle(IPC.music.preview, (_e, id: string) => {

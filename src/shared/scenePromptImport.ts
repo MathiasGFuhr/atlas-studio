@@ -17,26 +17,43 @@ const SCENE_HEADER_GLOBAL = new RegExp(
   'gim',
 )
 
+const SECTION_PREFIX = String.raw`(?:#{1,6}\s*)?(?:\*{1,2}|_{1,2})?`
+
 /** ComfyUI / Comfy UI, opcionalmente numerado (2. COMFYUI — …). */
-const COMFY_MARKER = /(?:^|\n)\s*(?:\d+\.\s*)?COMFY\s*UI\b/i
+const COMFY_MARKER = new RegExp(
+  String.raw`(?:^|\n)\s*${SECTION_PREFIX}(?:\d+\.\s*)?COMFY\s*UI\b`,
+  'i',
+)
+
+/** Bloco LTX direto quando o documento não escreve COMFYUI (ex.: 2. LTX-2.3 — ANIMAÇÃO). */
+const LTX_MARKER = new RegExp(
+  String.raw`(?:^|\n)\s*${SECTION_PREFIX}(?:\d+\.\s*)?LTX(?:\s*[-._]?\s*\d+(?:\.\d+)?)?\b`,
+  'i',
+)
 
 /**
  * Animação de banda/instrumental quando o corte não tem bloco ComfyUI.
  * Veo, Kling e Runway continuam só delimitando um bloco Comfy já encontrado.
  */
-const FALLBACK_ANIMATION_MARKER =
-  /(?:^|\n)\s*(?:\d+\.\s*)?(?:VEO(?:\s*\d+)?|KLING|RUNWAY)\b/i
+const FALLBACK_ANIMATION_MARKER = new RegExp(
+  String.raw`(?:^|\n)\s*${SECTION_PREFIX}(?:\d+\.\s*)?(?:VEO(?:\s*\d+(?:\.\d+)?)?|KLING|RUNWAY)\b`,
+  'i',
+)
 
-/** Documento de direção para o LipSync: cena/corte mais Comfy ou Veo/Kling/Runway. */
-const LIPSYNC_DIRECTION_MARKER =
-  /(?:^|\n)\s*(?:\d+\.\s*)?(?:COMFY\s*UI|VEO(?:\s*\d+)?|KLING|RUNWAY)\b/i
+/** Documento de direção para o LipSync: cena/corte mais Comfy, LTX ou Veo/Kling/Runway. */
+const LIPSYNC_DIRECTION_MARKER = new RegExp(
+  String.raw`(?:^|\n)\s*${SECTION_PREFIX}(?:\d+\.\s*)?(?:COMFY\s*UI|LTX(?:\s*[-._]?\s*\d+(?:\.\d+)?)?|VEO(?:\s*\d+(?:\.\d+)?)?|KLING|RUNWAY)\b`,
+  'i',
+)
 
 /**
  * FLOW — IMAGEM / FLOW - IMAGE / Google Flow / 1. FLOW — …
  * `\bFLOW\b` sozinho também vale (documentos sem o sufixo IMAGEM).
  */
-const FLOW_MARKER =
-  /(?:^|\n)\s*(?:\d+\.\s*)?(?:GOOGLE\s+)?FLOW(?:\s*[—–\-:]\s*(?:IMAGEM|IMAGE|PHOTO|FOTO))?\b/i
+const FLOW_MARKER = new RegExp(
+  String.raw`(?:^|\n)\s*${SECTION_PREFIX}(?:\d+\.\s*)?(?:GOOGLE\s+)?FLOW(?:\s*[—–\-:]\s*(?:IMAGEM|IMAGE|PHOTO|FOTO))?\b`,
+  'i',
+)
 
 /**
  * Próxima seção depois do bloco atual (outro motor, próximo corte, separador).
@@ -45,18 +62,30 @@ const FLOW_MARKER =
  */
 const NEXT_SECTION = new RegExp(
   [
-    String.raw`(?:^|\n)\s*(?:\d+\.\s*)?(?:COMFY\s*UI|(?:GOOGLE\s+)?FLOW|VEO(?:\s*\d+)?|KLING|RUNWAY)\b`,
+    String.raw`(?:^|\n)\s*${SECTION_PREFIX}(?:\d+\.\s*)?(?:COMFY\s*UI|LTX(?:\s*[-._]?\s*\d+(?:\.\d+)?)?|(?:GOOGLE\s+)?FLOW|VEO(?:\s*\d+(?:\.\d+)?)?|KLING|RUNWAY)\b`,
     String.raw`^(?:={3,}|#{2,})\s*$`,
     String.raw`^${SCENE_HEADER_PREFIX}(?:\*{1,2}|_{1,2})?${SCENE_HEADER_CORE}(?:\*{1,2}|_{1,2})?\s*#?\s*\d+\b`,
   ].join('|'),
   'im',
 )
 
-const FENCE = /```(?:text)?\s*\n([\s\S]*?)```/
+const FENCE = /```(?:[\w-]*)?\s*\n([\s\S]*?)```/
+const LEADING_FENCE = /^\s*```(?:[\w-]*)?\s*\n([\s\S]*?)```/
 
-/** Sufixo decorativo na linha do título (— IMAGEM, — ANIMAÇÃO…). */
-const TITLE_SUFFIX =
-  /^[\s—–\-|:]*((?:IMAGEM|IMAGE|PHOTO|FOTO|ANIMA[CÇ][AÃ]O|LIPSYNC|SINCRONIZA(?:[CÇ][AÃ]O)?|INSTRUMENTAL)(?:[\s\wÀ-ú\-—–|/]*)?)?/i
+const SEGMENT_END = String.raw`(?=$|\s*(?:[—–|:/()]|\s-\s))`
+
+const SUBTITLE_MODEL_SEGMENT = new RegExp(
+  String.raw`^(?:LTX(?:\s*[-._]?\s*\d+(?:\.\d+)?)?|WAN(?:\s*[-._]?\s*\d+(?:\.\d+)?)?|NANO\s*BANANA(?:\s+PRO)?|IMAGEN(?:\s*\d+)?|COMFY\s*UI|(?:GOOGLE\s+)?FLOW|VEO(?:\s*\d+(?:\.\d+)?)?|KLING(?:\s*\d+(?:\.\d+)?)?|RUNWAY(?:\s*GEN[-\s]?\d+)?|IA2V|I2V|T2V)${SEGMENT_END}`,
+  'i',
+)
+
+const SUBTITLE_TOPIC_WORDS = String.raw`(?:IMAGEM|IMAGE|PHOTO|FOTO|ANIMA[CÇ][AÃ]O|LIP\s*SYNC|SINCRONIZA(?:[CÇ][AÃ]O)?|INSTRUMENTAL|V[IÍ]DEO|VIDEO|PROMPT)`
+const SUBTITLE_TOPIC_CONT = String.raw`(?:DA\s+MESMA\s+IMAGEM|MESMA\s+IMAGEM|DA\s+CENA|INICIAL|DO\s+MESMO\s+ENQUADRAMENTO|E\s+LIP\s*SYNC|E\s+SINCRONIZA[CÇ][AÃ]O(?:\s+PELO\s+[AÁ]UDIO)?|PELO\s+[AÁ]UDIO|SEM\s+CANTO|COM\s+[AÁ]UDIO|SEM\s+[AÁ]UDIO|INSTRUMENTAL|CANTADA|FALADA|COMFY\s*UI|DE\s+LIP\s*SYNC|FLOW|DE\s+ANIMA[CÇ][AÃ]O|DE\s+IMAGEM)`
+
+const SUBTITLE_TOPIC_SEGMENT = new RegExp(
+  String.raw`^${SUBTITLE_TOPIC_WORDS}(?:\s+${SUBTITLE_TOPIC_CONT})*${SEGMENT_END}`,
+  'i',
+)
 
 export function looksLikeDirectionDoc(source: string): boolean {
   const text = source.replace(/\r\n/g, '\n')
@@ -79,8 +108,76 @@ function sceneStarts(text: string): Array<{ number: number; index: number }> {
   return starts
 }
 
+function stripSubtitleSegments(input: string, allowAllCapsTail: boolean): string {
+  let rest = input.replace(/^[\s*_—–\-|:]+/, '').trim()
+  let strippedAny = false
+
+  while (rest) {
+    if (rest.startsWith('(') || rest.startsWith('[')) {
+      const closeChar = rest.startsWith('(') ? ')' : ']'
+      const closeIdx = rest.indexOf(closeChar)
+      if (closeIdx > 0 && stripSubtitleSegments(rest.slice(1, closeIdx), true) === '') {
+        rest = rest.slice(closeIdx + 1).replace(/^[\s*_—–\-|:]+/, '').trim()
+        strippedAny = true
+        continue
+      }
+    }
+
+    const modelMatch = SUBTITLE_MODEL_SEGMENT.exec(rest)
+    if (modelMatch) {
+      rest = rest.slice(modelMatch[0].length).replace(/^[\s*_—–\-|:]+/, '').trim()
+      strippedAny = true
+      continue
+    }
+
+    const topicMatch = SUBTITLE_TOPIC_SEGMENT.exec(rest)
+    if (topicMatch) {
+      rest = rest.slice(topicMatch[0].length).replace(/^[\s*_—–\-|:]+/, '').trim()
+      strippedAny = true
+      continue
+    }
+
+    if (allowAllCapsTail || strippedAny) {
+      const sepIdx = rest.search(/(?:[—–|:/]|\s-\s)/)
+      const segment = (sepIdx < 0 ? rest : rest.slice(0, sepIdx)).replace(/[\s*_]+$/g, '').trim()
+      if (segment && /[A-ZÀ-Ú]/.test(segment) && !/[a-zà-ú]/.test(segment)) {
+        rest = (sepIdx < 0 ? '' : rest.slice(sepIdx)).replace(/^[\s*_—–\-|:]+/, '').trim()
+        strippedAny = true
+        continue
+      }
+    }
+
+    break
+  }
+
+  return rest.trim()
+}
+
 function stripTitleSuffix(titleRest: string): string {
-  return titleRest.replace(TITLE_SUFFIX, '').replace(/^[\s—–\-|:]+/, '').trim()
+  return stripSubtitleSegments(titleRest, true)
+}
+
+/** Remove subtítulos decorativos no topo de um bloco de prompt (ex.: `LTX-2.3 — ANIMAÇÃO DA MESMA IMAGEM`). */
+export function stripLeadingSubtitleLines(source: string): string {
+  const lines = source.replace(/\r\n/g, '\n').split('\n')
+  while (lines.length > 0) {
+    const trimmed = lines[0]?.trim() ?? ''
+    if (!trimmed || /^[-_=*•:\s]+$/.test(trimmed)) {
+      lines.shift()
+      continue
+    }
+    const candidate = trimmed.replace(/^(?:#{1,6}\s*|[-*•]\s+)/, '').trim()
+    const stripped = stripSubtitleSegments(candidate, false)
+    if (!stripped) {
+      lines.shift()
+      continue
+    }
+    if (stripped !== candidate) {
+      lines[0] = stripped
+    }
+    break
+  }
+  return lines.join('\n').trim()
 }
 
 /**
@@ -94,35 +191,39 @@ function contentAfterMarker(sceneBlock: string, marker: RegExp): string {
   if (!match || match.index == null) return ''
 
   const afterKeyword = sceneBlock.slice(match.index + match[0].length)
-
-  const fenceAfterKeyword = afterKeyword.match(FENCE)
-  if (fenceAfterKeyword?.[1]?.trim()) {
-    return fenceAfterKeyword[1].replace(/\r\n/g, '\n').trim()
-  }
-
   const titleNl = afterKeyword.indexOf('\n')
   const titleRest = (titleNl < 0 ? afterKeyword : afterKeyword.slice(0, titleNl)).trim()
+
+  if (/^```/.test(titleRest)) {
+    const fence = afterKeyword.match(FENCE)
+    return fence?.[1]?.replace(/\r\n/g, '\n').trim() ?? ''
+  }
+
   const inlinePrompt = stripTitleSuffix(titleRest)
+  const body = titleNl < 0 ? '' : stripLeadingSubtitleLines(afterKeyword.slice(titleNl + 1))
+  if (!inlinePrompt && !body) return ''
 
-  const body = titleNl < 0 ? '' : afterKeyword.slice(titleNl + 1)
-  if (!inlinePrompt && !body.trim()) return ''
-
-  const fenceInBody = body.match(FENCE)
-  if (fenceInBody?.[1]?.trim()) {
-    const fenced = fenceInBody[1].replace(/\r\n/g, '\n').trim()
+  const fenceAtStart = body.match(LEADING_FENCE)
+  if (fenceAtStart?.[1]?.trim()) {
+    const fenced = fenceAtStart[1].replace(/\r\n/g, '\n').trim()
     return inlinePrompt ? `${inlinePrompt}\n${fenced}` : fenced
   }
 
   const end = body.search(NEXT_SECTION)
-  const bodyPrompt = (end < 0 ? body : body.slice(0, end)).replace(/\r\n/g, '\n').trim()
-  if (inlinePrompt && bodyPrompt) return `${inlinePrompt}\n${bodyPrompt}`
-  return inlinePrompt || bodyPrompt
+  const sectionBody = (end < 0 ? body : body.slice(0, end)).trim()
+  const fenceInSection = sectionBody.match(FENCE)
+  if (fenceInSection?.[1]?.trim()) {
+    const fenced = fenceInSection[1].replace(/\r\n/g, '\n').trim()
+    return inlinePrompt ? `${inlinePrompt}\n${fenced}` : fenced
+  }
+
+  if (inlinePrompt && sectionBody) return `${inlinePrompt}\n${sectionBody}`
+  return inlinePrompt || sectionBody
 }
 
 function extractPromptsFromDirectionDoc(
   source: string,
-  marker: RegExp,
-  fallbackMarker?: RegExp,
+  markers: RegExp[],
 ): ImportedScenePrompt[] {
   const text = source.replace(/\r\n/g, '\n')
   const starts = sceneStarts(text)
@@ -130,9 +231,11 @@ function extractPromptsFromDirectionDoc(
   starts.forEach((entry, i) => {
     const end = starts[i + 1]?.index ?? text.length
     const block = text.slice(entry.index, end)
-    const prompt =
-      contentAfterMarker(block, marker) ||
-      (fallbackMarker ? contentAfterMarker(block, fallbackMarker) : '')
+    let prompt = ''
+    for (const marker of markers) {
+      prompt = contentAfterMarker(block, marker)
+      if (prompt) break
+    }
     if (prompt) byNumber.set(entry.number, prompt)
   })
   return [...byNumber.entries()]
@@ -142,12 +245,12 @@ function extractPromptsFromDirectionDoc(
 
 /** Recorta só os prompts ComfyUI de um documento de direção por cena/corte. */
 export function extractComfyPromptsFromDirectionDoc(source: string): ImportedScenePrompt[] {
-  return extractPromptsFromDirectionDoc(source, COMFY_MARKER)
+  return extractPromptsFromDirectionDoc(source, [COMFY_MARKER, LTX_MARKER])
 }
 
 /** Recorta só os prompts FLOW — IMAGEM de um documento de direção por cena/corte. */
 export function extractFlowPromptsFromDirectionDoc(source: string): ImportedScenePrompt[] {
-  return extractPromptsFromDirectionDoc(source, FLOW_MARKER)
+  return extractPromptsFromDirectionDoc(source, [FLOW_MARKER])
 }
 
 /**
@@ -156,9 +259,15 @@ export function extractFlowPromptsFromDirectionDoc(source: string): ImportedScen
  */
 export function parseScenePromptsForImport(source: string): ImportedScenePrompt[] {
   if (looksLikeDirectionDoc(source)) {
-    return extractPromptsFromDirectionDoc(source, COMFY_MARKER, FALLBACK_ANIMATION_MARKER)
+    return extractPromptsFromDirectionDoc(source, [
+      COMFY_MARKER,
+      LTX_MARKER,
+      FALLBACK_ANIMATION_MARKER,
+    ])
   }
   return parseNumberedSceneTexts(source)
+    .map((entry) => ({ number: entry.number, text: stripLeadingSubtitleLines(entry.text) }))
+    .filter((entry) => Boolean(entry.text))
 }
 
 /** Lista `1- prompt` ou documento completo de direção (só o bloco FLOW). */

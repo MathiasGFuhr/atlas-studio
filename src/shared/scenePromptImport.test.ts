@@ -6,6 +6,7 @@ import {
   looksLikeFlowDirectionDoc,
   parseFlowPromptsForImport,
   parseScenePromptsForImport,
+  stripLeadingSubtitleLines,
 } from './scenePromptImport'
 
 const SAMPLE = `
@@ -237,6 +238,89 @@ Keep the mouth locked to the recording.
     expect(parseScenePromptsForImport(doc).map((entry) => entry.number)).toEqual([4, 5])
     expect(parseScenePromptsForImport(doc)[0]?.text).toBe('Sing with the supplied vocal audio.')
     expect(parseScenePromptsForImport(doc)[1]?.text).toBe('Keep the mouth locked to the recording.')
+  })
+
+  it('remove o subtítulo LTX-2.3 — ANIMAÇÃO DA MESMA IMAGEM antes do prompt Comfy', () => {
+    const doc = `
+CENA 01 — Diagonal esquerda
+FLOW — IMAGEM
+Photograph the singer from the left diagonal.
+
+COMFYUI — LTX-2.3 — ANIMAÇÃO DA MESMA IMAGEM
+Animate this exact left-diagonal composition as one continuous singing take.
+
+CENA 02 — Close frontal
+FLOW — IMAGEM
+Close-up portrait.
+
+2. COMFYUI — ANIMAÇÃO E LIPSYNC
+**LTX-2.3 — ANIMAÇÃO DA MESMA IMAGEM**
+Continue this exact composition with natural lip movement.
+
+CENA 03 — Direto com LTX
+1. FLOW — IMAGEM
+Stage wide shot.
+
+2. LTX-2.3 — ANIMAÇÃO DA MESMA IMAGEM
+Image-to-video. Keep the camera locked in one continuous shot.
+`
+    expect(parseScenePromptsForImport(doc)).toEqual([
+      {
+        number: 1,
+        text: 'Animate this exact left-diagonal composition as one continuous singing take.',
+      },
+      {
+        number: 2,
+        text: 'Continue this exact composition with natural lip movement.',
+      },
+      {
+        number: 3,
+        text: 'Image-to-video. Keep the camera locked in one continuous shot.',
+      },
+    ])
+    expect(parseFlowPromptsForImport(doc)).toEqual([
+      { number: 1, text: 'Photograph the singer from the left diagonal.' },
+      { number: 2, text: 'Close-up portrait.' },
+      { number: 3, text: 'Stage wide shot.' },
+    ])
+  })
+
+  it('remove subtítulo LTX-2.3 também na lista numerada e preserva prompts normais', () => {
+    const list = `
+1- LTX-2.3 — ANIMAÇÃO DA MESMA IMAGEM
+Animate this exact left-diagonal composition as one continuous shot.
+
+2- LIPSYNC cena 2 deve entrar sozinho
+`
+    expect(parseScenePromptsForImport(list)).toEqual([
+      {
+        number: 1,
+        text: 'Animate this exact left-diagonal composition as one continuous shot.',
+      },
+      {
+        number: 2,
+        text: 'LIPSYNC cena 2 deve entrar sozinho',
+      },
+    ])
+    expect(stripLeadingSubtitleLines('LTX-2.3 — ANIMAÇÃO DA MESMA IMAGEM\nAnimate now.')).toBe('Animate now.')
+    expect(stripLeadingSubtitleLines('Image-to-video. Animate now.')).toBe('Image-to-video. Animate now.')
+  })
+
+  it('não puxa fence de Veo quando o bloco Comfy da mesma cena não tem fence', () => {
+    const doc = `
+CORTE 01 — Canto
+COMFYUI
+LTX-2.3 — ANIMAÇÃO DA MESMA IMAGEM
+Animate this exact left-diagonal composition.
+
+VEO 3 — ANIMAÇÃO
+\`\`\`text
+Veo prompt should not replace Comfy.
+\`\`\`
+`
+    expect(parseScenePromptsForImport(doc)).toEqual([
+      { number: 1, text: 'Animate this exact left-diagonal composition.' },
+    ])
   })
 })
 

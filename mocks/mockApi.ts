@@ -875,10 +875,14 @@ export const mockApi = {
     onAuthStateChanged: () => () => undefined,
   },
   music: {
-    list: async (filters?: { projectId?: string }) =>
-      musicTracks.filter((track) => !filters?.projectId || track.projectId === filters.projectId),
+    list: async (filters?: { projectId?: string; channelId?: string }) =>
+      musicTracks.filter(
+        (track) =>
+          (!filters?.projectId || track.projectId === filters.projectId) &&
+          (!filters?.channelId || track.channelId === filters.channelId),
+      ),
     get: async (id: string) => musicTracks.find((track) => track.id === id) ?? null,
-    import: async () => {
+    import: async (_projectId?: string | null, _channelId?: string | null) => {
       throw new Error('Importação de música indisponível no modo mock. Use o Electron.')
     },
     update: async (id: string, patch: Partial<MusicTrack>) => {
