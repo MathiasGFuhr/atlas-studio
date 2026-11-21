@@ -873,6 +873,7 @@ export const IPC = {
     exportSrt: 'music:exportSrt',
     importSrt: 'music:importSrt',
     exportCutsToLipSync: 'music:exportCutsToLipSync',
+    saveCover: 'music:saveCover',
   },
   shorts: {
     list: 'shorts:list',

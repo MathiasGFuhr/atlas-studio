@@ -7,6 +7,7 @@ import {
   Clapperboard,
   Film,
   Home,
+  Image,
   Lightbulb,
   Loader2,
   MessageSquareText,
@@ -21,6 +22,7 @@ import {
 import { AI_SETTINGS_HREF, deriveAtlasAiStatus } from '@shared/atlasAiStatus'
 import type { CodexStatus } from '@shared/types'
 import {
+  MUSIC_COVERS_PATH,
   MUSIC_FLOW_PATH,
   MUSIC_LIPSYNC_PATH,
   MUSIC_PROMPTS_PATH,
@@ -65,6 +67,7 @@ const navSections: NavSection[] = [
     items: [
       { to: MUSIC_PROMPTS_PATH, label: 'Prompts', icon: MessageSquareText },
       { to: MUSIC_TRACKS_PATH, label: 'Cortes', icon: Scissors },
+      { to: MUSIC_COVERS_PATH, label: 'Capas', icon: Image },
       { to: MUSIC_LIPSYNC_PATH, label: 'Lipsync', icon: Mic2 },
       { to: MUSIC_FLOW_PATH, label: 'Flow', icon: Workflow },
       { to: '/editor', label: 'Editor', icon: Film },
@@ -97,6 +100,7 @@ function isSidebarLinkActive(to: string, pathname: string, matched: boolean): bo
       (pathname.startsWith(`${ENVIRONMENTS.music.basePath}/`) &&
         !pathname.startsWith(MUSIC_PROMPTS_PATH) &&
         !pathname.startsWith(MUSIC_TRACKS_PATH) &&
+        !pathname.startsWith(MUSIC_COVERS_PATH) &&
         !pathname.startsWith(MUSIC_LIPSYNC_PATH) &&
         !pathname.startsWith(MUSIC_FLOW_PATH))
     )
@@ -106,6 +110,9 @@ function isSidebarLinkActive(to: string, pathname: string, matched: boolean): bo
   }
   if (to === MUSIC_TRACKS_PATH) {
     return pathname === MUSIC_TRACKS_PATH || pathname.startsWith(`${MUSIC_TRACKS_PATH}/`)
+  }
+  if (to === MUSIC_COVERS_PATH) {
+    return pathname === MUSIC_COVERS_PATH || pathname.startsWith(`${MUSIC_COVERS_PATH}/`)
   }
   if (to === MUSIC_LIPSYNC_PATH) {
     return pathname === MUSIC_LIPSYNC_PATH || pathname.startsWith(`${MUSIC_LIPSYNC_PATH}/`)

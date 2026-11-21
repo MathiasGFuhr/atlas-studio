@@ -29,7 +29,12 @@ import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
 import { MusicCaptionGenerationProvider } from './hooks/useMusicCaptionGeneration'
 import { ComfyQueueProvider } from './hooks/useComfyQueue'
 import { ComfyQueueDock } from './components/lipsync/ComfyQueueDock'
-import { MUSIC_FLOW_PATH, MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
+import {
+  MUSIC_COVERS_PATH,
+  MUSIC_FLOW_PATH,
+  MUSIC_LIPSYNC_PATH,
+  MUSIC_PROMPTS_PATH,
+} from '@shared/workspaceCapabilities'
 import { version as appVersion } from '../../package.json'
 import { AtlasLogo } from './components/AtlasLogo'
 import { shouldShowWelcome, WelcomeSplash } from './components/WelcomeSplash'
@@ -71,6 +76,7 @@ const pageLoaders = {
   settings: () => import('./pages/SettingsPage'),
   music: () => import('./pages/MusicPage'),
   musicEditor: () => import('./pages/MusicEditorPage'),
+  musicCovers: () => import('./pages/MusicCoversPage'),
   shortsStudio: () => import('./pages/ShortsStudioPage'),
   shortsProjects: () => import('./pages/ShortsProjectsPage'),
   editorProjects: () => import('./pages/EditorProjectsPage'),
@@ -104,6 +110,9 @@ const SettingsPage = lazy(() => pageLoaders.settings().then((m) => ({ default: m
 const MusicPage = lazy(() => pageLoaders.music().then((m) => ({ default: m.MusicPage })))
 const MusicEditorPage = lazy(() =>
   pageLoaders.musicEditor().then((m) => ({ default: m.MusicEditorPage })),
+)
+const MusicCoversPage = lazy(() =>
+  pageLoaders.musicCovers().then((m) => ({ default: m.MusicCoversPage })),
 )
 const ShortsStudioPage = lazy(() =>
   pageLoaders.shortsStudio().then((m) => ({ default: m.ShortsStudioPage })),
@@ -319,6 +328,7 @@ export default function App() {
                 <Route path="/musica/projetos/:id" element={<ProjectDetailPage projectType="music" />} />
                 <Route path="/musica/faixas" element={<MusicPage />} />
                 <Route path="/musica/faixas/:id" element={<MusicEditorPage />} />
+                <Route path={MUSIC_COVERS_PATH} element={<MusicCoversPage />} />
                 <Route path={MUSIC_PROMPTS_PATH} element={<PromptsPage />} />
                 <Route path={MUSIC_FLOW_PATH} element={<FlowPromptsPage />} />
                 <Route path={MUSIC_LIPSYNC_PATH} element={<LipSyncRefsPage />} />

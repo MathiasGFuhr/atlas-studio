@@ -104,6 +104,8 @@ export const MUSIC_PROMPTS_PATH = '/musica/prompts'
 export const MUSIC_PROMPTS_CUSTOM_PATH = MUSIC_PROMPTS_PATH
 /** Estúdio de corte e legenda das faixas. */
 export const MUSIC_TRACKS_PATH = '/musica/faixas'
+/** Conversor/enquadrador de capas 1400x1400 das músicas. */
+export const MUSIC_COVERS_PATH = '/musica/capas'
 /** Referências de imagem + prompt de lipsync. */
 export const MUSIC_LIPSYNC_PATH = '/musica/lipsync'
 /** Extrator de prompts Flow para copiar cena a cena. */

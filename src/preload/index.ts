@@ -345,6 +345,8 @@ const api = {
         files: string[]
         refs: Array<{ id: string; label: string }>
       } | null>,
+    saveCover: (payload: { bytes: Uint8Array; defaultName?: string }) =>
+      ipcRenderer.invoke(IPC.music.saveCover, payload) as Promise<string | null>,
   },
   shorts: {
     list: (filters?: ShortsProjectListFilters) =>

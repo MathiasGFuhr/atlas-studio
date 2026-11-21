@@ -919,6 +919,7 @@ export const mockApi = {
     exportCutsToLipSync: async () => {
       throw new Error('Envio ao LipSync indisponível no modo mock. Use o Electron.')
     },
+    saveCover: async () => null,
   },
   editor: {
     list: async () => [],

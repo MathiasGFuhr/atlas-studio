@@ -918,6 +918,27 @@ export function registerIpcHandlers(deps: {
     return exportMusicCutsToLipSync({ ...payload, directory })
   })
 
+  ipcMain.handle(
+    IPC.music.saveCover,
+    async (_e, payload: { bytes: Uint8Array; defaultName?: string }) => {
+      const win = getMainWindow()
+      const lastFolder = settingsRepository.get().musicExportFolder
+      const suggested = path.basename(payload.defaultName?.trim() || 'capa-musica-1400x1400.jpg')
+      const result = await dialog.showSaveDialog(win ?? undefined!, {
+        title: 'Salvar capa da música (1400×1400 JPG)',
+        defaultPath: lastFolder ? path.join(lastFolder, suggested) : suggested,
+        filters: [{ name: 'Imagem JPG', extensions: ['jpg', 'jpeg'] }],
+      })
+      if (result.canceled || !result.filePath) return null
+      const target = /\.(jpe?g)$/i.test(result.filePath)
+        ? result.filePath
+        : `${result.filePath}.jpg`
+      fs.writeFileSync(target, Buffer.from(payload.bytes))
+      settingsRepository.update({ musicExportFolder: path.dirname(target) })
+      return target
+    },
+  )
+
   ipcMain.handle(IPC.shorts.list, (_e, filters?: ShortsProjectListFilters) =>
     shortsRepository.list(filters).map(presentShortsJob),
   )
