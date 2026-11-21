@@ -190,6 +190,35 @@ type PendingInstrumentalImport = {
   hasConflicts: boolean
   numbers: number[]
   choices: Record<number, InstrumentalChoice>
+  presetSubjects?: Record<number, LipSyncSubject>
+}
+
+function splitSavedScanChoices(
+  scan: LipSyncFolderScan,
+  numbers: number[],
+  savedChoices: Record<number, InstrumentalChoice>,
+): {
+  resolvedScan: LipSyncFolderScan
+  resolvedSubjects: Record<number, LipSyncSubject>
+  unansweredNumbers: number[]
+  unansweredChoices: Record<number, InstrumentalChoice>
+} {
+  const preApplied = applyInstrumentalChoices(scan, savedChoices)
+  const unansweredNumbers = numbers.filter(
+    (number) => !resolveInstrumentalChoice(savedChoices[number] ?? { presetIds: [], custom: '' }),
+  )
+  const unansweredChoices = Object.fromEntries(
+    unansweredNumbers.map((number) => [
+      number,
+      savedChoices[number] ?? { presetIds: [], custom: '' },
+    ]),
+  )
+  return {
+    resolvedScan: preApplied.scan,
+    resolvedSubjects: preApplied.subjects,
+    unansweredNumbers,
+    unansweredChoices,
+  }
 }
 
 /** Modal de instrumento para cenas já na fila sem trecho de letra. */
@@ -943,14 +972,28 @@ export function LipSyncRefsPage() {
           folderPath: scan.folder,
           numbers: withoutLyrics,
         })
-        setPendingInstrumental({
-          scan,
-          replaceExisting: true,
+        const split = splitSavedScanChoices(scan, withoutLyrics, savedChoices)
+        if (split.unansweredNumbers.length > 0) {
+          setPendingInstrumental({
+            scan: split.resolvedScan,
+            replaceExisting: true,
+            projectId: target.id,
+            queue,
+            hasConflicts: reuseCurrent && countFolderConflicts(split.resolvedScan) > 0,
+            numbers: split.unansweredNumbers,
+            choices: split.unansweredChoices,
+            presetSubjects: split.resolvedSubjects,
+          })
+          return
+        }
+        if (reuseCurrent && countFolderConflicts(split.resolvedScan) > 0) {
+          setFolderImport(split.resolvedScan)
+          return
+        }
+        await applyFolderImport(split.resolvedScan, true, {
           projectId: target.id,
           queue,
-          hasConflicts: reuseCurrent && countFolderConflicts(scan) > 0,
-          numbers: withoutLyrics,
-          choices: savedChoices,
+          subjects: split.resolvedSubjects,
         })
         return
       }
@@ -989,17 +1032,12 @@ export function LipSyncRefsPage() {
       folderPath: scan.folder,
       numbers,
     })
-    if (
-      options?.quiet &&
-      numbers.every((number) =>
-        Boolean(resolveInstrumentalChoice(savedChoices[number] ?? { presetIds: [], custom: '' })),
-      )
-    ) {
-      const resolved = applyInstrumentalChoices(scan, savedChoices)
-      await applyFolderImport(resolved.scan, replaceExisting, {
+    const split = splitSavedScanChoices(scan, numbers, savedChoices)
+    if (split.unansweredNumbers.length === 0) {
+      await applyFolderImport(split.resolvedScan, replaceExisting, {
         ...options,
         projectId,
-        subjects: resolved.subjects,
+        subjects: split.resolvedSubjects,
       })
       return
     }
@@ -1013,14 +1051,15 @@ export function LipSyncRefsPage() {
     }
     setFolderImport(null)
     setPendingInstrumental({
-      scan,
+      scan: split.resolvedScan,
       replaceExisting,
       projectId,
       queue,
       quiet: options?.quiet,
       hasConflicts: false,
-      numbers,
-      choices: savedChoices,
+      numbers: split.unansweredNumbers,
+      choices: split.unansweredChoices,
+      presetSubjects: split.resolvedSubjects,
     })
   }
 
@@ -1037,7 +1076,7 @@ export function LipSyncRefsPage() {
       projectId: pending.projectId,
       queue: pending.queue,
       quiet: pending.quiet,
-      subjects: resolved.subjects,
+      subjects: { ...(pending.presetSubjects ?? {}), ...resolved.subjects },
     })
   }
 
@@ -1436,10 +1475,36 @@ export function LipSyncRefsPage() {
       const latest = emptyLyricSceneNumbers(queue, draftsRef.current)
       if (latest.length === 0) return
       const projectId = attachProjectIdRef.current
-      const latestKey = `${projectId}:${latest.join(',')}`
+      const project = projectsRef.current.find((entry) => entry.id === projectId)
+      const folderPath = project?.projectFolderPath?.trim() || null
+      const savedChoices = readSavedInstrumentalChoices({
+        projectId,
+        folderPath,
+        numbers: latest,
+      })
+      const unanswered: number[] = []
+      for (const number of latest) {
+        const choice = savedChoices[number]
+        const resolved = choice ? resolveInstrumentalChoice(choice) : null
+        const item = queue[number - 1]
+        if (resolved && item) {
+          void persistSceneInstrumentChoice({
+            projectId,
+            folderPath,
+            number,
+            itemId: item.id,
+            initialSubject: item.subject,
+            choice,
+          })
+        } else {
+          unanswered.push(number)
+        }
+      }
+      if (unanswered.length === 0) return
+      const latestKey = `${projectId}:${unanswered.join(',')}`
       if (promptedEmptyLyricsKeyRef.current === latestKey) return
       promptedEmptyLyricsKeyRef.current = latestKey
-      setPendingSceneInstruments(buildPendingSceneInstruments(projectId, queue, latest))
+      setPendingSceneInstruments(buildPendingSceneInstruments(projectId, queue, unanswered))
     }, 900)
 
     return () => window.clearTimeout(timer)

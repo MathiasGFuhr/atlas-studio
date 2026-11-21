@@ -82,6 +82,8 @@ import { getAtlasApi } from '../lib/api'
 import { decodeWavPcm } from '../lib/decodeWav'
 import { useToast } from '../components/Toast'
 import { environmentBreadcrumb } from '../lib/environments'
+import { mergeTrackCaptions } from '@shared/musicCaptionGeneration'
+import { useMusicCaptionGeneration } from '../hooks/useMusicCaptionGeneration'
 
 function TimeField({
   label,
@@ -164,7 +166,13 @@ export function MusicEditorPage() {
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const [splitFlash, setSplitFlash] = useState(false)
-  const [captionBusy, setCaptionBusy] = useState(false)
+  const captionGeneration = useMusicCaptionGeneration()
+  const captionGenerationRef = useRef(captionGeneration)
+  captionGenerationRef.current = captionGeneration
+  const activeCaptionJob = id ? captionGeneration.jobFor(id) : null
+  const captionBusy = Boolean(id && captionGeneration.isGenerating(id))
+  const latestCaptionResult = id ? captionGeneration.latestResultFor(id) : null
+  const appliedCaptionSeqRef = useRef(0)
   const [captionLanguage, setCaptionLanguage] = useState<MusicCaptionLanguage>('pt')
   const [captionModel, setCaptionModel] = useState<MusicCaptionModel>('medium')
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -197,6 +205,7 @@ export function MusicEditorPage() {
   useEffect(() => {
     if (!id) return
     let cancelled = false
+    const baselineCaptionSeq = captionGenerationRef.current.latestResultFor(id)?.seq ?? 0
     void (async () => {
       setLoading(true)
       try {
@@ -259,8 +268,11 @@ export function MusicEditorPage() {
         setPreviewUrl(nextUrl)
         samplesRef.current = editorialSamples
         historyRef.current.clear()
+        appliedCaptionSeqRef.current = baselineCaptionSeq
+        const runningJob = captionGenerationRef.current.jobFor(id)
         setTrack(nextTrack)
-        setCaptionLanguage(parseMusicCaptionLanguage(nextTrack.captionsLanguage))
+        setCaptionLanguage(runningJob ? runningJob.language : parseMusicCaptionLanguage(nextTrack.captionsLanguage))
+        if (runningJob) setCaptionModel(runningJob.model)
         setAnalysis(editorialAnalysis)
         setPeaks(computePeaks(editorialSamples, 1200))
         setSelectedId(nextTrack.selectedId ?? nextTrack.cuts[0]?.id ?? null)
@@ -299,6 +311,20 @@ export function MusicEditorPage() {
   }, [api, id, navigate, push, pushError])
 
   const trackId = track?.id ?? null
+
+  useEffect(() => {
+    if (!activeCaptionJob) return
+    setCaptionLanguage(activeCaptionJob.language)
+    setCaptionModel(activeCaptionJob.model)
+  }, [activeCaptionJob])
+
+  useEffect(() => {
+    if (!latestCaptionResult || latestCaptionResult.seq <= appliedCaptionSeqRef.current) return
+    if (!latestCaptionResult.track) return
+    appliedCaptionSeqRef.current = latestCaptionResult.seq
+    const incoming = latestCaptionResult.track
+    setTrack((current) => (current ? mergeTrackCaptions(current, incoming) : incoming))
+  }, [latestCaptionResult])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -494,26 +520,12 @@ export function MusicEditorPage() {
 
   async function generateCaptions() {
     if (!track || captionBusy) return
-    setCaptionBusy(true)
-    try {
-      const updated = await api.music.transcribe(track.id, captionLanguage, captionModel)
-      if (updated) {
-        setTrack((current) =>
-          current
-            ? {
-                ...current,
-                captions: updated.captions ?? [],
-                captionsLanguage: updated.captionsLanguage ?? captionLanguage,
-              }
-            : updated,
-        )
-      }
-      push(updated?.captions.length ? 'Legenda gerada.' : 'Nenhuma fala encontrada.', 'success')
-    } catch (error) {
-      pushError(error, 'Não foi possível gerar a legenda')
-    } finally {
-      setCaptionBusy(false)
-    }
+    await captionGeneration.generateCaptions({
+      trackId: track.id,
+      trackName: track.name,
+      language: captionLanguage,
+      model: captionModel,
+    })
   }
 
   async function saveCaptionsFile() {
@@ -1030,8 +1042,12 @@ export function MusicEditorPage() {
         ) : null}
         {captionBusy ? (
           <p className="mt-3 rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
-            Gerando com {MUSIC_CAPTION_MODELS.find((item) => item.value === captionModel)?.label ?? captionModel}.
-            A primeira vez do modelo pode baixar os arquivos. Em CPU, Medium e Large demoram mais.
+            Gerando com{' '}
+            {MUSIC_CAPTION_MODELS.find((item) => item.value === (activeCaptionJob?.model ?? captionModel))
+              ?.label ??
+              (activeCaptionJob?.model ?? captionModel)}
+            . A primeira vez do modelo pode baixar os arquivos. Em CPU, Medium e Large demoram mais.
+            Você pode navegar por outras abas enquanto ela continua gerando.
           </p>
         ) : null}
       </Card>

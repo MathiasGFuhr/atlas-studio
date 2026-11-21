@@ -868,6 +868,8 @@ export const IPC = {
     chooseExportFolder: 'music:chooseExportFolder',
     adviseCuts: 'music:adviseCuts',
     transcribe: 'music:transcribe',
+    activeTranscriptions: 'music:activeTranscriptions',
+    transcribeChanged: 'music:transcribeChanged',
     exportSrt: 'music:exportSrt',
     importSrt: 'music:importSrt',
     exportCutsToLipSync: 'music:exportCutsToLipSync',

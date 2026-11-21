@@ -107,7 +107,13 @@ import {
   parseMusicCaptionModel,
   resolveWhisperModelName,
   type MusicCaption,
+  type MusicTrack,
 } from '../../shared/musicAnalysis'
+import type {
+  MusicCaptionFinishedEvent,
+  MusicCaptionJob,
+  MusicCaptionStateEvent,
+} from '../../shared/musicCaptionGeneration'
 import { shortsRepository } from '../repositories/shortsRepository'
 import { analyzeShortsJob, regenerateShortsClipCopy } from '../services/shorts/ShortsPipeline'
 import { loadShortsAnalysisPlan } from '../services/shorts/ShortsAnalysisPlanner'
@@ -744,7 +750,28 @@ export function registerIpcHandlers(deps: {
       return saved
     },
   )
-  ipcMain.handle(IPC.music.transcribe, async (_e, id: string, language?: string, model?: string) => {
+  const activeMusicTranscriptions = new Map<
+    string,
+    { job: MusicCaptionJob; promise: Promise<MusicTrack | null> }
+  >()
+  const emitMusicTranscribeChanged = (finished?: MusicCaptionFinishedEvent) => {
+    const win = getMainWindow()
+    if (!win || win.isDestroyed()) return
+    const payload: MusicCaptionStateEvent = {
+      active: Array.from(activeMusicTranscriptions.values()).map((entry) => entry.job),
+      ...(finished ? { finished } : {}),
+    }
+    win.webContents.send(IPC.music.transcribeChanged, payload)
+  }
+
+  ipcMain.handle(IPC.music.activeTranscriptions, () =>
+    Array.from(activeMusicTranscriptions.values()).map((entry) => entry.job),
+  )
+
+  ipcMain.handle(IPC.music.transcribe, (_e, id: string, language?: string, model?: string) => {
+    const existing = activeMusicTranscriptions.get(id)
+    if (existing) return existing.promise
+
     const track = musicRepository.get(id)
     if (!track) throw new Error('Música não encontrada')
     const captionLanguage = parseMusicCaptionLanguage(language)
@@ -754,17 +781,50 @@ export function registerIpcHandlers(deps: {
       track.originalPath && fs.existsSync(track.originalPath) ? track.originalPath : track.previewPath
     if (!audioPath || !fs.existsSync(audioPath)) throw new Error('Arquivo de áudio não encontrado')
     const outputDir = path.join(path.dirname(audioPath), 'captions')
-    const result = await transcribeLocalAudio(audioPath, outputDir, {
+
+    const job: MusicCaptionJob = {
+      trackId: id,
+      trackName: track.name,
       language: captionLanguage,
-      model: whisperModel,
-    })
-    if (result.cues.length === 0) {
-      throw new Error(
-        result.detail ||
-          'Não foi possível gerar a legenda. Instale o modelo com: py -3 -m pip install faster-whisper',
-      )
+      model: captionModel,
+      startedAt: new Date().toISOString(),
     }
-    return musicRepository.saveCaptions(id, result.cues, captionLanguage)
+
+    const promise = (async () => {
+      let savedTrack: MusicTrack | null = null
+      let errorMessage: string | null = null
+      try {
+        const result = await transcribeLocalAudio(audioPath, outputDir, {
+          language: captionLanguage,
+          model: whisperModel,
+        })
+        if (result.cues.length === 0) {
+          throw new Error(
+            result.detail ||
+              'Não foi possível gerar a legenda. Instale o modelo com: py -3 -m pip install faster-whisper',
+          )
+        }
+        if (!musicRepository.get(id)) return null
+        savedTrack = musicRepository.saveCaptions(id, result.cues, captionLanguage)
+        return savedTrack
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message : String(error)
+        throw error
+      } finally {
+        activeMusicTranscriptions.delete(id)
+        emitMusicTranscribeChanged({
+          trackId: id,
+          trackName: track.name,
+          track: savedTrack,
+          error: errorMessage,
+          finishedAt: new Date().toISOString(),
+        })
+      }
+    })()
+
+    activeMusicTranscriptions.set(id, { job, promise })
+    emitMusicTranscribeChanged()
+    return promise
   })
   ipcMain.handle(IPC.music.exportSrt, async (_e, id: string) => {
     const track = musicRepository.get(id)

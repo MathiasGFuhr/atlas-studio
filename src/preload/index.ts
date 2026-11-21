@@ -44,6 +44,7 @@ import type {
   MusicSegment,
   MusicTrack,
 } from '../shared/musicAnalysis'
+import type { MusicCaptionJob, MusicCaptionStateEvent } from '../shared/musicCaptionGeneration'
 import type { MusicAdviseRequest, MusicAdviseResult } from '../shared/audio/audioCutAdvisor'
 import type { AudioExportFormat, Mp3Bitrate } from '../shared/audio/audioExport'
 import type {
@@ -320,6 +321,15 @@ const api = {
       ipcRenderer.invoke(IPC.music.adviseCuts, request) as Promise<MusicAdviseResult>,
     transcribe: (id: string, language?: MusicCaptionLanguage, model?: MusicCaptionModel) =>
       ipcRenderer.invoke(IPC.music.transcribe, id, language, model) as Promise<MusicTrack | null>,
+    activeTranscriptions: () =>
+      ipcRenderer.invoke(IPC.music.activeTranscriptions) as Promise<MusicCaptionJob[]>,
+    onTranscribeChanged: (callback: (event: MusicCaptionStateEvent) => void) => {
+      const listener = (_: Electron.IpcRendererEvent, data: MusicCaptionStateEvent) => callback(data)
+      ipcRenderer.on(IPC.music.transcribeChanged, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.music.transcribeChanged, listener)
+      }
+    },
     exportSrt: (id: string) => ipcRenderer.invoke(IPC.music.exportSrt, id) as Promise<string | null>,
     importSrt: (id: string) => ipcRenderer.invoke(IPC.music.importSrt, id) as Promise<MusicTrack | null>,
     exportCutsToLipSync: (payload: {

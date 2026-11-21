@@ -605,54 +605,8 @@ export function ComfyQueueProvider({ children }: { children: ReactNode }) {
 
   const startPending = useCallback(async () => {
     if (!pending) return
-    if (connectPhase === 'simulated') {
-      push(
-        'Simulação concluída — nenhuma GPU iniciada. Desligue o dry-run e conecte de verdade antes de gerar.',
-        'error',
-      )
-      return
-    }
-    if (isComfyConnectReadyForGeneration(connectPhase) && connectConnection?.ok) {
-      await startBatchNow(pending)
-      return
-    }
-    // Com dry-run ligado, prepare/confirm só simula — não envia fila real.
-    if (config?.runpodDryRunStarts) {
-      const outcome = await prepareConnect()
-      if (outcome === 'needs_confirmation') {
-        pendingAfterConnect.current = false
-        push(
-          'Dry-run ligado: a confirmação só simula. Desligue o dry-run nas Configurações para start real.',
-          'error',
-        )
-        return
-      }
-      push(
-        'Dry-run ligado — não é possível enviar LipSync real. Desligue a simulação nas Configurações.',
-        'error',
-      )
-      return
-    }
-    const outcome = await prepareConnect()
-    if (outcome === 'ready') {
-      await startBatchNow(pending)
-      return
-    }
-    if (outcome === 'needs_confirmation') {
-      // Recovery ainda exige escolher opção (ou dry-run).
-      pendingAfterConnect.current = true
-      push('Escolha como continuar na barra RunPod para enviar.', 'error')
-      return
-    }
-  }, [
-    pending,
-    connectPhase,
-    connectConnection,
-    config?.runpodDryRunStarts,
-    prepareConnect,
-    startBatchNow,
-    push,
-  ])
+    await startBatchNow(pending)
+  }, [pending, startBatchNow])
 
   // Após confirmação real (não simulada), retoma o envio se Gerar pediu conexão.
   useEffect(() => {

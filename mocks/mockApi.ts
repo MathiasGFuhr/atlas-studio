@@ -906,6 +906,8 @@ export const mockApi = {
     transcribe: async (_id: string, _language?: 'pt' | 'en', _model?: string) => {
       throw new Error('Legenda indisponível no modo mock. Use o Electron.')
     },
+    activeTranscriptions: async () => [],
+    onTranscribeChanged: () => () => {},
     exportSrt: async () => null,
     importSrt: async () => {
       throw new Error('Importação de SRT indisponível no modo mock. Use o Electron.')

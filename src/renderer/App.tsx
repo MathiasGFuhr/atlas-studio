@@ -26,6 +26,7 @@ import { useCodexAuth } from './hooks/useCodexAuth'
 import { WorkspaceCapabilitiesProvider } from './hooks/useWorkspaceCapabilities'
 import { AppUpdateProvider } from './hooks/useAppUpdate'
 import { ShortsGenerationProvider } from './hooks/useShortsGeneration'
+import { MusicCaptionGenerationProvider } from './hooks/useMusicCaptionGeneration'
 import { ComfyQueueProvider } from './hooks/useComfyQueue'
 import { ComfyQueueDock } from './components/lipsync/ComfyQueueDock'
 import { MUSIC_FLOW_PATH, MUSIC_LIPSYNC_PATH, MUSIC_PROMPTS_PATH } from '@shared/workspaceCapabilities'
@@ -302,6 +303,7 @@ export default function App() {
         <WorkspaceCapabilitiesProvider>
         <CreateActionsProvider>
         <ShortsGenerationProvider>
+        <MusicCaptionGenerationProvider>
         <ComfyQueueProvider>
         <div className="atlas-shell flex h-full w-full overflow-hidden text-text">
           <AppSidebar codexStatus={codexAuth.status} accountId={session.user.id} />
@@ -425,6 +427,7 @@ export default function App() {
           onClose={() => setLinkModalOpen(false)}
         />
         </ComfyQueueProvider>
+        </MusicCaptionGenerationProvider>
         </ShortsGenerationProvider>
         </CreateActionsProvider>
         </WorkspaceCapabilitiesProvider>

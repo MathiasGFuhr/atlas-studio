@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Captions, Clock3, Music2, Plus, Scissors, Trash2 } from 'lucide-react'
+import { Captions, Clock3, Loader2, Music2, Plus, Scissors, Trash2 } from 'lucide-react'
 import type { MusicTrack } from '@shared/musicAnalysis'
 import { formatTimecode } from '@shared/musicAnalysis'
 import { PageHeader } from '../components/PageHeader'
@@ -12,22 +12,33 @@ import { getAtlasApi } from '../lib/api'
 import { useToast } from '../components/Toast'
 import { environmentBreadcrumb } from '../lib/environments'
 import { cn, formatRelativeDate } from '../lib/utils'
+import { useMusicCaptionGeneration } from '../hooks/useMusicCaptionGeneration'
 
 export function MusicPage() {
   const api = getAtlasApi()
   const navigate = useNavigate()
   const { push, pushError } = useToast()
+  const captionGeneration = useMusicCaptionGeneration()
+  const prevActiveCountRef = useRef(captionGeneration.activeJobs.length)
   const [tracks, setTracks] = useState<MusicTrack[]>([])
   const [importing, setImporting] = useState(false)
   const [deleting, setDeleting] = useState<MusicTrack | null>(null)
 
-  async function load() {
+  const load = useCallback(async () => {
     setTracks(await api.music.list())
-  }
+  }, [api])
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [load])
+
+  useEffect(() => {
+    const count = captionGeneration.activeJobs.length
+    if (count < prevActiveCountRef.current) {
+      void load()
+    }
+    prevActiveCountRef.current = count
+  }, [captionGeneration.activeJobs.length, load])
 
   const stats = useMemo(() => {
     const cuts = tracks.reduce((sum, track) => sum + track.cuts.length, 0)
@@ -131,6 +142,7 @@ export function MusicPage() {
           <ul className="divide-y divide-border-soft">
             {tracks.map((track) => {
               const captionCount = track.captions?.length ?? 0
+              const generatingCaption = captionGeneration.isGenerating(track.id)
               return (
                 <li key={track.id}>
                   <div
@@ -164,7 +176,12 @@ export function MusicPage() {
                             <Scissors className="h-3.5 w-3.5" />
                             {track.cuts.length} {track.cuts.length === 1 ? 'corte' : 'cortes'}
                           </span>
-                          {captionCount > 0 ? (
+                          {generatingCaption ? (
+                            <span className="inline-flex items-center gap-1.5 text-accent">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Gerando legenda...
+                            </span>
+                          ) : captionCount > 0 ? (
                             <span className="inline-flex items-center gap-1.5 text-accent">
                               <Captions className="h-3.5 w-3.5" />
                               Legenda
